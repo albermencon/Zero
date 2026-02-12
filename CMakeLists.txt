@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED "Build as shared library" ON)
 
+# We set this variable to tell spdlog not to install itself, just build
+set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/spdlog)
+
 file(GLOB_RECURSE ENGINE_SOURCES
     "src/*.cpp"
 )
@@ -20,9 +24,12 @@ endif()
 target_include_directories(VoxelEngine
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/spdlog/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+
+target_link_libraries(VoxelEngine PRIVATE spdlog::spdlog)
 
 target_precompile_headers(VoxelEngine
     PRIVATE
