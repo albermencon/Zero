@@ -1,0 +1,284 @@
+#include "pch.h"
+#include "GLFWWindowImpl.h"
+
+#include <Engine/Log.h>
+
+#include <Engine/ApplicationEvent.h>
+#include <Engine/KeyEvent.h>
+#include <Engine/MouseEvent.h>
+
+#include <GLFW/glfw3.h>
+
+namespace VoxelEngine
+{
+    static bool s_GLFWInitialized = false;
+
+    GLFWWindowImpl::GLFWWindowImpl(const WindowProps &props)
+    {
+        Init(props);
+    }
+
+    GLFWWindowImpl::~GLFWWindowImpl()
+    {
+        Shutdown();
+    }
+
+    void GLFWWindowImpl::Init(const WindowProps &props)
+    {
+        m_Data.Title = props.Title;
+        m_Data.Width = props.Width;
+        m_Data.Height = props.Height;
+        m_Data.VSync = props.VSync;
+        m_Data.Fullscreen = props.Fullscreen;
+        m_Data.Visible = props.Visible;
+
+        if (!s_GLFWInitialized)
+        {
+            int success = glfwInit();
+            if (success == GLFW_FALSE)
+            {
+                ENGINE_CORE_CRITICAL("Could not initialize GLFW!");
+                return;
+            }
+            s_GLFWInitialized = true;
+        }
+
+        // Set GLFW window hints
+        glfwWindowHint(GLFW_RESIZABLE, props.Resizable ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_VISIBLE, props.Visible ? GLFW_TRUE : GLFW_FALSE);
+
+        // Get primary monitor for fullscreen
+        GLFWmonitor *monitor = props.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+
+        // Create the GLFW window
+        m_Window = glfwCreateWindow(
+            static_cast<int>(props.Width),
+            static_cast<int>(props.Height),
+            props.Title.c_str(),
+            monitor,
+            nullptr);
+
+        if (!m_Window)
+        {
+            ENGINE_CORE_CRITICAL("Failed to create GLFW window!");
+            return;
+        }
+
+        // Set the user pointer to our WindowData struct for callback access
+        glfwSetWindowUserPointer(m_Window, &m_Data);
+        SetVSync(props.VSync);
+
+        // Setup callbacks
+        SetupCallBacks();
+    }
+
+    void GLFWWindowImpl::SetupCallBacks()
+    {
+        // Window resize callback
+        glfwSetWindowSizeCallback(m_Window, [](GLFWwindow *window, int width, int height)
+        {
+            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+            data.Width = width;
+            data.Height = height;
+
+            WindowResizeEvent event(width, height);
+            data.EventCallback(event); 
+        });
+
+        // Window close callback
+        glfwSetWindowCloseCallback(m_Window, [](GLFWwindow *window)
+        {
+            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+            WindowCloseEvent event;
+            data.EventCallback(event); 
+        });
+
+        // Key callback
+        glfwSetKeyCallback(m_Window, [](GLFWwindow *window, int key, int scancode, int action, int mods)
+        {
+            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+
+            switch (action)
+            {
+                case GLFW_PRESS:
+                {
+                    KeyPressedEvent event(key, 0);
+                    data.EventCallback(event);
+                    break;
+                }
+                case GLFW_RELEASE:
+                {
+                    KeyReleasedEvent event(key);
+                    data.EventCallback(event);
+                    break;
+                }
+                case GLFW_REPEAT:
+                {
+                    KeyPressedEvent event(key, 1);
+                    data.EventCallback(event);
+                    break;
+                }
+            } 
+        });
+
+        // Mouse button callback
+        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow *window, int button, int action, int mods)
+        {
+            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+
+            switch (action)
+            {
+                case GLFW_PRESS:
+                {
+                    MouseButtonPressedEvent event(button);
+                    data.EventCallback(event);
+                    break;
+                }
+                case GLFW_RELEASE:
+                {
+                    MouseButtonReleasedEvent event(button);
+                    data.EventCallback(event);
+                    break;
+                }
+            } 
+        });
+
+        // Scroll callback
+        glfwSetScrollCallback(m_Window, [](GLFWwindow *window, double xOffset, double yOffset)
+        {
+            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+
+            MouseScrolledEvent event((float)xOffset, (float)yOffset);
+            data.EventCallback(event); 
+        });
+
+        // Cursor position callback
+        glfwSetCursorPosCallback(m_Window, [](GLFWwindow *window, double xPos, double yPos)
+        { 
+            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+
+            MouseMovedEvent event((float)xPos, (float)yPos);
+            data.EventCallback(event);
+        });
+    }
+
+    void GLFWWindowImpl::Shutdown()
+    {
+        if (m_Window)
+        {
+            glfwDestroyWindow(m_Window);
+            m_Window = nullptr;
+        }
+    }
+
+    void GLFWWindowImpl::OnUpdate()
+    {
+        glfwPollEvents();
+        glfwSwapBuffers(m_Window);
+    }
+
+    void GLFWWindowImpl::SetVSync(bool enabled)
+    {
+        m_Data.VSync = enabled;
+        glfwSwapInterval(enabled ? 1 : 0);
+    }
+
+    bool GLFWWindowImpl::IsVSync() const
+    {
+        return m_Data.VSync;
+    }
+
+    uint32_t GLFWWindowImpl::GetWidth() const
+    {
+        return m_Data.Width;
+    }
+
+    uint32_t GLFWWindowImpl::GetHeight() const
+    {
+        return m_Data.Height;
+    }
+
+    void GLFWWindowImpl::SetEventCallback(const Window::EventCallbackFn &callback)
+    {
+        m_Data.EventCallback = callback;
+    }
+
+    void GLFWWindowImpl::SetTitle(const std::string &title)
+    {
+        m_Data.Title = title;
+        glfwSetWindowTitle(m_Window, title.c_str());
+    }
+
+    const std::string &GLFWWindowImpl::GetTitle() const
+    {
+        return m_Data.Title;
+    }
+
+    void GLFWWindowImpl::SetSize(uint32_t width, uint32_t height)
+    {
+        m_Data.Width = width;
+        m_Data.Height = height;
+        glfwSetWindowSize(m_Window, static_cast<int>(width), static_cast<int>(height));
+    }
+
+    void GLFWWindowImpl::SetWidth(uint32_t width)
+    {
+        SetSize(width, m_Data.Height);
+    }
+
+    void GLFWWindowImpl::SetHeight(uint32_t height)
+    {
+        SetSize(m_Data.Width, height);
+    }
+
+    void GLFWWindowImpl::SetFullscreen(bool fullscreen)
+    {
+        if (m_Data.Fullscreen == fullscreen)
+            return;
+
+        m_Data.Fullscreen = fullscreen;
+
+        GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+
+        if (fullscreen)
+        {
+            glfwSetWindowMonitor(m_Window, monitor, 0, 0,
+                                 mode->width, mode->height, mode->refreshRate);
+        }
+        else
+        {
+            glfwSetWindowMonitor(m_Window, nullptr,
+                                 (mode->width - m_Data.Width) / 2,
+                                 (mode->height - m_Data.Height) / 2,
+                                 m_Data.Width, m_Data.Height, 0);
+        }
+    }
+
+    bool GLFWWindowImpl::IsFullscreen() const
+    {
+        return m_Data.Fullscreen;
+    }
+
+    void GLFWWindowImpl::SetVisible(bool visible)
+    {
+        m_Data.Visible = visible;
+        if (visible)
+        {
+            glfwShowWindow(m_Window);
+        }
+        else
+        {
+            glfwHideWindow(m_Window);
+        }
+    }
+
+    bool GLFWWindowImpl::IsVisible() const
+    {
+        return m_Data.Visible;
+    }
+    void *GLFWWindowImpl::GetNativeWindow() const
+    {
+        return m_Window;
+    }
+}
