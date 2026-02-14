@@ -1,5 +1,4 @@
 #pragma once
-
 #include "Core.h"
 #include <memory>
 #include <string_view>
