@@ -32,6 +32,14 @@ target_link_libraries(VoxelEngine
         spdlog::spdlog
         glfw
 )
+target_link_libraries(VoxelEngine PRIVATE glad::glad)
+
+# OpenGL system library (REQUIRED)
+if(WIN32)
+    target_link_libraries(VoxelEngine PRIVATE opengl32)
+elseif(UNIX AND NOT APPLE)
+    target_link_libraries(VoxelEngine PRIVATE GL)
+endif()
 
 target_precompile_headers(VoxelEngine
     PRIVATE

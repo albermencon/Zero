@@ -5,3 +5,4 @@ set(SPDLOG_HEADER_ONLY ON CACHE BOOL "" FORCE)
 # Add submodules
 add_subdirectory(spdlog)
 add_subdirectory(glfw)
+add_subdirectory(glad)
