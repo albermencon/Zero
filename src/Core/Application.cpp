@@ -7,6 +7,7 @@
 #include <Engine/Log.h>
 #include "Platform/WindowImpl.h"
 #include "Layers/LayerStack.h"
+#include "Platform/InputInternal.h"
 
 namespace VoxelEngine
 {
@@ -60,6 +61,8 @@ namespace VoxelEngine
         // Main loop
         while (m_Running)
         {
+            Input::UpdateInput();
+
             m_Window->OnUpdate();
         }
     }
