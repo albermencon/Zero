@@ -24,11 +24,11 @@ namespace VoxelEngine
 #elif defined(PLATFORM_MACOS)
         return std::make_unique<GLFWWindowImpl>(props);
 #elif defined(PLATFORM_ANDROID)
-        // not supported yet
-        return std::make_unique<AndroidWindowImpl>(props);
+#error "not supported yet"
+        //return std::make_unique<AndroidWindowImpl>(props);
 #elif defined(PLATFORM_IOS)
-        // not supported yet
-        return std::make_unique<iOSWindowImpl>(props);
+#error "not supported yet"
+        //return std::make_unique<iOSWindowImpl>(props);
 #else
 #error "Unsupported platform!"
 #endif
