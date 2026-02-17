@@ -32,7 +32,7 @@ namespace VoxelEngine
 #endif
 
     protected:
-#ifndef NDEBUG
+#ifndef ENGINE_DEBUG
         std::string m_DebugName;
 #endif
     };
