@@ -7,3 +7,6 @@
 [submodule "third_party/imgui"]
 	path = third_party/imgui
 	url = https://github.com/ocornut/imgui
+[submodule "third_party/highway"]
+	path = third_party/highway
+	url = https://github.com/google/highway
