@@ -5,6 +5,7 @@
 #include <Engine/Window.h>
 #include <Engine/EventDispatcher.h>
 #include <Engine/Log.h>
+#include <Engine/Time.h>
 #include "Platform/WindowImpl.h"
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
@@ -58,12 +59,27 @@ namespace VoxelEngine
     {
         ENGINE_CORE_TRACE("Application started.");
 
+        Time::Init();
+
         // Main loop
         while (m_Running)
         {
-            Input::UpdateInput();
+            Time::Update();
 
             m_Window->OnUpdate();
+
+            float dt = Time::GetDeltaTime();
+            for (auto &layer : *m_LayerStack)
+            {
+                layer->OnUpdate(dt);
+            }
+
+            for (auto &layer : *m_LayerStack)
+            {
+                layer->OnRender();
+            }
+
+            Input::UpdateInput();
         }
     }
 
