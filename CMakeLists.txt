@@ -27,12 +27,11 @@ target_include_directories(VoxelEngine
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(VoxelEngine 
-    PRIVATE 
-        spdlog::spdlog
-        glfw
-)
+target_link_libraries(VoxelEngine PRIVATE spdlog::spdlog)
+target_link_libraries(VoxelEngine PRIVATE glfw)
 target_link_libraries(VoxelEngine PRIVATE glad::glad)
+target_link_libraries(VoxelEngine PRIVATE imgui)
+target_link_libraries(VoxelEngine PRIVATE hwy)
 
 # OpenGL system library (REQUIRED)
 if(WIN32)
