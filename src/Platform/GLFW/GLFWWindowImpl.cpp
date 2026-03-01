@@ -4,13 +4,14 @@
 #include <Engine/Input/KeyCode.h>
 #include <Engine/Input/MouseButton.h>
 
+#include <Engine/Core.h>
+
 #include <Engine/Log.h>
 
 #include <Engine/ApplicationEvent.h>
 #include <Engine/KeyEvent.h>
 #include <Engine/MouseEvent.h>
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 namespace VoxelEngine
@@ -35,6 +36,7 @@ namespace VoxelEngine
         m_Data.VSync = props.VSync;
         m_Data.Fullscreen = props.Fullscreen;
         m_Data.Visible = props.Visible;
+        m_backend = props.backend;
 
         if (!s_GLFWInitialized)
         {
@@ -51,9 +53,60 @@ namespace VoxelEngine
         glfwWindowHint(GLFW_RESIZABLE, props.Resizable ? GLFW_TRUE : GLFW_FALSE);
         glfwWindowHint(GLFW_VISIBLE, props.Visible ? GLFW_TRUE : GLFW_FALSE);
 
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        switch (m_backend)
+        {
+        case BackendType::OpenGL:
+        {
+            // Use the OpenGL context
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+
+            // Request a modern core profile context. Change versions if needed.
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+            // On macOS, forward-compatible flag is required for core profiles >= 3.2
+#if defined(PLATFORM_MACOS)
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
+            break;
+        }
+
+        case BackendType::Vulkan:
+        {
+            // No client API: the app will use Vulkan (glfwCreateWindowSurface expects this).
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+            break;
+        }
+
+        case BackendType::DirectX12:
+        {
+            // DirectX12 is only available on Windows. GLFW windows should be created with NO_API.
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#if !defined(PLATFORM_WINDOWS)
+            ENGINE_CORE_WARN("DirectX12 backend selected but current platform is not Windows. Window created with NO_API anyway.");
+#endif
+            break;
+        }
+
+        case BackendType::Metal:
+        {
+            // Metal targets macOS / iOS. GLFW should be created with NO_API for Metal rendering.
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#if !defined(PLATFORM_MACOS)
+            ENGINE_CORE_WARN("Metal backend selected but current platform is not macOS. Window created with NO_API anyway.");
+#endif
+            break;
+        }
+
+        default:
+        {
+            // Safe fallback: no client API. Log the occurrence.
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+            ENGINE_CORE_WARN("Unknown BackendType: defaulting to NO_API window hints.");
+            break;
+        }
+        }
 
         // Get primary monitor for fullscreen
         GLFWmonitor *monitor = props.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
@@ -71,84 +124,6 @@ namespace VoxelEngine
             ENGINE_CORE_CRITICAL("Failed to create GLFW window!");
             return;
         }
-
-        // Make context current BEFORE any GL call
-        glfwMakeContextCurrent(m_Window);
-
-        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-        {
-            ENGINE_CORE_ERROR("Failed to initialize GLAD");
-            return;
-        }
-
-        // Verify a context is actually current
-        if (!glfwGetCurrentContext())
-            ENGINE_CORE_ERROR("OpenGL context is not current");
-
-        // Load OpenGL function pointers
-        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-            ENGINE_CORE_ERROR("Failed to initialize GLAD");
-
-        // Hard validation checks
-        const GLubyte *version = glGetString(GL_VERSION);
-        const GLubyte *vendor = glGetString(GL_VENDOR);
-        const GLubyte *renderer = glGetString(GL_RENDERER);
-
-        const char *versionStr = reinterpret_cast<const char *>(version);
-        const char *vendorStr = reinterpret_cast<const char *>(vendor);
-        const char *rendererStr = reinterpret_cast<const char *>(renderer);
-
-        if (!version || !vendor || !renderer)
-            ENGINE_CORE_ERROR("glGetString returned null — invalid OpenGL context");
-
-        ENGINE_CORE_INFO("OpenGL Version: {}", versionStr);
-        ENGINE_CORE_INFO("Vendor: {}", vendorStr);
-        ENGINE_CORE_INFO("Renderer: {}", rendererStr);
-
-        // Check for AMD memory extension
-        if (GLAD_GL_ATI_meminfo)
-        {
-            GLint memInfo[4] = {0};
-
-            // Returns free texture memory in KB
-            glGetIntegerv(GL_TEXTURE_FREE_MEMORY_ATI, memInfo);
-
-            // memInfo layout (in KB):
-            // memInfo[0] = total free texture memory
-            // memInfo[1] = largest available free block
-            // memInfo[2] = total auxiliary memory free
-            // memInfo[3] = largest auxiliary free block
-
-            ENGINE_CORE_INFO("AMD GL_ATI_meminfo detected");
-
-            ENGINE_CORE_INFO("Free Texture Memory: {} MB", memInfo[0] / 1024);
-            ENGINE_CORE_INFO("Largest Free Texture Block: {} MB", memInfo[1] / 1024);
-            ENGINE_CORE_INFO("Free Auxiliary Memory: {} MB", memInfo[2] / 1024);
-            ENGINE_CORE_INFO("Largest Auxiliary Free Block: {} MB", memInfo[3] / 1024);
-        }
-        else
-        {
-            ENGINE_CORE_WARN("GL_ATI_meminfo not supported on this driver");
-        }
-
-        int major = 0, minor = 0;
-        glGetIntegerv(GL_MAJOR_VERSION, &major);
-        glGetIntegerv(GL_MINOR_VERSION, &minor);
-
-        if (major == 0 && minor == 0)
-            ENGINE_CORE_ERROR("Failed to query OpenGL version");
-
-        ENGINE_CORE_INFO("Parsed Version: {0}.{1}", major, minor);
-
-        if (major < 4)
-            ENGINE_CORE_ERROR("OpenGL 4.x required");
-
-        // Final sanity check
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR)
-            ENGINE_CORE_ERROR("OpenGL error detected immediately after initialization");
-
-        ENGINE_CORE_INFO("OpenGL context successfully initialized.");
 
         // Set the user pointer to our WindowData struct for callback access
         glfwSetWindowUserPointer(m_Window, &m_Data);
@@ -383,5 +358,10 @@ namespace VoxelEngine
     void *GLFWWindowImpl::GetNativeWindow() const
     {
         return m_Window;
+    }
+
+    BackendType GLFWWindowImpl::GetBackend() const
+    {
+        return m_backend;
     }
 }

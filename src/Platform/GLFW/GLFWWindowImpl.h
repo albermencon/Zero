@@ -34,6 +34,7 @@ namespace VoxelEngine
         virtual bool IsVisible() const override;
 
         virtual void *GetNativeWindow() const override;
+        virtual BackendType GetBackend() const override;
 
     private:
         void Init(const WindowProps &props);
@@ -44,15 +45,16 @@ namespace VoxelEngine
 
     private:
         GLFWwindow *m_Window;
+        BackendType m_backend;
 
         struct WindowData
         {
             std::string Title;
-            uint32_t Width;
-            uint32_t Height;
-            bool VSync;
-            bool Fullscreen;
-            bool Visible;
+            uint32_t Width =  0;
+            uint32_t Height = 0;
+            bool VSync = false;
+            bool Fullscreen = false;
+            bool Visible = false;
             Window::EventCallbackFn EventCallback;
         };
 

@@ -1,5 +1,4 @@
 #pragma once
-
 #include <Engine/Window.h>
 
 namespace VoxelEngine
@@ -32,6 +31,7 @@ namespace VoxelEngine
         virtual bool IsVisible() const = 0;
 
         virtual void *GetNativeWindow() const = 0;
+        virtual BackendType GetBackend() const = 0;
 
         // Factory method
         static std::unique_ptr<WindowImpl> Create(const WindowProps &props);

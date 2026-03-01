@@ -7,9 +7,19 @@
 
 namespace VoxelEngine
 {
+
+    enum class BackendType
+    {
+        Vulkan,
+        DirectX12,
+        OpenGL,
+        Metal // fuck it
+    };
+
     struct WindowProps
     {
         std::string Title;
+        BackendType backend;
         uint32_t Width;
         uint32_t Height;
         bool Fullscreen;
@@ -18,13 +28,14 @@ namespace VoxelEngine
         bool Visible;
 
         WindowProps(const std::string &title = "Voxel Engine",
+                    BackendType bd = BackendType::Vulkan,
                     uint32_t width = 1280,
                     uint32_t height = 720,
                     bool fullscreen = false,
                     bool vsync = true,
                     bool resizable = true,
                     bool visible = true)
-            : Title(title), Width(width), Height(height),
+            : Title(title), backend(bd), Width(width), Height(height),
               Fullscreen(fullscreen), VSync(vsync),
               Resizable(resizable), Visible(visible) {}
     };
