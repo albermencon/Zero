@@ -8,14 +8,10 @@ namespace VoxelEngine
     class ENGINE_API Layer
     {
     public:
-#ifndef ENGINE_DEBUG
-        Layer(const std::string &name = "Layer")
-            : m_DebugName(name) {}
-#else
-        Layer(const std::string & = "")
+        explicit Layer(std::string name = "Layer")
+            : m_DebugName(std::move(name))
         {
         }
-#endif
 
         virtual ~Layer() = default;
 
@@ -23,17 +19,14 @@ namespace VoxelEngine
         virtual void OnDetach() {}
         virtual void OnUpdate(float dt) {}
         virtual void OnRender() {}
-        virtual void OnEvent(Event &event) {}
+        virtual void OnEvent(Event& event) {}
 
-#ifndef ENGINE_DEBUG
-        const std::string &GetName() const { return m_DebugName; }
-#else
-        const char *GetName() const { return ""; }
-#endif
+        const std::string& GetName() const noexcept
+        {
+            return m_DebugName;
+        }
 
     protected:
-#ifndef ENGINE_DEBUG
         std::string m_DebugName;
-#endif
     };
 }
