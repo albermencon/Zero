@@ -18,7 +18,10 @@ namespace VoxelEngine
 
         virtual void OnFinished() override;
 
+        virtual void OnRenderSurfaceResize() override;
+
     private:
         Window* m_window = nullptr;
+        bool m_SwapChainDirty = false;
     };
 }
