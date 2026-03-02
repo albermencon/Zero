@@ -15,7 +15,8 @@ namespace VoxelEngine
         virtual void SwapBuffers() = 0;
 
         virtual void OnFinished() = 0;
+
+        virtual void OnRenderSurfaceResize() = 0;
     };
 
 }
-

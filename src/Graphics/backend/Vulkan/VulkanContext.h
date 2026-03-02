@@ -34,6 +34,8 @@ namespace VoxelEngine
 
         virtual void OnFinished() override;
 
+        virtual void OnRenderSurfaceResize() override;
+
         void recreateSwapChain();
 
         void recordCommandBuffer(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -60,6 +62,9 @@ namespace VoxelEngine
         void createCommandBuffers();
         void createSyncObjetcs();
     private:
+        void cleanupSwapChain();
+
+    private:
         uint32_t findQueueFamilies(vk::raii::PhysicalDevice physicalDevice);
         vk::SurfaceFormatKHR chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& avaibleFormats);
         vk::PresentModeKHR chooseSwapChainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
@@ -71,7 +76,7 @@ namespace VoxelEngine
         vk::raii::SurfaceKHR surface = nullptr;
         vk::raii::PhysicalDevice physicalDevice = nullptr;
         vk::raii::Device device = nullptr;
-        
+
         vk::raii::Queue graphicsQueue = nullptr;
         vk::raii::Queue presentQueue = nullptr;
         uint32_t graphicsFamilyIndex = UINT32_MAX;
@@ -104,8 +109,9 @@ namespace VoxelEngine
         std::vector<vk::Fence> imagesInFlight;
         uint32_t currentFrame = 0;
 
-        const uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+        const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
     private:
         Window* m_Window;
+        bool m_SwapChainDirty = false;
     };
 }

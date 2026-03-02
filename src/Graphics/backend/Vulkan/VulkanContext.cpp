@@ -29,7 +29,7 @@ namespace VoxelEngine
 
     VulkanDevice::~VulkanDevice()
     {
-
+        cleanupSwapChain();
     }
 
     void VulkanDevice::init() {
@@ -47,14 +47,16 @@ namespace VoxelEngine
         ENGINE_CORE_INFO("Vulkan Device initialized successfully.");
     }
 
-    void VulkanDevice::SwapBuffers() 
+    void VulkanDevice::SwapBuffers()
     {
-        glfwPollEvents();
+
     }
     void VulkanDevice::BeginFrame()
     {
         // Wait for the previus frame to complete
         auto fenceResult = device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
+
+        ENGINE_CORE_ASSERT(fenceResult == vk::Result::eSuccess, "failed to wait for fence");
 
         // Grab an image from the framebuffer
         // First parameter indices the timeout in nanoseconds, beign the max unsigned 64 bit integer effictivily disable the timeout
@@ -63,20 +65,24 @@ namespace VoxelEngine
         // The last paramater specifies a variable to output the index of the swap chain image that has become avaible
         auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompletedSemaphores[currentFrame], nullptr);
 
-        // CRITICAL: wait if this swapchain image is already in flight
-        if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        if (result == vk::Result::eErrorOutOfDateKHR
+            || result == vk::Result::eSuboptimalKHR
+            || m_SwapChainDirty)
         {
-            device.waitForFences(
-                imagesInFlight[imageIndex],
-                vk::True,
-                UINT64_MAX);
+            m_SwapChainDirty = false;
+            recreateSwapChain();
+        }
+        else if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+        {
+            ENGINE_CORE_ASSERT(result != vk::Result::eTimeout || result != vk::Result::eNotReady, "failed to acquire swap chain image");
+            ENGINE_CORE_WARN("Failed to acquire swap chain image");
+            return;
         }
 
-        // mark this image as now being in flight
-        imagesInFlight[imageIndex] = inFlightFences[currentFrame];
-
+        // Only reset the fence if we are submitting work
         device.resetFences(*inFlightFences[currentFrame]);
 
+        commandBuffers[currentFrame].reset();
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
         // The first three parameters specify which semaphores to wait on before execution begins and in which stage(s) of the pipeline to wait.
@@ -111,15 +117,10 @@ namespace VoxelEngine
 
         currentFrame =
             (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-        //vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, {});
-        //vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, {},
-        //    vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        //    {}, vk::AccessFlagBits::eColorAttachmentWrite);
     }
     void VulkanDevice::EndFrame()
     {
-        
+
     }
 
     void VulkanDevice::OnFinished()
@@ -127,15 +128,29 @@ namespace VoxelEngine
         device.waitIdle();
     }
 
+    void VulkanDevice::OnRenderSurfaceResize()
+    {
+        m_SwapChainDirty = true;
+    }
+
     void VulkanDevice::recreateSwapChain()
     {
+        int width = 0, height = 0;
+
+        GLFWwindow* window = static_cast<GLFWwindow*>(m_Window->GetNativeWindow());
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents();
+        }
+
         device.waitIdle();
 
-        //cleanupSwapchain();
+        cleanupSwapChain();
 
         createSwapChain();
         createImageViews();
-        createCommandBuffers();
+        //createCommandBuffers();
     }
 
     void VulkanDevice::recordCommandBuffer(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -371,9 +386,9 @@ namespace VoxelEngine
     void VulkanDevice::createSurface()
     {
         VkSurfaceKHR _surface;
-        
+
         GLFWwindow* window = static_cast<GLFWwindow*>(m_Window->GetNativeWindow());
-        if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0) 
+        if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0)
         {
             throw std::runtime_error("failed to create window surface!");
         }
@@ -383,7 +398,7 @@ namespace VoxelEngine
     void VulkanDevice::pickPhysicalDevice()
     {
         std::vector<vk::raii::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
-        if (devices.empty()) 
+        if (devices.empty())
         {
             ENGINE_CORE_ERROR("failed to find GPUs with Vulkan support");
         }
@@ -396,7 +411,7 @@ namespace VoxelEngine
             auto deviceFeatures = device.getFeatures();
             uint32_t score = 0;
 
-            if (deviceProperties.apiVersion < VK_API_VERSION_1_3) 
+            if (deviceProperties.apiVersion < VK_API_VERSION_1_3)
             {
                 continue;
             }
@@ -405,7 +420,7 @@ namespace VoxelEngine
             if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
                 score += 1000;
             }
-            
+
             // Maximum possible size of textures affects graphics quality
             score += deviceProperties.limits.maxImageDimension2D;
 
@@ -535,7 +550,7 @@ namespace VoxelEngine
         std::set<uint32_t> uniqueQueueFamilies = { graphicsIndex, presentIndex };
 
         float queuePriority = 0.5f;
-        for (uint32_t family : uniqueQueueFamilies) 
+        for (uint32_t family : uniqueQueueFamilies)
         {
             vk::DeviceQueueCreateInfo deviceQueueCreateInfo{};
             deviceQueueCreateInfo.queueFamilyIndex = family;
@@ -576,7 +591,6 @@ namespace VoxelEngine
         auto colorSpaceStr = vk::to_string(swapChainSurfaceFormat.colorSpace);
 
         ENGINE_CORE_TRACE("Swapchain format : {0} | {1}", formatStr, colorSpaceStr);
-        ENGINE_CORE_TRACE("SwapChainExtent: Width {0} Height {1}", swapChainExtent.width, swapChainExtent.height);
 
         // Request triple buffering when possible
         // Ensures at least 3 images unless the surface requires more
@@ -584,11 +598,11 @@ namespace VoxelEngine
             3u,
             surfaceCapabilities.minImageCount
         );
-        
+
         // Clamp to maxImageCount if defined
         // maxImageCount == 0 means no upper limit
-        if (surfaceCapabilities.maxImageCount > 0 
-            && imageCount > surfaceCapabilities.maxImageCount) 
+        if (surfaceCapabilities.maxImageCount > 0
+            && imageCount > surfaceCapabilities.maxImageCount)
         {
             imageCount = surfaceCapabilities.maxImageCount;
         }
@@ -735,7 +749,7 @@ namespace VoxelEngine
         colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
         colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-        
+
         vk::PipelineColorBlendStateCreateInfo colorBlending{};
         colorBlending.logicOpEnable = vk::False;
         colorBlending.logicOp = vk::LogicOp::eCopy;
@@ -748,7 +762,7 @@ namespace VoxelEngine
         pipelineInfo.pStages = shaderProgram.stageInfos().data();
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState; 
+        pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
@@ -787,14 +801,17 @@ namespace VoxelEngine
 
     void VulkanDevice::createSyncObjetcs()
     {
+        ENGINE_CORE_ASSERT(presentCompletedSemaphores.empty() && renderFinishedSemaphores.empty() && inFlightFences.empty(), "Assert Failed");
         uint32_t imageCount = swapChainImages.size();
 
         // Tracks which fence is using each swapchain image
         imagesInFlight.resize(imageCount, VK_NULL_HANDLE);
 
-        presentCompletedSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores.reserve(imageCount);
-        inFlightFences.reserve(MAX_FRAMES_IN_FLIGHT);
+        // Per-image resources
+        for (uint32_t i = 0; i < imageCount; i++)
+        {
+            renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
+        }
 
         // Per-frame resources
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -806,12 +823,12 @@ namespace VoxelEngine
 
             inFlightFences.emplace_back(device, fenceInfo);
         }
+    }
 
-        // Per-image resources
-        for (uint32_t i = 0; i < imageCount; i++)
-        {
-            renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
-        }
+    void VulkanDevice::cleanupSwapChain()
+    {
+        swapChainImageViews.clear();
+        swapChain = nullptr;
     }
 
     uint32_t VulkanDevice::findQueueFamilies(vk::raii::PhysicalDevice physicalDevice)
@@ -820,9 +837,9 @@ namespace VoxelEngine
         std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
         // get the first index into queueFamilyProperties which supports graphics
-        auto graphicsQueueFamilyProperty = 
-            std::find_if( queueFamilyProperties.begin(),
-                          queueFamilyProperties.end(),
+        auto graphicsQueueFamilyProperty =
+            std::find_if(queueFamilyProperties.begin(),
+                queueFamilyProperties.end(),
                 [](vk::QueueFamilyProperties const& qfp) { return qfp.queueFlags & vk::QueueFlagBits::eGraphics; }
             );
         return static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
@@ -855,10 +872,9 @@ namespace VoxelEngine
         //      Mobile: FIFO (better power efficiency)
         //      Fallback: FIFO (always supported)
         // Present mode affects latency, power consumption, and frame pacing.
-
-        for (const auto& presentMode : availablePresentModes) 
+        for (const auto& presentMode : availablePresentModes)
         {
-            if (presentMode == vk::PresentModeKHR::eMailbox) 
+            if (presentMode == vk::PresentModeKHR::eMailbox)
             {
                 return presentMode;
             }
@@ -885,16 +901,17 @@ namespace VoxelEngine
 
     vk::Extent2D VulkanDevice::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
     {
+        ENGINE_CORE_TRACE("Swap Extent W H");
         // The size is fixed by the window system (Wayland, Android, or exclusive fullscreen)
         // Vulkan requires using this exact extent, and the application cannot override it.
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
         {
             return capabilities.currentExtent;
         }
 
         // Otherwise, the surface allows the application to choose the swapchain extent
         // Query the current framebuffer size from the window system
-        auto [width, height] = m_Window->GetSize();
+        auto [width, height] = m_Window->GetFrameBufferSize();
 
         // Vulkan enforces limits defined in minImageExtent and MaxImageExtent
         // Clamp to valid values preventing swapchain creation failure or validation erros
@@ -903,5 +920,5 @@ namespace VoxelEngine
             std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
         };
     }
-  
+
 }

@@ -12,12 +12,12 @@ namespace VoxelEngine
         init();
     }
 
-    void OpenGLDevice::init() 
+    void OpenGLDevice::init()
     {
-        
+
     }
 
-    void OpenGLDevice::SwapBuffers() 
+    void OpenGLDevice::SwapBuffers()
     {
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
         glfwSwapBuffers(glfwWindow);
@@ -32,8 +32,12 @@ namespace VoxelEngine
 
     }
 
-    void OpenGLDevice::OnFinished() 
+    void OpenGLDevice::OnFinished()
     {
 
+    }
+    void OpenGLDevice::OnRenderSurfaceResize()
+    {
+        m_SwapChainDirty = true;
     }
 }
