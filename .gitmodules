@@ -10,3 +10,6 @@
 [submodule "third_party/highway"]
 	path = third_party/highway
 	url = https://github.com/google/highway
+[submodule "third_party/tracy"]
+	path = third_party/tracy
+	url = https://github.com/wolfpld/tracy.git

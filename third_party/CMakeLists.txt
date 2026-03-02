@@ -33,3 +33,16 @@ target_include_directories(imgui
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/imgui
 )
+
+if (ENGINE_ENABLE_PROFILING)
+
+    # Prevent Tracy from installing itself
+    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    set(TRACY_ON_DEMAND OFF CACHE BOOL "" FORCE)
+    set(TRACY_CALLSTACK 10 CACHE STRING "" FORCE)
+    set(TRACY_NO_EXIT ON CACHE BOOL "" FORCE)
+    set(TRACY_STATIC ON CACHE BOOL "" FORCE)
+
+    add_subdirectory(tracy)
+
+endif()

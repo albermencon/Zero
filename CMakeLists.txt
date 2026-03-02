@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED "Build as shared library" ON)
+option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
 
 file(GLOB_RECURSE ENGINE_SOURCES
     "src/*.cpp"
@@ -32,6 +33,18 @@ target_link_libraries(VoxelEngine PRIVATE glfw)
 target_link_libraries(VoxelEngine PRIVATE glad::glad)
 target_link_libraries(VoxelEngine PRIVATE imgui)
 target_link_libraries(VoxelEngine PRIVATE hwy)
+
+if (ENGINE_ENABLE_PROFILING)
+
+    target_link_libraries(VoxelEngine PRIVATE Tracy::TracyClient)
+
+    target_compile_definitions(VoxelEngine PRIVATE
+        ENGINE_ENABLE_PROFILING
+        TRACY_ENABLE
+        TRACY_VK_USE_SYMBOL_TABLE
+    )
+
+endif()
 
 # OpenGL system library (REQUIRED)
 if(WIN32)
