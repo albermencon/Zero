@@ -2,11 +2,26 @@
 set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
 set(SPDLOG_HEADER_ONLY ON CACHE BOOL "" FORCE)
 
+# Highway specific settings - disable everything we don't need
+set(HWY_ENABLE_CONTRIB OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(HWY_PRINT_TARGETS OFF CACHE BOOL "" FORCE)
+set(HWY_SYSTEM_GTEST OFF CACHE BOOL "" FORCE)  # Google Tests off
+set(HWY_SYSTEM_JPEG OFF CACHE BOOL "" FORCE)   # No image codecs needed
+set(HWY_SYSTBM OFF CACHE BOOL "" FORCE)        # No TinyEXR
+
 # Add submodules
 add_subdirectory(spdlog)
 add_subdirectory(glfw)
 add_subdirectory(glad)
+add_subdirectory(highway)
 
+# Add the Highway include directory explicitly for safety
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/highway)
+
+set(IMGUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_library(imgui STATIC
     imgui/imgui.cpp
     imgui/imgui_draw.cpp
