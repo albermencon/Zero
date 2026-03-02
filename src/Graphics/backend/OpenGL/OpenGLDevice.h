@@ -10,12 +10,15 @@ namespace VoxelEngine
     public:
         OpenGLDevice(Window* window);
 
-        virtual void init() override;         // <--- Importante: añadir override
+        virtual void init() override;
         virtual void SwapBuffers() override;
 
         virtual void BeginFrame() override;
         virtual void EndFrame() override;
 
         virtual void OnFinished() override;
+
+    private:
+        Window* m_window = nullptr;
     };
 }
