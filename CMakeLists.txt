@@ -40,6 +40,9 @@ elseif(UNIX AND NOT APPLE)
     target_link_libraries(VoxelEngine PRIVATE GL)
 endif()
 
+find_package(Vulkan REQUIRED)
+target_link_libraries(VoxelEngine PRIVATE Vulkan::Vulkan)
+
 target_precompile_headers(VoxelEngine
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h
