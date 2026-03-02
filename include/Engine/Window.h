@@ -27,17 +27,18 @@ namespace VoxelEngine
         bool Resizable;
         bool Visible;
 
-        WindowProps(const std::string &title = "Voxel Engine",
-                    BackendType bd = BackendType::Vulkan,
-                    uint32_t width = 1280,
-                    uint32_t height = 720,
-                    bool fullscreen = false,
-                    bool vsync = true,
-                    bool resizable = true,
-                    bool visible = true)
+        WindowProps(const std::string& title = "Voxel Engine",
+            BackendType bd = BackendType::Vulkan,
+            uint32_t width = 1280,
+            uint32_t height = 720,
+            bool fullscreen = false,
+            bool vsync = true,
+            bool resizable = true,
+            bool visible = true)
             : Title(title), backend(bd), Width(width), Height(height),
-              Fullscreen(fullscreen), VSync(vsync),
-              Resizable(resizable), Visible(visible) {}
+            Fullscreen(fullscreen), VSync(vsync),
+            Resizable(resizable), Visible(visible) {
+        }
     };
 
     // Forward declare platform-specific window implementation
@@ -46,37 +47,42 @@ namespace VoxelEngine
     class ENGINE_API Window
     {
     public:
-        using EventCallbackFn = std::function<void(Event &)>;
+        using EventCallbackFn = std::function<void(Event&)>;
 
-        Window(const WindowProps &props = WindowProps());
+        Window(const WindowProps& props = WindowProps());
         ~Window();
 
         // No copying allowed
-        Window(const Window &) = delete;
-        Window &operator=(const Window &) = delete;
+        Window(const Window&) = delete;
+        Window& operator=(const Window&) = delete;
 
         // Allow moving
-        Window(Window &&other) noexcept;
-        Window &operator=(Window &&other) noexcept;
+        Window(Window&& other) noexcept;
+        Window& operator=(Window&& other) noexcept;
 
         // Core functionality
-        void OnUpdate();
+        void PollEvents();
         void SetEventCallback(const EventCallbackFn& callback);
         void SetVSync(bool enabled);
         bool IsVSync() const;
 
         // Window properties
-        uint32_t GetWidth() const;
-        uint32_t GetHeight() const;
-        std::pair<uint32_t, uint32_t> GetSize() const;
+        uint32_t GetWindowWidth() const;
+        uint32_t GetWindowHeight() const;
+        std::pair<uint32_t, uint32_t> GetWindowSize() const;
 
-        void SetWidth(uint32_t width);
-        void SetHeight(uint32_t height);
-        void SetSize(uint32_t width, uint32_t height);
+        void SetWindowWidth(uint32_t width);
+        void SetWindowHeight(uint32_t height);
+        void SetWindowSize(uint32_t width, uint32_t height);
+
+        // Frame Buffer properties
+        uint32_t GetFrameBufferWidth() const;
+        uint32_t GetFrameBufferHeight() const;
+        std::pair<uint32_t, uint32_t> GetFrameBufferSize() const;
 
         // Window state
-        void SetTitle(const std::string &title);
-        const std::string &GetTitle() const;
+        void SetTitle(const std::string& title);
+        const std::string& GetTitle() const;
 
         void SetFullscreen(bool fullscreen);
         bool IsFullscreen() const;
@@ -84,7 +90,7 @@ namespace VoxelEngine
         void SetVisible(bool visible);
         bool IsVisible() const;
 
-        void *GetNativeWindow() const;
+        void* GetNativeWindow() const;
 
         // Platform info
         static std::string GetPlatformName();

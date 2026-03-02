@@ -8,24 +8,30 @@ namespace VoxelEngine
     class GLFWWindowImpl : public WindowImpl
     {
     public:
-        GLFWWindowImpl(const WindowProps &props);
+        GLFWWindowImpl(const WindowProps& props);
         virtual ~GLFWWindowImpl();
 
         virtual void PollEvents() override;
 
-        virtual void SetEventCallback(const Window::EventCallbackFn &callback) override;
+        virtual void SetEventCallback(const Window::EventCallbackFn& callback) override;
         virtual void SetVSync(bool enabled) override;
         virtual bool IsVSync() const override;
 
-        virtual uint32_t GetWidth() const override;
-        virtual uint32_t GetHeight() const override;
+        // Window props
+        virtual uint32_t GetWindowWidth() const override;
+        virtual uint32_t GetWindowHeight() const override;
 
-        virtual void SetWidth(uint32_t width) override;
-        virtual void SetHeight(uint32_t height) override;
-        virtual void SetSize(uint32_t width, uint32_t height) override;
+        virtual void SetWindowWidth(uint32_t width) override;
+        virtual void SetWindowHeight(uint32_t height) override;
+        virtual void SetWindowSize(uint32_t width, uint32_t height) override;
 
-        virtual void SetTitle(const std::string &title) override;
-        virtual const std::string &GetTitle() const override;
+        // Frame buffer props
+        virtual uint32_t GetFrameBufferWidth() const override;
+        virtual uint32_t GetFrameBufferHeight() const override;
+
+        // Other window props
+        virtual void SetTitle(const std::string& title) override;
+        virtual const std::string& GetTitle() const override;
 
         virtual void SetFullscreen(bool fullscreen) override;
         virtual bool IsFullscreen() const override;
@@ -33,31 +39,35 @@ namespace VoxelEngine
         virtual void SetVisible(bool visible) override;
         virtual bool IsVisible() const override;
 
-        virtual void *GetNativeWindow() const override;
+        virtual void* GetNativeWindow() const override;
         virtual BackendType GetBackend() const override;
 
     private:
-        void Init(const WindowProps &props);
+        void Init(const WindowProps& props);
         void Shutdown();
 
         // Callback registration functions
         void SetupCallBacks();
 
     private:
-        GLFWwindow *m_Window;
+        GLFWwindow* m_Window;
         BackendType m_backend;
 
-        struct WindowData
+        struct WindowState
         {
             std::string Title;
-            uint32_t Width =  0;
-            uint32_t Height = 0;
+            uint32_t WindowWidth = 0;
+            uint32_t WindowHeight = 0;
+
+            uint32_t FramebufferWidth = 0;
+            uint32_t FramebufferHeight = 0;
+
             bool VSync = false;
             bool Fullscreen = false;
             bool Visible = false;
             Window::EventCallbackFn EventCallback;
         };
 
-        WindowData m_Data;
+        WindowState m_Data;
     };
 }

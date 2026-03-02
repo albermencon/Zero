@@ -4,22 +4,22 @@
 
 namespace VoxelEngine
 {
-    Window::Window(const WindowProps &props)
+    Window::Window(const WindowProps& props)
         : m_Impl(WindowImpl::Create(props))
     {
     }
 
     Window::~Window() = default;
-    
-    Window::Window(Window &&other) noexcept = default;
-    Window &Window::operator=(Window &&other) noexcept = default;
 
-    void Window::OnUpdate()
+    Window::Window(Window&& other) noexcept = default;
+    Window& Window::operator=(Window&& other) noexcept = default;
+
+    void Window::PollEvents()
     {
-        m_Impl->OnUpdate();
+        m_Impl->PollEvents();
     }
 
-    void Window::SetEventCallback(const EventCallbackFn &callback)
+    void Window::SetEventCallback(const EventCallbackFn& callback)
     {
         m_Impl->SetEventCallback(callback);
     }
@@ -34,42 +34,47 @@ namespace VoxelEngine
         return m_Impl->IsVSync();
     }
 
-    uint32_t Window::GetWidth() const
+    uint32_t Window::GetWindowWidth() const
     {
-        return m_Impl->GetWidth();
+        return m_Impl->GetWindowWidth();
     }
 
-    uint32_t Window::GetHeight() const
+    uint32_t Window::GetWindowHeight() const
     {
-        return m_Impl->GetHeight();
+        return m_Impl->GetWindowHeight();
     }
 
-    std::pair<uint32_t, uint32_t> Window::GetSize() const
+    std::pair<uint32_t, uint32_t> Window::GetWindowSize() const
     {
-        return {GetWidth(), GetHeight()};
+        return { GetWindowWidth(), GetWindowHeight() };
     }
 
-    void Window::SetWidth(uint32_t width)
+    void Window::SetWindowWidth(uint32_t width)
     {
-        m_Impl->SetWidth(width);
+        m_Impl->SetWindowWidth(width);
     }
 
-    void Window::SetHeight(uint32_t height)
+    uint32_t Window::GetFrameBufferWidth() const
     {
-        m_Impl->SetHeight(height);
+        return m_Impl->GetFrameBufferWidth();
     }
 
-    void Window::SetSize(uint32_t width, uint32_t height)
+    uint32_t Window::GetFrameBufferHeight() const
     {
-        m_Impl->SetSize(width, height);
+        return m_Impl->GetFrameBufferWidth();
     }
 
-    void Window::SetTitle(const std::string &title)
+    std::pair<uint32_t, uint32_t> Window::GetFrameBufferSize() const
+    {
+        return { GetFrameBufferWidth(), GetFrameBufferHeight() };
+    }
+
+    void Window::SetTitle(const std::string& title)
     {
         m_Impl->SetTitle(title);
     }
 
-    const std::string &Window::GetTitle() const
+    const std::string& Window::GetTitle() const
     {
         return m_Impl->GetTitle();
     }
@@ -94,7 +99,7 @@ namespace VoxelEngine
         return m_Impl->IsVisible();
     }
 
-    void *Window::GetNativeWindow() const
+    void* Window::GetNativeWindow() const
     {
         return m_Impl->GetNativeWindow();
     }

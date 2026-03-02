@@ -18,7 +18,7 @@ namespace VoxelEngine
 {
     static bool s_GLFWInitialized = false;
 
-    GLFWWindowImpl::GLFWWindowImpl(const WindowProps &props)
+    GLFWWindowImpl::GLFWWindowImpl(const WindowProps& props)
     {
         Init(props);
     }
@@ -28,11 +28,11 @@ namespace VoxelEngine
         Shutdown();
     }
 
-    void GLFWWindowImpl::Init(const WindowProps &props)
+    void GLFWWindowImpl::Init(const WindowProps& props)
     {
         m_Data.Title = props.Title;
-        m_Data.Width = props.Width;
-        m_Data.Height = props.Height;
+        m_Data.WindowWidth = props.Width;
+        m_Data.WindowHeight = props.Height;
         m_Data.VSync = props.VSync;
         m_Data.Fullscreen = props.Fullscreen;
         m_Data.Visible = props.Visible;
@@ -109,7 +109,7 @@ namespace VoxelEngine
         }
 
         // Get primary monitor for fullscreen
-        GLFWmonitor *monitor = props.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+        GLFWmonitor* monitor = props.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
 
         // Create the GLFW window
         m_Window = glfwCreateWindow(
@@ -136,36 +136,47 @@ namespace VoxelEngine
     void GLFWWindowImpl::SetupCallBacks()
     {
         // Window resize callback
-        glfwSetWindowSizeCallback(m_Window, [](GLFWwindow *window, int width, int height)
-        {
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
-            data.Width = width;
-            data.Height = height;
+        glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height)
+            {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
+                data.WindowWidth = width;
+                data.WindowHeight = height;
 
-            WindowResizeEvent event(width, height);
-            data.EventCallback(event); 
-        });
+                WindowResizeEvent event(width, height);
+                data.EventCallback(event);
+            });
+
+        // Frame buffer callback
+        glfwSetFramebufferSizeCallback(m_Window, [](GLFWwindow* window, int width, int height)
+            {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
+                data.FramebufferWidth = width;
+                data.FramebufferHeight = height;
+
+                RenderSurfaceResize event(width, height);
+                data.EventCallback(event);
+            });
 
         // Window close callback
-        glfwSetWindowCloseCallback(m_Window, [](GLFWwindow *window)
-        {
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
-            WindowCloseEvent event;
-            data.EventCallback(event); 
-        });
+        glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
+            {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
+                WindowCloseEvent event;
+                data.EventCallback(event);
+            });
 
         // Key callback
-        glfwSetKeyCallback(m_Window, [](GLFWwindow *window, int key, int scancode, int action, int mods)
-        {
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
-
-            if (action == GLFW_PRESS)
-                Input::SetKeyState(static_cast<KeyCode>(key), true);
-            else if (action == GLFW_RELEASE)
-                Input::SetKeyState(static_cast<KeyCode>(key), false);
-
-            switch (action)
+        glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods)
             {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
+
+                if (action == GLFW_PRESS)
+                    Input::SetKeyState(static_cast<KeyCode>(key), true);
+                else if (action == GLFW_RELEASE)
+                    Input::SetKeyState(static_cast<KeyCode>(key), false);
+
+                switch (action)
+                {
                 case GLFW_PRESS:
                 {
                     KeyPressedEvent event(key, 0);
@@ -184,28 +195,28 @@ namespace VoxelEngine
                     data.EventCallback(event);
                     break;
                 }
-            } 
-        });
+                }
+            });
 
-        glfwSetCharCallback(m_Window, [](GLFWwindow *window, unsigned int character)
-        {
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
-            KeyTypedEvent event(character);
-            data.EventCallback(event);
-        });
+        glfwSetCharCallback(m_Window, [](GLFWwindow* window, unsigned int character)
+            {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
+                KeyTypedEvent event(character);
+                data.EventCallback(event);
+            });
 
         // Mouse button callback
-        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow *window, int button, int action, int mods)
-        {
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
-
-            if (action == GLFW_PRESS)
-                Input::SetMouseButtonState(static_cast<MouseButton>(button), true);
-            else if (action == GLFW_RELEASE)
-                Input::SetMouseButtonState(static_cast<MouseButton>(button), false);
-
-            switch (action)
+        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods)
             {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
+
+                if (action == GLFW_PRESS)
+                    Input::SetMouseButtonState(static_cast<MouseButton>(button), true);
+                else if (action == GLFW_RELEASE)
+                    Input::SetMouseButtonState(static_cast<MouseButton>(button), false);
+
+                switch (action)
+                {
                 case GLFW_PRESS:
                 {
                     MouseButtonPressedEvent event(button);
@@ -218,26 +229,26 @@ namespace VoxelEngine
                     data.EventCallback(event);
                     break;
                 }
-            } 
-        });
+                }
+            });
 
         // Scroll callback
-        glfwSetScrollCallback(m_Window, [](GLFWwindow *window, double xOffset, double yOffset)
-        {
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+        glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xOffset, double yOffset)
+            {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
 
-            MouseScrolledEvent event((float)xOffset, (float)yOffset);
-            data.EventCallback(event); 
-        });
+                MouseScrolledEvent event((float)xOffset, (float)yOffset);
+                data.EventCallback(event);
+            });
 
         // Cursor position callback
-        glfwSetCursorPosCallback(m_Window, [](GLFWwindow *window, double xPos, double yPos)
-        { 
-            WindowData &data = *(WindowData *)glfwGetWindowUserPointer(window);
+        glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xPos, double yPos)
+            {
+                WindowState& data = *(WindowState*)glfwGetWindowUserPointer(window);
 
-            MouseMovedEvent event((float)xPos, (float)yPos);
-            data.EventCallback(event);
-        });
+                MouseMovedEvent event((float)xPos, (float)yPos);
+                data.EventCallback(event);
+            });
     }
 
     void GLFWWindowImpl::Shutdown()
@@ -265,47 +276,57 @@ namespace VoxelEngine
         return m_Data.VSync;
     }
 
-    uint32_t GLFWWindowImpl::GetWidth() const
+    uint32_t GLFWWindowImpl::GetWindowWidth() const
     {
-        return m_Data.Width;
+        return m_Data.WindowWidth;
     }
 
-    uint32_t GLFWWindowImpl::GetHeight() const
+    uint32_t GLFWWindowImpl::GetWindowHeight() const
     {
-        return m_Data.Height;
+        return m_Data.WindowHeight;
     }
 
-    void GLFWWindowImpl::SetEventCallback(const Window::EventCallbackFn &callback)
+    void GLFWWindowImpl::SetEventCallback(const Window::EventCallbackFn& callback)
     {
         m_Data.EventCallback = callback;
     }
 
-    void GLFWWindowImpl::SetTitle(const std::string &title)
+    void GLFWWindowImpl::SetTitle(const std::string& title)
     {
         m_Data.Title = title;
         glfwSetWindowTitle(m_Window, title.c_str());
     }
 
-    const std::string &GLFWWindowImpl::GetTitle() const
+    const std::string& GLFWWindowImpl::GetTitle() const
     {
         return m_Data.Title;
     }
 
-    void GLFWWindowImpl::SetSize(uint32_t width, uint32_t height)
+    void GLFWWindowImpl::SetWindowSize(uint32_t width, uint32_t height)
     {
-        m_Data.Width = width;
-        m_Data.Height = height;
+        m_Data.WindowWidth = width;
+        m_Data.WindowHeight = height;
         glfwSetWindowSize(m_Window, static_cast<int>(width), static_cast<int>(height));
     }
 
-    void GLFWWindowImpl::SetWidth(uint32_t width)
+    uint32_t GLFWWindowImpl::GetFrameBufferWidth() const
     {
-        SetSize(width, m_Data.Height);
+        return m_Data.FramebufferWidth;
     }
 
-    void GLFWWindowImpl::SetHeight(uint32_t height)
+    uint32_t GLFWWindowImpl::GetFrameBufferHeight() const
     {
-        SetSize(m_Data.Width, height);
+        return m_Data.FramebufferHeight;
+    }
+
+    void GLFWWindowImpl::SetWindowWidth(uint32_t width)
+    {
+        SetWindowSize(width, m_Data.WindowHeight);
+    }
+
+    void GLFWWindowImpl::SetWindowHeight(uint32_t height)
+    {
+        SetWindowSize(m_Data.WindowWidth, height);
     }
 
     void GLFWWindowImpl::SetFullscreen(bool fullscreen)
@@ -315,20 +336,20 @@ namespace VoxelEngine
 
         m_Data.Fullscreen = fullscreen;
 
-        GLFWmonitor *monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 
         if (fullscreen)
         {
             glfwSetWindowMonitor(m_Window, monitor, 0, 0,
-                                 mode->width, mode->height, mode->refreshRate);
+                mode->width, mode->height, mode->refreshRate);
         }
         else
         {
             glfwSetWindowMonitor(m_Window, nullptr,
-                                 (mode->width - m_Data.Width) / 2,
-                                 (mode->height - m_Data.Height) / 2,
-                                 m_Data.Width, m_Data.Height, 0);
+                (mode->width - m_Data.WindowWidth) / 2,
+                (mode->height - m_Data.WindowHeight) / 2,
+                m_Data.WindowWidth, m_Data.WindowHeight, 0);
         }
     }
 
@@ -354,7 +375,7 @@ namespace VoxelEngine
     {
         return m_Data.Visible;
     }
-    void *GLFWWindowImpl::GetNativeWindow() const
+    void* GLFWWindowImpl::GetNativeWindow() const
     {
         return m_Window;
     }
