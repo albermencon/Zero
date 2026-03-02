@@ -11,6 +11,7 @@ namespace VoxelEngine
         None = 0,
         WindowClose,
         WindowResize,
+        RenderSurfaceResize,
         WindowFocus,
         WindowLostFocus,
         WindowMoved,

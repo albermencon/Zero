@@ -16,6 +16,11 @@ namespace VoxelEngine
 
         void PopLayer(Layer *layer);
 
+        size_t Size() const noexcept
+        {
+            return m_Layers.size();
+        }
+
         // Iterators
         auto begin() { return m_Layers.begin(); }
         auto end() { return m_Layers.end(); }
