@@ -8,7 +8,7 @@ namespace VoxelEngine
     public:
         virtual ~WindowImpl() = default;
 
-        virtual void OnUpdate() = 0;
+        virtual void PollEvents() = 0;
 
         virtual void SetEventCallback(const Window::EventCallbackFn &callback) = 0;
         virtual void SetVSync(bool enabled) = 0;

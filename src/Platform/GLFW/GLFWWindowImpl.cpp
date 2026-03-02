@@ -249,16 +249,15 @@ namespace VoxelEngine
         }
     }
 
-    void GLFWWindowImpl::OnUpdate()
+    void GLFWWindowImpl::PollEvents()
     {
         glfwPollEvents();
-        glfwSwapBuffers(m_Window);
     }
 
     void GLFWWindowImpl::SetVSync(bool enabled)
     {
         m_Data.VSync = enabled;
-        glfwSwapInterval(enabled ? 1 : 0);
+        // TODO: The backend is in charge of this
     }
 
     bool GLFWWindowImpl::IsVSync() const

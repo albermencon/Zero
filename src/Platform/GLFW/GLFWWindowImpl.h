@@ -11,7 +11,7 @@ namespace VoxelEngine
         GLFWWindowImpl(const WindowProps &props);
         virtual ~GLFWWindowImpl();
 
-        virtual void OnUpdate() override;
+        virtual void PollEvents() override;
 
         virtual void SetEventCallback(const Window::EventCallbackFn &callback) override;
         virtual void SetVSync(bool enabled) override;
