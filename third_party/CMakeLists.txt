@@ -1,3 +1,5 @@
+include(FetchContent)
+
 # Prevent vendor libraries from installing themselves
 set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
 set(SPDLOG_HEADER_ONLY ON CACHE BOOL "" FORCE)
@@ -11,6 +13,33 @@ set(HWY_PRINT_TARGETS OFF CACHE BOOL "" FORCE)
 set(HWY_SYSTEM_GTEST OFF CACHE BOOL "" FORCE)  # Google Tests off
 set(HWY_SYSTEM_JPEG OFF CACHE BOOL "" FORCE)   # No image codecs needed
 set(HWY_SYSTBM OFF CACHE BOOL "" FORCE)        # No TinyEXR
+
+# VMA (Vulkan Memory Allocator)
+add_library(vma INTERFACE)
+
+target_include_directories(vma
+    INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/vma
+)
+
+if (WIN32)
+
+    FetchContent_Declare(
+        d3d12ma
+        GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git
+        GIT_TAG v3.1.0
+    )
+
+    FetchContent_MakeAvailable(d3d12ma)
+
+    add_library(d3d12ma INTERFACE)
+
+    target_include_directories(d3d12ma
+        SYSTEM INTERFACE
+            ${d3d12ma_SOURCE_DIR}/include
+    )
+
+endif()
 
 # Add submodules
 add_subdirectory(spdlog)

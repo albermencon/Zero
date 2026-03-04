@@ -55,6 +55,11 @@ endif()
 
 find_package(Vulkan REQUIRED)
 target_link_libraries(VoxelEngine PRIVATE Vulkan::Vulkan)
+target_link_libraries(VoxelEngine PRIVATE vma)
+
+if(WIN32)
+    target_link_libraries(VoxelEngine PRIVATE d3d12ma)
+endif()
 
 target_precompile_headers(VoxelEngine
     PRIVATE
