@@ -4,7 +4,7 @@
 #include "Engine/Input/MouseButton.h"
 #include <utility>
 
-namespace VoxelEngine
+namespace Zero
 {
     namespace Input
     {

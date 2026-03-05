@@ -21,7 +21,7 @@ import vulkan_hpp;
 * TODO: Make present mode configurable
 */
 
-namespace VoxelEngine
+namespace Zero
 {
     VulkanDevice::VulkanDevice(Window* window)
         : m_instance()
@@ -44,6 +44,37 @@ namespace VoxelEngine
     }
 
     void VulkanDevice::init() {
+        m_memoryAllocator.Initialize(*m_instance.Get(), *m_physicaldevice.Get(), *m_device.Get());
+
+        auto alloc = m_memoryAllocator.GetAllocator();
+
+        VkDeviceSize size = 1024ull * 1024ull * 1024ull; // 1 GB
+
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = size;
+        bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+
+        VkResult result = vmaCreateBuffer(
+            m_memoryAllocator.GetAllocator(),
+            &bufferInfo,
+            &allocInfo,
+            &buffer,
+            &allocation,
+            nullptr
+        );
+
+        ENGINE_CORE_INFO("Memory allocator succesfully initialized");
+
         ENGINE_CORE_INFO("Vulkan Device initialized successfully.");
     }
 

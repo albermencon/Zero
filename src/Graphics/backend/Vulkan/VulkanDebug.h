@@ -6,7 +6,7 @@ import vulkan_hpp;
 #endif
 #include <Engine/Log.h>
 
-namespace VoxelEngine::Debug
+namespace Zero::Debug
 {
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
         vk::DebugUtilsMessageSeverityFlagBitsEXT severity,

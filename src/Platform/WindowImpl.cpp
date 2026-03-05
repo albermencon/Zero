@@ -13,7 +13,7 @@
 #include "Platform/iOS/iOSWindowImpl.h"
 #endif
 
-namespace VoxelEngine
+namespace Zero
 {
     std::unique_ptr<WindowImpl> WindowImpl::Create(const WindowProps &props)
     {

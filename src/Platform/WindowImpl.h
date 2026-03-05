@@ -1,7 +1,7 @@
 #pragma once
 #include <Engine/Window.h>
 
-namespace VoxelEngine
+namespace Zero
 {
     class WindowImpl
     {

@@ -2,7 +2,7 @@
 #include <Engine/Log.h>
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	VulkanLogicalDevice::VulkanLogicalDevice(const vk::raii::SurfaceKHR& surface, const vk::raii::PhysicalDevice& physicalDevice)
 	{

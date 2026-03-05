@@ -10,7 +10,7 @@ import vulkan_hpp;
 
 #include "ShaderModule.h"
 
-namespace VoxelEngine {
+namespace Zero {
 
     // One shader stage: which pipeline stage + which entry point.
     // Does NOT own the ShaderModule — the program or a cache does.

@@ -1,7 +1,7 @@
 #pragma once
 #include "Core.h"
 
-namespace VoxelEngine
+namespace Zero
 {
     class ENGINE_API Time
     {

@@ -14,7 +14,7 @@
 
 #include <GLFW/glfw3.h>
 
-namespace VoxelEngine
+namespace Zero
 {
     static bool s_GLFWInitialized = false;
 

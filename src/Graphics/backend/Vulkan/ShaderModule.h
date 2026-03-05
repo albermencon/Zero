@@ -8,7 +8,7 @@ import vulkan_hpp;
 #include <string_view>
 #include <vector>
 
-namespace VoxelEngine {
+namespace Zero {
 
     // Immutable SPIR-V source — either points to embedded bytes (zero-copy)
     // or owns a heap-allocated buffer loaded from disk.

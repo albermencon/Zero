@@ -6,7 +6,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace VoxelEngine
+namespace Zero
 {
     std::string Event::ToString() const
     {

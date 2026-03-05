@@ -11,7 +11,7 @@
 import vulkan_hpp;
 #endif
 
-namespace VoxelEngine 
+namespace Zero 
 {
     VulkanSurface::VulkanSurface(const vk::raii::Instance& instance, const Window& window)
     {

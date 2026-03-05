@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-namespace VoxelEngine
+namespace Zero
 {
     class LayerStack
     {

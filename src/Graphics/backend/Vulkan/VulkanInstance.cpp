@@ -4,7 +4,7 @@
 #include "Graphics/backend/Vulkan/VulkanDebug.h"
 #include <GLFW/glfw3.h>
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	VulkanInstance::VulkanInstance()
 	{

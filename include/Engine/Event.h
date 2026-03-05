@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <iosfwd> // Forward declaration for std::ostream
 
-namespace VoxelEngine
+namespace Zero
 {
 
     // Event types used for casting/checking
@@ -48,7 +48,7 @@ namespace VoxelEngine
 
     /**
      * @class Event
-     * @brief Base class for all events in the VoxelEngine.
+     * @brief Base class for all events in the Zero.
      *
      * The Event class provides a common interface for all events in the engine.
      * Events are not inherently blocking; however, they can be marked as handled

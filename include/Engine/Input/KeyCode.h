@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace VoxelEngine
+namespace Zero
 {
     enum class KeyCode : std::uint16_t
     {

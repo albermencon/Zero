@@ -2,7 +2,7 @@
 #include "Graphics/backend/Vulkan/VulkanCommandContext.h"
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	VulkanCommandContext::VulkanCommandContext(VulkanLogicalDevice* device)
 		: m_device(device)

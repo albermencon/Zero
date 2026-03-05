@@ -3,7 +3,7 @@
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanSwapchain.h"
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	VulkanSyncObjects::VulkanSyncObjects(VulkanLogicalDevice* device, VulkanSwapchain* swapchain)
         : m_device(device), m_swapchain(swapchain) 

@@ -16,7 +16,9 @@ import vulkan_hpp;
 #include "Graphics/backend/Vulkan/VulkanCommandContext.h"
 #include "Graphics/backend/Vulkan/VulkanSyncObjects.h"
 
-namespace VoxelEngine
+#include "Graphics/backend/Vulkan/VulkanMemoryAllocator.h"
+
+namespace Zero
 {
 
     class Window;
@@ -59,6 +61,7 @@ namespace VoxelEngine
         VulkanPipeline m_pipeline;
         VulkanCommandContext m_commandcontext;
         VulkanSyncObjects m_syncobjects;
+        VulkanMemory m_memoryAllocator;
     private:
         uint32_t currentFrame = 0;
         const uint32_t MAX_FRAMES_IN_FLIGHT = 2;

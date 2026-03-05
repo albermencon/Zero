@@ -2,7 +2,7 @@
 #include <Engine/Window.h>
 #include "Platform/WindowImpl.h"
 
-namespace VoxelEngine
+namespace Zero
 {
     Window::Window(const WindowProps& props)
         : m_Impl(WindowImpl::Create(props))

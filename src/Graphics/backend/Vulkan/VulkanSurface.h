@@ -5,7 +5,7 @@
 import vulkan_hpp;
 #endif
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	class Window;
 

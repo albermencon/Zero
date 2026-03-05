@@ -3,7 +3,7 @@
 
 struct GLFWwindow;
 
-namespace VoxelEngine
+namespace Zero
 {
     class GLFWWindowImpl : public WindowImpl
     {

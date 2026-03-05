@@ -2,7 +2,7 @@
 #include "Core.h"
 #include <memory>
 
-namespace VoxelEngine
+namespace Zero
 {
     class Event;
     class LayerStack;

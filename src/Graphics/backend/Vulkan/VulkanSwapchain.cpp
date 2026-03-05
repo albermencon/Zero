@@ -7,7 +7,7 @@
 #include "Graphics/backend/Vulkan/VulkanSurface.h"
 #include <Engine/Log.h>
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	VulkanSwapchain::VulkanSwapchain(VulkanLogicalDevice* device, VulkanPhysicalDevice* physicalDevice,
         VulkanSurface* surface, Window* window)
@@ -178,7 +178,7 @@ namespace VoxelEngine
 
         for (const auto& presentMode : availablePresentModes)
         {
-            if (presentMode == vk::PresentModeKHR::eFifoLatestReady)
+            if (presentMode == vk::PresentModeKHR::eImmediate)
             {
                 return presentMode;
             }
@@ -186,7 +186,7 @@ namespace VoxelEngine
 
         for (const auto& presentMode : availablePresentModes)
         {
-            if (presentMode == vk::PresentModeKHR::eImmediate)
+            if (presentMode == vk::PresentModeKHR::eFifoLatestReady)
             {
                 return presentMode;
             }

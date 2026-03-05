@@ -3,7 +3,7 @@
 #include "Core.h"
 #include "Event.h"
 
-namespace VoxelEngine
+namespace Zero
 {
     class ENGINE_API Layer
     {

@@ -1,11 +1,17 @@
 #pragma once
+#include <memory>
 
-namespace VoxelEngine
+namespace Zero
 {
+    class Buffer;
+    class BufferDesc;
+
     class GraphicsDevice
     {
     public:
         virtual ~GraphicsDevice() = default;
+
+        //virtual std::shared_ptr<Buffer> CreateBuffer(const BufferDesc& desc) = 0;
 
         // Frame lifecycle
         virtual void BeginFrame() = 0;

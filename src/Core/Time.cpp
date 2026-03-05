@@ -2,7 +2,7 @@
 #include <Engine/Time.h>
 #include <chrono>
 
-namespace VoxelEngine
+namespace Zero
 {
     using Clock = std::chrono::steady_clock;
 

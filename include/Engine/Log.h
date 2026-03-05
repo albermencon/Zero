@@ -4,7 +4,7 @@
 #include <string_view>
 #include <format>
 
-namespace VoxelEngine
+namespace Zero
 {
     // Define Log Levels
     enum class LogLevel
@@ -36,18 +36,18 @@ namespace VoxelEngine
 // This keeps the formatting type-safe and standard.
 
 #define LOG_CALL(isCore, level, ...) \
-    ::VoxelEngine::Log::LogMessage(isCore, level, std::format(__VA_ARGS__))
+    ::Zero::Log::LogMessage(isCore, level, std::format(__VA_ARGS__))
 
 // Core Logging
-#define ENGINE_CORE_TRACE(...) LOG_CALL(true, ::VoxelEngine::LogLevel::Trace, __VA_ARGS__)
-#define ENGINE_CORE_INFO(...) LOG_CALL(true, ::VoxelEngine::LogLevel::Info, __VA_ARGS__)
-#define ENGINE_CORE_WARN(...) LOG_CALL(true, ::VoxelEngine::LogLevel::Warn, __VA_ARGS__)
-#define ENGINE_CORE_ERROR(...) LOG_CALL(true, ::VoxelEngine::LogLevel::Error, __VA_ARGS__)
-#define ENGINE_CORE_CRITICAL(...) LOG_CALL(true, ::VoxelEngine::LogLevel::Critical, __VA_ARGS__)
+#define ENGINE_CORE_TRACE(...) LOG_CALL(true, ::Zero::LogLevel::Trace, __VA_ARGS__)
+#define ENGINE_CORE_INFO(...) LOG_CALL(true, ::Zero::LogLevel::Info, __VA_ARGS__)
+#define ENGINE_CORE_WARN(...) LOG_CALL(true, ::Zero::LogLevel::Warn, __VA_ARGS__)
+#define ENGINE_CORE_ERROR(...) LOG_CALL(true, ::Zero::LogLevel::Error, __VA_ARGS__)
+#define ENGINE_CORE_CRITICAL(...) LOG_CALL(true, ::Zero::LogLevel::Critical, __VA_ARGS__)
 
 // Client Logging
-#define CLIENT_TRACE(...) LOG_CALL(false, ::VoxelEngine::LogLevel::Trace, __VA_ARGS__)
-#define CLIENT_INFO(...) LOG_CALL(false, ::VoxelEngine::LogLevel::Info, __VA_ARGS__)
-#define CLIENT_WARN(...) LOG_CALL(false, ::VoxelEngine::LogLevel::Warn, __VA_ARGS__)
-#define CLIENT_ERROR(...) LOG_CALL(false, ::VoxelEngine::LogLevel::Error, __VA_ARGS__)
-#define CLIENT_CRITICAL(...) LOG_CALL(false, ::VoxelEngine::LogLevel::Critical, __VA_ARGS__)
+#define CLIENT_TRACE(...) LOG_CALL(false, ::Zero::LogLevel::Trace, __VA_ARGS__)
+#define CLIENT_INFO(...) LOG_CALL(false, ::Zero::LogLevel::Info, __VA_ARGS__)
+#define CLIENT_WARN(...) LOG_CALL(false, ::Zero::LogLevel::Warn, __VA_ARGS__)
+#define CLIENT_ERROR(...) LOG_CALL(false, ::Zero::LogLevel::Error, __VA_ARGS__)
+#define CLIENT_CRITICAL(...) LOG_CALL(false, ::Zero::LogLevel::Critical, __VA_ARGS__)

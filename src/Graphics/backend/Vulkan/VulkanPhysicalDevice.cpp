@@ -7,7 +7,7 @@
 import vulkan_hpp;
 #endif
 
-namespace VoxelEngine 
+namespace Zero 
 {
 	VulkanPhysicalDevice::VulkanPhysicalDevice(const vk::raii::Instance& instance)
 	{

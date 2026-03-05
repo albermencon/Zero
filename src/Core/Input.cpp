@@ -3,7 +3,7 @@
 #include "Platform/InputInternal.h"
 #include <cstring>
 
-namespace VoxelEngine
+namespace Zero
 {
     namespace Input
     {

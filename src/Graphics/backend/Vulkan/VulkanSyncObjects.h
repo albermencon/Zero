@@ -7,7 +7,7 @@ import vulkan_hpp;
 #endif
 #include <vector>
 
-namespace VoxelEngine
+namespace Zero
 {
 	class VulkanLogicalDevice;
 	class VulkanSwapchain;

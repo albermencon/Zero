@@ -6,7 +6,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-namespace VoxelEngine
+namespace Zero
 {
     struct Log::Impl
     {
@@ -33,7 +33,7 @@ namespace VoxelEngine
         logSinks[0]->set_pattern("%^[%T] %n: %v%$");
 
         // 2. File Sink
-        logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("VoxelEngine.log", true));
+        logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("Zero.log", true));
         logSinks[1]->set_pattern("[%T] [%l] %n: %v");
 
         // Initialize Core Logger

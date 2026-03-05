@@ -5,7 +5,7 @@
 #include "Core.h"
 #include "Event.h"
 
-namespace VoxelEngine
+namespace Zero
 {
 
     enum class BackendType

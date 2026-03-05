@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace VoxelEngine
+namespace Zero
 {
     LayerStack::LayerStack() = default;
 

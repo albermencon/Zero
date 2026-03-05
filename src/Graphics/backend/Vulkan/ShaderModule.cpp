@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <format>
 
-namespace VoxelEngine {
+namespace Zero {
 
     // ── SpirVSource ────────────────────────────────────────────────────────────
 

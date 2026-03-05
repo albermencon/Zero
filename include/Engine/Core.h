@@ -8,6 +8,7 @@
 #endif
 
 #define ENGINE_ENABLE_ASSERTS
+#define ENGINE_DEBUG
 
 #ifdef ENGINE_ENABLE_ASSERTS
     #define ENGINE_ASSERT(x, ...) { if(!(x)) { ENGINE_ERROR("Assertion Failed: {0}", __VA_ARGS__); __debugbreak(); } }

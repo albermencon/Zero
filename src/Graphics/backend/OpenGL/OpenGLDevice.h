@@ -1,7 +1,7 @@
 #pragma once
 #include "Graphics/core/GraphicsDevice.h"
 
-namespace VoxelEngine
+namespace Zero
 {
     class Window;
 

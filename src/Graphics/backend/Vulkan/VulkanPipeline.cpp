@@ -6,7 +6,7 @@
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanSwapchain.h"
 
-namespace VoxelEngine
+namespace Zero
 {
 	VulkanPipeline::VulkanPipeline(VulkanLogicalDevice* device, VulkanSwapchain* swapchain)
         : m_device(device), m_swapchain(swapchain) 
@@ -16,8 +16,8 @@ namespace VoxelEngine
 
 	void VulkanPipeline::createGraphicsPipeline()
 	{
-        SpirVSource vertSource = SpirVSource::fromFile("C:\\Dev\\EngineProject\\VoxelEngine\\Shaders\\shader.vert.spv");
-        SpirVSource fragSource = SpirVSource::fromFile("C:\\Dev\\EngineProject\\VoxelEngine\\Shaders\\shader.frag.spv");
+        SpirVSource vertSource = SpirVSource::fromFile("Shaders\\shader.vert.spv");
+        SpirVSource fragSource = SpirVSource::fromFile("Shaders\\shader.frag.spv");
 
         auto shaderVertModule = ShaderModule(m_device->Get(), std::move(vertSource));
         auto shaderFragModule = ShaderModule(m_device->Get(), std::move(fragSource));

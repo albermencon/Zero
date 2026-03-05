@@ -4,7 +4,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-namespace VoxelEngine
+namespace Zero
 {
     OpenGLDevice::OpenGLDevice(Window* window)
         : m_window(window)

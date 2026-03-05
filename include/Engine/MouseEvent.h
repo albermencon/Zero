@@ -3,7 +3,7 @@
 #include "Event.h"
 #include <sstream> // For std::stringstream
 
-namespace VoxelEngine
+namespace Zero
 {
 
     class ENGINE_API MouseMovedEvent : public Event

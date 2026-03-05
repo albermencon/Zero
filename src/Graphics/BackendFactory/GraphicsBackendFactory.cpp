@@ -17,7 +17,7 @@
 #error Unsupported platform
 #endif
 
-namespace VoxelEngine
+namespace Zero
 {
     std::unique_ptr<GraphicsDevice> GraphicsBackend::Create(
         BackendType type,

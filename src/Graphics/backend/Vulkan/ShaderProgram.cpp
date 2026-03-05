@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "ShaderProgram.h"
 
-namespace VoxelEngine 
+namespace Zero 
 {
 
     ShaderStage ShaderStage::vertex(const ShaderModule& m, const char* ep) noexcept {

@@ -13,7 +13,7 @@
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
 #include <Engine/Profiler/Profiler.h>
 
-namespace VoxelEngine
+namespace Zero
 {
     Application* Application::s_Instance = nullptr;
 
@@ -25,7 +25,7 @@ namespace VoxelEngine
 
         {
             ENGINE_PROFILE_SCOPE("Log Init");
-            VoxelEngine::Log::Init();
+            Zero::Log::Init();
         }
 
         // Initialize the layer stack
@@ -48,7 +48,7 @@ namespace VoxelEngine
 
         {
             ENGINE_PROFILE_SCOPE("Window Creation");
-            m_Window = std::make_unique<VoxelEngine::Window>(props);
+            m_Window = std::make_unique<Zero::Window>(props);
             m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
         }
 

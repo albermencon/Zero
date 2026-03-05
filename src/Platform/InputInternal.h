@@ -3,7 +3,7 @@
 #include <Engine/Input/MouseButton.h>
 #include <cstdint>
 
-namespace VoxelEngine
+namespace Zero
 {
     namespace Input
     {
