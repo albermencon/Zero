@@ -21,7 +21,7 @@ namespace Zero
         void PushLayer(std::unique_ptr<Layer> layer);
         void PushOverlay(std::unique_ptr<Layer> overlay);
 
-        inline static Application& Get() { return *s_Instance; }
+        inline static Application& Get();
         inline Window& GetWindow() { return *m_Window; }
 
         void Run();

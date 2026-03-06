@@ -17,6 +17,11 @@ namespace Zero
 {
     Application* Application::s_Instance = nullptr;
 
+    Application& Application::Get()
+    {
+        return *s_Instance;
+    }
+
     Application::Application()
     {
         ENGINE_PROFILE_FUNCTION();
