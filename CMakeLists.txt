@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED "Build as shared library" ON)
-option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
+option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" On) # profiling with tracy
 
 file(GLOB_RECURSE ENGINE_SOURCES
     "src/*.cpp"
@@ -33,6 +33,7 @@ target_link_libraries(Zero PRIVATE glfw)
 target_link_libraries(Zero PRIVATE glad::glad)
 target_link_libraries(Zero PRIVATE imgui)
 target_link_libraries(Zero PRIVATE hwy)
+target_link_libraries(Zero PRIVATE moodycamel)
 
 if (ENGINE_ENABLE_PROFILING)
 

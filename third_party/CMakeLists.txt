@@ -14,6 +14,14 @@ set(HWY_SYSTEM_GTEST OFF CACHE BOOL "" FORCE)  # Google Tests off
 set(HWY_SYSTEM_JPEG OFF CACHE BOOL "" FORCE)   # No image codecs needed
 set(HWY_SYSTBM OFF CACHE BOOL "" FORCE)        # No TinyEXR
 
+# Moodycamel queues (header-only)
+add_library(moodycamel INTERFACE)
+
+target_include_directories(moodycamel
+    INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/moodycamel
+)
+
 # VMA (Vulkan Memory Allocator)
 add_library(vma INTERFACE)
 
@@ -50,17 +58,29 @@ add_subdirectory(highway)
 # Add the Highway include directory explicitly for safety
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/highway)
 
+find_package(Vulkan REQUIRED)
+
 set(IMGUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_library(imgui STATIC
     imgui/imgui.cpp
     imgui/imgui_draw.cpp
     imgui/imgui_tables.cpp
     imgui/imgui_widgets.cpp
+    imgui/imgui_demo.cpp
+    imgui/backends/imgui_impl_opengl3.cpp
+    imgui/backends/imgui_impl_vulkan.cpp
+
 )
 
 target_include_directories(imgui
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/imgui
+        ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends
+)
+
+target_link_libraries(imgui
+    PUBLIC
+        Vulkan::Vulkan
 )
 
 if (ENGINE_ENABLE_PROFILING)
