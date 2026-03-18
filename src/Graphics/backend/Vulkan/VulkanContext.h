@@ -53,6 +53,17 @@ namespace Zero
             vk::raii::CommandBuffer& commandBuffer
         );
     private:
+        void initImGui();
+        void shutdownImGui();
+
+        // harcodewd imgui state
+        vk::raii::DescriptorPool m_imguiDescPool = nullptr;
+        VkFormat m_cachedSwapchainFormat = VK_FORMAT_UNDEFINED;
+        bool m_imguiInitialized = false;
+        uint32_t m_currentImageIndex = 0;
+        bool m_frameAborted = false;
+
+    private:
         VulkanInstance m_instance;
         VulkanSurface m_surface;
         VulkanPhysicalDevice m_physicaldevice;

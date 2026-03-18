@@ -16,6 +16,10 @@
 import vulkan_hpp;
 #endif
 
+//temp
+#include <imgui.h>
+#include <backends/imgui_impl_vulkan.h>
+
 /*
 * TODO: Create a validation system for extensions and layers
 * TODO: Make present mode configurable
@@ -41,6 +45,7 @@ namespace Zero
     VulkanDevice::~VulkanDevice()
     {
         //cleanupSwapChain();
+        shutdownImGui();
     }
 
     void VulkanDevice::init() {
@@ -64,6 +69,7 @@ namespace Zero
         VkBuffer buffer = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
 
+        /*
         VkResult result = vmaCreateBuffer(
             m_memoryAllocator.GetAllocator(),
             &bufferInfo,
@@ -72,6 +78,22 @@ namespace Zero
             &allocation,
             nullptr
         );
+        */
+
+        // ImGui
+        vk::DescriptorPoolSize poolSize{
+            vk::DescriptorType::eCombinedImageSampler, 1
+        };
+        vk::DescriptorPoolCreateInfo poolInfo{
+            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            1,          // maxSets
+            1,          // poolSizeCount
+            &poolSize
+        };
+
+        m_imguiDescPool = m_device.Get().createDescriptorPool(poolInfo);
+
+        initImGui();
 
         ENGINE_CORE_INFO("Memory allocator succesfully initialized");
 
@@ -80,7 +102,24 @@ namespace Zero
 
     void VulkanDevice::SwapBuffers()
     {
+        if (m_frameAborted) return;
 
+        vk::PresentInfoKHR presentInfo{};
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[m_currentImageIndex];
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &*m_swapchain.Get();
+        presentInfo.pImageIndices = &m_currentImageIndex;
+
+        auto result = m_device.GetPresentQueue().presentKHR(presentInfo);
+
+        if (result == vk::Result::eErrorOutOfDateKHR ||
+            result == vk::Result::eSuboptimalKHR)
+        {
+            m_SwapChainDirty = true; // will be recreated in the next BeginFrame call
+        }
+
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
     void VulkanDevice::BeginFrame()
     {
@@ -100,6 +139,7 @@ namespace Zero
         {
             m_SwapChainDirty = false;
             recreateSwapChain();
+            m_frameAborted = true;
             return;
         }
 
@@ -107,51 +147,43 @@ namespace Zero
         {
             ENGINE_CORE_WARN("Failed to acquire swap chain image");
             currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT; // avanza
+            m_frameAborted = true;
             return;
         }
 
-        // Only reset the fence if we are submitting work
-        m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
+        m_currentImageIndex = imageIndex;
+        m_frameAborted = false;
 
-        m_commandcontext.GetCommandBuffers()[currentFrame].reset();
-        recordCommandBuffer(imageIndex);
+        if (m_imguiInitialized)
+        {
+            ImGui_ImplVulkan_NewFrame();
+            ImGui::NewFrame();
+        }
 
-        // The first three parameters specify which semaphores to wait on before execution begins and in which stage(s) of the pipeline to wait.
-        // The next parameter specifies which command buffers to actually submit for execution. We simply submit the single command buffer we have.
-        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        vk::SubmitInfo submitInfo{};
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &*m_syncobjects.GetImageAvailableSemaphores()[currentFrame];
-        submitInfo.pWaitDstStageMask = &waitDestinationStageMask;
-
-        // Command buffers
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &*m_commandcontext.GetCommandBuffers()[currentFrame];
-
-        // Signal semaphores
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[imageIndex];
-
-        // Submit to the gpu
-        m_device.GetGraphicsQueue().submit(submitInfo, *m_syncobjects.GetInFlightFences()[currentFrame]);
-
-        vk::PresentInfoKHR presentInfoKHR{};
-        presentInfoKHR.waitSemaphoreCount = 1;
-        presentInfoKHR.pWaitSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[imageIndex];
-
-        presentInfoKHR.swapchainCount = 1;
-        presentInfoKHR.pSwapchains = &*m_swapchain.Get();
-        presentInfoKHR.pImageIndices = &imageIndex;
-        presentInfoKHR.pResults = nullptr; // Optional
-
-        result = m_device.GetPresentQueue().presentKHR(presentInfoKHR);
-
-        currentFrame =
-            (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
     void VulkanDevice::EndFrame()
     {
+        if (m_frameAborted) return;
 
+        if (m_imguiInitialized)
+            ImGui::Render();
+
+        m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
+        m_commandcontext.GetCommandBuffers()[currentFrame].reset();
+        recordCommandBuffer(m_currentImageIndex);
+
+        vk::PipelineStageFlags waitMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        vk::SubmitInfo submitInfo{};
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &*m_syncobjects.GetImageAvailableSemaphores()[currentFrame];
+        submitInfo.pWaitDstStageMask = &waitMask;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &*m_commandcontext.GetCommandBuffers()[currentFrame];
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[m_currentImageIndex];
+
+        m_device.GetGraphicsQueue().submit(submitInfo,
+            *m_syncobjects.GetInFlightFences()[currentFrame]);
     }
 
     void VulkanDevice::OnFinished()
@@ -215,6 +247,14 @@ namespace Zero
 
         commandBuffer.draw(3, 1, 0, 0);
 
+        // Imgui
+        if (m_imguiInitialized && ImGui::GetDrawData())
+        {
+            ImGui_ImplVulkan_RenderDrawData(
+                ImGui::GetDrawData(), *commandBuffer
+            );
+        }
+
         commandBuffer.endRendering();
 
         // After rendering, transition the swapchain image to PRESENT_SRC
@@ -267,6 +307,55 @@ namespace Zero
         dependencyInfo.pImageMemoryBarriers = &barrier;
 
         commandBuffer.pipelineBarrier2(dependencyInfo);
+    }
+
+    void VulkanDevice::initImGui()
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        ImGui::StyleColorsDark();
+
+        // Cache format
+        m_cachedSwapchainFormat = static_cast<VkFormat>(m_swapchain.GetFormat());
+
+        ImGui_ImplVulkan_InitInfo info{};
+        info.ApiVersion = VK_API_VERSION_1_3;
+        info.Instance = *m_instance.Get();
+        info.PhysicalDevice = *m_physicaldevice.Get();
+        info.Device = *m_device.Get();
+        info.QueueFamily = m_device.GetFamilyGraphicsIndex();
+        info.Queue = *m_device.GetGraphicsQueue();
+        info.DescriptorPool = *m_imguiDescPool;
+        info.MinImageCount = 2;
+        info.ImageCount = static_cast<uint32_t>(m_swapchain.GetImages().size());
+        
+        // Dynamic rendering — PipelineInfoMain
+        info.UseDynamicRendering = true;
+        info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        info.PipelineInfoMain.PipelineRenderingCreateInfo.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+        info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &m_cachedSwapchainFormat;
+
+        ImGui_ImplVulkan_Init(&info);
+
+        // ImGui 1.92+
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+
+        m_imguiInitialized = true;
+        ENGINE_CORE_INFO("ImGui Vulkan backend initialized.");
+    }
+
+    void VulkanDevice::shutdownImGui()
+    {
+        if (!m_imguiInitialized) return;
+        m_device.Get().waitIdle();
+        ImGui_ImplVulkan_Shutdown();
+        ImGui::DestroyContext();
+        m_imguiInitialized = false;
     }
 
 }
