@@ -11,6 +11,22 @@ file(GLOB_RECURSE ENGINE_SOURCES
     "src/*.cpp"
 )
 
+# Remove all platform-specific thread impls from the glob result
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX ".*/Thread/Platform/.*\\.cpp$")
+
+# Add only the correct one back
+if(WIN32)
+    list(APPEND ENGINE_SOURCES "src/Thread/Platform/Thread_Win32.cpp")
+elseif(ANDROID)
+    list(APPEND ENGINE_SOURCES "src/Thread/Platform/Thread_Linux.cpp")
+elseif(UNIX AND APPLE)
+    list(APPEND ENGINE_SOURCES "src/Thread/Platform/Thread_Mac.cpp")
+elseif(UNIX)
+    list(APPEND ENGINE_SOURCES "src/Thread/Platform/Thread_Linux.cpp")
+else()
+    list(APPEND ENGINE_SOURCES "src/Thread/Platform/Thread_Fallback.cpp")
+endif()
+
 # Add vendor dependencies
 add_subdirectory(third_party)
 
@@ -60,6 +76,11 @@ target_link_libraries(Zero PRIVATE vma)
 
 if(WIN32)
     target_link_libraries(Zero PRIVATE d3d12ma)
+endif()
+
+# pthread needed on Linux/macOS for pthread_setname_np, pthread_setaffinity_np
+if(UNIX)
+    target_link_libraries(Zero PRIVATE pthread)
 endif()
 
 target_precompile_headers(Zero
