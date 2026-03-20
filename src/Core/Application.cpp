@@ -12,6 +12,12 @@
 
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
 #include <Engine/Profiler/Profiler.h>
+//temp
+#include "ImGui/Backends/Vulkan/ImGuiLayerVulkan.h"
+#include "Graphics/backend/Vulkan/VulkanContext.h"
+#include <imgui.h>
+
+#include "Graphics/Renderer/Renderer.h"
 
 namespace Zero
 {
@@ -24,21 +30,13 @@ namespace Zero
 
     Application::Application()
     {
-        ENGINE_PROFILE_FUNCTION();
         ENGINE_CORE_ASSERT(!s_Instance, "Application already exists!");
         s_Instance = this;
 
-        {
-            ENGINE_PROFILE_SCOPE("Log Init");
-            Zero::Log::Init();
-        }
+        Zero::Log::Init();
 
-        // Initialize the layer stack
-        {
-            ENGINE_PROFILE_SCOPE("LayerStack Creation");
-            m_LayerStack = std::make_unique<LayerStack>();
-        }
-
+        m_LayerStack = std::make_unique<LayerStack>();
+        
         // TODO: Replace this with a CLI, NativeWindow request factory maker
         // Create a window
         std::string Title = "Voxel Engine";
@@ -51,16 +49,41 @@ namespace Zero
         bool Visible = true;
         WindowProps props(Title, backend, Width, Height, Fullscreen, VSync, Resizable, Visible);
 
+        m_Window = std::make_unique<Zero::Window>(props);
+        m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
+        
+        Renderer::Get().Init(RHI::API::Vulkan, m_Window.get());
+
+        if (false && props.backend != BackendType::Vulkan)
         {
-            ENGINE_PROFILE_SCOPE("Window Creation");
-            m_Window = std::make_unique<Zero::Window>(props);
-            m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
+            auto imguiLayer = std::make_unique<ImGuiLayerVulkan>(
+                static_cast<VulkanDevice*>(m_backend.get())
+            );
+            //PushOverlay(std::move(imguiLayer));
         }
 
+        class ImGuiTestLayer : public Layer
         {
-            ENGINE_PROFILE_SCOPE("Backend Creation");
-            m_backend = GraphicsBackend::Create(backend, *m_Window);
-        }
+        public:
+            ImGuiTestLayer() : Layer("ImGuiTest") {}
+            void OnRender() override
+            {
+                float dt = Time::GetDeltaTime();
+                float fps = dt > 0.0f ? 1.0f / dt : 0.0f;
+
+                static bool toggled = false;
+
+                ImGui::Begin("Performance");
+                ImGui::SetWindowFontScale(1.5f); // scale factor (e.g. 1.5x)
+                ImGui::Text("Delta time: %.3f ms", dt * 1000.0f);
+                ImGui::Text("FPS: %.1f", fps);
+                ImGui::End();
+
+                //ImGui::ShowDemoWindow();
+            }
+        };
+
+        PushLayer(std::make_unique<ImGuiTestLayer>());
     }
 
     Application::~Application()
@@ -81,9 +104,6 @@ namespace Zero
 
     void Application::Run()
     {
-        ENGINE_PROFILE_FUNCTION();
-        ENGINE_PROFILE_THREAD("Main Thread");
-
         ENGINE_CORE_TRACE("Application started.");
 
         Time::Init();
@@ -91,77 +111,40 @@ namespace Zero
         // Main loop
         while (m_Running)
         {
-            ENGINE_PROFILE_FRAME();               // mark frame boundary
-            ENGINE_PROFILE_SCOPE("Frame");
-
             Time::Update();
-
-            // Poll OS events
-            {
-                ENGINE_PROFILE_SCOPE("PollEvents");
-                m_Window->PollEvents();
-            }
-
-            {
-                ENGINE_PROFILE_SCOPE("BeginFrame");
-                m_backend->BeginFrame();
-            }
+            m_Window->PollEvents(); // Poll OS events
+            Input::UpdateInput();
 
             float dt = Time::GetDeltaTime();
 
-            ENGINE_PROFILE_PLOT("DeltaTime", dt);
-            ENGINE_PROFILE_PLOT("FPS", 1.0f / dt);
-            ENGINE_PROFILE_PLOT("LayerCount", static_cast<float>(m_LayerStack->Size()));
-
+            // Game logic
+            for (auto& layer : *m_LayerStack)
             {
-                ENGINE_PROFILE_SCOPE("Layer Update");
-
-                for (auto& layer : *m_LayerStack)
-                {
-                    ENGINE_PROFILE_SCOPE_DYNAMIC(
-                        layer->GetName().c_str(),
-                        layer->GetName().size()
-                    );
-
-                    layer->OnUpdate(dt);
-                }
+                layer->OnUpdate(dt);
             }
 
+            // Build frame
+            if (!Renderer::Get().RequestFrame())
+                continue;
+
+            //ImGui::NewFrame();
+            for (auto& layer : *m_LayerStack)
             {
-                ENGINE_PROFILE_SCOPE("Layer Render");
+                //layer->OnRender();
+            }
+            //ImGui::EndFrame();
 
-                for (auto& layer : *m_LayerStack)
-                {
-                    ENGINE_PROFILE_SCOPE_DYNAMIC(
-                        layer->GetName().c_str(),
-                        layer->GetName().size()
-                    );
+            auto frame = std::make_unique<FrameData>();
 
-                    layer->OnRender();
-                }
+            for (auto& layer : *m_LayerStack)
+            {
+                //layer->(*frame);
             }
 
-            {
-                ENGINE_PROFILE_SCOPE("EndFrame");
-                m_backend->EndFrame();
-            }
-
-            {
-                ENGINE_PROFILE_SCOPE("SwapBuffers");
-                m_backend->SwapBuffers();
-            }
-
-            {
-                ENGINE_PROFILE_SCOPE("Input Update");
-                Input::UpdateInput();
-            }
+            Renderer::Get().SubmitFrame(std::move(frame));
         }
 
-        // For Vulkan wait for the devices to finished
-        {
-            ENGINE_PROFILE_SCOPE("Backend Shutdown Wait");
-            m_backend->OnFinished();
-        }
+        Renderer::Get().Shutdown();
     }
 
     void Application::OnEvent(Event& e)
@@ -188,7 +171,7 @@ namespace Zero
 
     bool Application::OnRenderSurfaceResize(RenderSurfaceResize& e)
     {
-        m_backend->OnRenderSurfaceResize();
+        Renderer::Get().OnRenderSurfaceResize();
         return true; // the layers don't need to see this event
     }
 
