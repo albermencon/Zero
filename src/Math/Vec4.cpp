@@ -1,7 +1,6 @@
 #include "pch.h"
 #include <cmath>
 #include <Engine/Math/Vec4.h>
-#include "Vec4.h"
 
 namespace Zero
 {
