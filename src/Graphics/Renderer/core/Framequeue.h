@@ -27,6 +27,7 @@ namespace Zero
         void FrameConsumed();
 
         bool TryAdquire();
+        void Adquire();
 
     private:
         moodycamel::BlockingReaderWriterCircularBuffer<std::unique_ptr<FrameData>> m_queue;

@@ -124,8 +124,7 @@ namespace Zero
             }
 
             // Build frame
-            if (!Renderer::Get().RequestFrame())
-                continue;
+            Renderer::Get().RequestFrame();
 
             //ImGui::NewFrame();
             for (auto& layer : *m_LayerStack)
@@ -138,7 +137,7 @@ namespace Zero
 
             for (auto& layer : *m_LayerStack)
             {
-                //layer->(*frame);
+                layer->OnBuildFrame(*frame);
             }
 
             Renderer::Get().SubmitFrame(std::move(frame));

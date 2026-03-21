@@ -41,4 +41,9 @@ namespace Zero
 	{
 		return m_availableSlots.try_acquire();
 	}
+
+	void FrameQueue::Adquire()
+	{
+		m_availableSlots.acquire();
+	}
 }

@@ -28,7 +28,7 @@ namespace Zero
 		void OnRenderSurfaceResize();
 
 		// Called from main thread
-		bool RequestFrame();
+		void RequestFrame();
 
 		void SubmitFrame(std::unique_ptr<FrameData> frame);
 

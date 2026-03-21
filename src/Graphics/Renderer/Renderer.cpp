@@ -61,9 +61,9 @@ namespace Zero
 		m_backend->OnRenderSurfaceResize();
 	}
 
-	bool Renderer::RequestFrame()
+	void Renderer::RequestFrame()
 	{
-		return m_queue.TryAdquire();
+		m_queue.Adquire();
 	}
 
 	void Renderer::SubmitFrame(std::unique_ptr<FrameData> frame)

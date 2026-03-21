@@ -5,6 +5,8 @@
 
 namespace Zero
 {
+    class FrameData;
+
     class ENGINE_API Layer
     {
     public:
@@ -19,6 +21,7 @@ namespace Zero
         virtual void OnDetach() {}
         virtual void OnUpdate(float dt) {}
         virtual void OnRender() {}
+        virtual void OnBuildFrame(FrameData& frame) {}
         virtual void OnEvent(Event& event) {}
 
         const std::string& GetName() const noexcept
