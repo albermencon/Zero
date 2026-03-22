@@ -1,22 +1,15 @@
 #include "pch.h"
-#include <Engine/Layer.h>
 #include <Engine/Application.h>
+#include <Engine/Layer.h>
 #include <Engine/ApplicationEvent.h>
 #include <Engine/Window.h>
 #include <Engine/EventDispatcher.h>
 #include <Engine/Log.h>
 #include <Engine/Time.h>
+#include <Engine/Scene/SceneManager.h>
 #include "Platform/WindowImpl.h"
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
-
-#include "Graphics/BackendFactory/GraphicsBackendFactory.h"
-#include <Engine/Profiler/Profiler.h>
-//temp
-#include "ImGui/Backends/Vulkan/ImGuiLayerVulkan.h"
-#include "Graphics/backend/Vulkan/VulkanContext.h"
-#include <imgui.h>
-
 #include "Graphics/Renderer/Renderer.h"
 
 namespace Zero
@@ -53,37 +46,7 @@ namespace Zero
         m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
         
         Renderer::Get().Init(RHI::API::Vulkan, m_Window.get());
-
-        if (false && props.backend != BackendType::Vulkan)
-        {
-            auto imguiLayer = std::make_unique<ImGuiLayerVulkan>(
-                static_cast<VulkanDevice*>(m_backend.get())
-            );
-            //PushOverlay(std::move(imguiLayer));
-        }
-
-        class ImGuiTestLayer : public Layer
-        {
-        public:
-            ImGuiTestLayer() : Layer("ImGuiTest") {}
-            void OnRender() override
-            {
-                float dt = Time::GetDeltaTime();
-                float fps = dt > 0.0f ? 1.0f / dt : 0.0f;
-
-                static bool toggled = false;
-
-                ImGui::Begin("Performance");
-                ImGui::SetWindowFontScale(1.5f); // scale factor (e.g. 1.5x)
-                ImGui::Text("Delta time: %.3f ms", dt * 1000.0f);
-                ImGui::Text("FPS: %.1f", fps);
-                ImGui::End();
-
-                //ImGui::ShowDemoWindow();
-            }
-        };
-
-        PushLayer(std::make_unique<ImGuiTestLayer>());
+        SceneManager::Get().Init();
     }
 
     Application::~Application()
@@ -123,27 +86,18 @@ namespace Zero
                 layer->OnUpdate(dt);
             }
 
+            SceneManager::Get().FlushCommands();
+
             // Build frame
             Renderer::Get().RequestFrame();
 
-            //ImGui::NewFrame();
-            for (auto& layer : *m_LayerStack)
-            {
-                //layer->OnRender();
-            }
-            //ImGui::EndFrame();
-
-            auto frame = std::make_unique<FrameData>();
-
-            for (auto& layer : *m_LayerStack)
-            {
-                layer->OnBuildFrame(*frame);
-            }
+            std::unique_ptr<FrameData> frame(SceneManager::Get().BuildFrame(0, dt));
 
             Renderer::Get().SubmitFrame(std::move(frame));
         }
 
         Renderer::Get().Shutdown();
+        SceneManager::Get().Shutdown();
     }
 
     void Application::OnEvent(Event& e)
