@@ -10,7 +10,6 @@ namespace Zero
     class Window;
     class WindowCloseEvent;
     class RenderSurfaceResize;
-    class GraphicsDevice;
 
     class ENGINE_API Application
     {
@@ -21,7 +20,7 @@ namespace Zero
         void PushLayer(std::unique_ptr<Layer> layer);
         void PushOverlay(std::unique_ptr<Layer> overlay);
 
-        inline static Application& Get();
+        static Application& Get();
         inline Window& GetWindow() { return *m_Window; }
 
         void Run();
@@ -34,7 +33,6 @@ namespace Zero
 
     private:
         std::unique_ptr<class Window> m_Window;
-        std::unique_ptr<class GraphicsDevice> m_backend;
         std::unique_ptr<LayerStack> m_LayerStack;
         static Application* s_Instance;
         bool m_Running = true;
