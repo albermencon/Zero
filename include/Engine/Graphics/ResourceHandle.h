@@ -29,6 +29,28 @@ namespace Zero
     public:
         ResourceHandle() = default;
 
+        // Copy — copies the id and loads the state atomically
+        ResourceHandle(const ResourceHandle& o) noexcept
+            : m_id(o.m_id)
+        {
+            m_state.store(o.m_state.load(std::memory_order_acquire),
+                std::memory_order_release);
+        }
+
+        ResourceHandle& operator=(const ResourceHandle& o) noexcept
+        {
+            if (this != &o)
+            {
+                m_id = o.m_id;
+                m_state.store(o.m_state.load(std::memory_order_acquire),
+                    std::memory_order_release);
+            }
+            return *this;
+        }
+
+        ResourceHandle(ResourceHandle&&) noexcept = default;
+        ResourceHandle& operator=(ResourceHandle&&) noexcept = default;
+
         [[nodiscard]] bool IsValid()   const noexcept { return m_state.load(std::memory_order_acquire) != ResourceState::Invalid; }
         [[nodiscard]] bool IsReady()   const noexcept { return m_state.load(std::memory_order_acquire) == ResourceState::Ready; }
         [[nodiscard]] bool IsPending() const noexcept { return m_state.load(std::memory_order_acquire) == ResourceState::Pending; }
