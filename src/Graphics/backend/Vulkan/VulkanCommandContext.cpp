@@ -24,7 +24,7 @@ namespace Zero
 		commandBuffers.clear();
 
 		vk::CommandBufferAllocateInfo allocinfo{};
-		allocinfo.commandPool = commandPool;
+		allocinfo.commandPool = *commandPool;
 		allocinfo.level = vk::CommandBufferLevel::ePrimary;
 		allocinfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 

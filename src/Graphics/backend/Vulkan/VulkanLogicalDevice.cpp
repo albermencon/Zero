@@ -59,19 +59,19 @@ namespace Zero
             vk::PhysicalDeviceFeatures2,
             vk::PhysicalDeviceVulkan11Features,
             vk::PhysicalDeviceVulkan13Features,
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-            vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesKHR
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+            //,vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesKHR
         > featureChain{};
 
         // Enable features directly in the chain
-        featureChain.get<vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesKHR>().presentModeFifoLatestReady = VK_TRUE;
+        //featureChain.get<vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesKHR>().presentModeFifoLatestReady = VK_TRUE;
         featureChain.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering = VK_TRUE; // Enable dynamic rendering from Vulkan 1.3
         featureChain.get<vk::PhysicalDeviceVulkan13Features>().synchronization2 = VK_TRUE;
         featureChain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState = VK_TRUE; // Enable extended dynamic state from the extension
         featureChain.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters = VK_TRUE;
         std::vector<const char*> deviceExtensions = {
-            vk::KHRSwapchainExtensionName,
-            vk::KHRPresentModeFifoLatestReadyExtensionName
+            vk::KHRSwapchainExtensionName
+            //,vk::KHRPresentModeFifoLatestReadyExtensionName
         };
 
         std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
@@ -99,7 +99,7 @@ namespace Zero
         // Basic surface capabilities (min/max number of images in swap chain, min/max width and height of images)
         // Surface formats (pixel format, color space)
         // Available presentation modes
-        auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(surface);
+        auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
 
         m_device = vk::raii::Device(physicalDevice, deviceCreateInfo);
         m_graphicsQueue = vk::raii::Queue(m_device, graphicsIndex, 0);

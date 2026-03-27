@@ -3,7 +3,7 @@
 
 namespace Zero
 {
-	std::atomic<bool> initialized{ false };
+	inline std::atomic<bool> initialized{ false };
 
 	BlockingThreadPool::BlockingThreadPool()
 	{

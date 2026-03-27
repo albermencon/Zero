@@ -42,13 +42,13 @@ namespace Zero
         switch (type)
         {
         case BackendType::Vulkan:
-            return std::make_unique<VulkanDevice>(nativeWindowHandle);
+            return std::make_unique<VulkanDevice>(&window);
 
         case BackendType::Metal:
-            return std::make_unique<MetalBackend>(nativeWindowHandle);
+            return std::make_unique<MetalBackend>(&window);
 
         case BackendType::OpenGL:
-            return std::make_unique<OpenGLDevice>(nativeWindowHandle);
+            return std::make_unique<OpenGLDevice>(&window);
         }
 
 #elif defined(PLATFORM_LINUX)
@@ -56,10 +56,10 @@ namespace Zero
         switch (type)
         {
         case BackendType::Vulkan:
-            return std::make_unique<VulkanDevice>(nativeWindowHandle);
+            return std::make_unique<VulkanDevice>(&window);
 
         case BackendType::OpenGL:
-            return std::make_unique<OpenGLDevice>(nativeWindowHandle);
+            return std::make_unique<OpenGLDevice>(&window);
         }
 
 #else

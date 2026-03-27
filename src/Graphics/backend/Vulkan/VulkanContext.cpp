@@ -8,7 +8,7 @@
 
 #include "Graphics/backend/Vulkan/ShaderModule.h"
 #include "Graphics/backend/Vulkan/ShaderProgram.h"
-#include "Graphics/backend/Vulkan/VulkanDebug.h"
+#include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
@@ -207,7 +207,7 @@ namespace Zero
         vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
         vk::RenderingAttachmentInfo attachmentInfo = {};
 
-        attachmentInfo.imageView = m_swapchain.GetImageViews()[imageIndex];
+        attachmentInfo.imageView = *m_swapchain.GetImageViews()[imageIndex];
         attachmentInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
         attachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
         attachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
@@ -221,7 +221,7 @@ namespace Zero
 
         commandBuffer.beginRendering(renderingInfo);
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.GetGraphicsPipeline());
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline.GetGraphicsPipeline());
 
         // Set dynamic data
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(m_swapchain.GetExtent().width), static_cast<float>(m_swapchain.GetExtent().height), 0.0f, 1.0f));

@@ -11,7 +11,7 @@ import vulkan_hpp;
 #include "Graphics/backend/Vulkan/VulkanInstance.h"
 #include "Graphics/backend/Vulkan/VulkanPhysicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanSwapChain.h"
+#include "Graphics/backend/Vulkan/VulkanSwapchain.h"
 #include "Graphics/backend/Vulkan/VulkanPipeline.h"
 #include "Graphics/backend/Vulkan/VulkanCommandContext.h"
 #include "Graphics/backend/Vulkan/VulkanSyncObjects.h"

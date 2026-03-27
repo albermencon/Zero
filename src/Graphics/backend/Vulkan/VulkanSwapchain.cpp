@@ -188,6 +188,8 @@ namespace Zero
             }
         }
 
+        // vulkan inux sdk does not provide this
+        /*
         for (const auto& presentMode : availablePresentModes)
         {
             if (presentMode == vk::PresentModeKHR::eFifoLatestReady)
@@ -195,6 +197,7 @@ namespace Zero
                 return presentMode;
             }
         }
+        */
 
         return vk::PresentModeKHR::eFifo; // fifo is the only guaranteed
     }

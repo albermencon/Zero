@@ -1,5 +1,7 @@
 include(FetchContent)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Prevent vendor libraries from installing themselves
 set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
 set(SPDLOG_HEADER_ONLY ON CACHE BOOL "" FORCE)
@@ -51,7 +53,7 @@ endif()
 
 # Add submodules
 add_subdirectory(spdlog)
-add_subdirectory(glfw)
+add_subdirectory(GLFW)
 add_subdirectory(glad)
 add_subdirectory(highway)
 

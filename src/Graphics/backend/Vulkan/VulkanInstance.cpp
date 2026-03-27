@@ -1,8 +1,9 @@
 #include "pch.h"
 #include <Engine/Core.h>
 #include "Graphics/backend/Vulkan/VulkanInstance.h"
-#include "Graphics/backend/Vulkan/VulkanDebug.h"
+#include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
 #include <GLFW/glfw3.h>
+#include <Engine/Log.h>
 
 namespace Zero 
 {
@@ -107,7 +108,7 @@ namespace Zero
 		vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{};
 		debugUtilsMessengerCreateInfoEXT.messageSeverity = severityFlags;
 		debugUtilsMessengerCreateInfoEXT.messageType = messageTypeFlags;
-		debugUtilsMessengerCreateInfoEXT.pfnUserCallback = &Debug::debugCallback;
+		debugUtilsMessengerCreateInfoEXT.pfnUserCallback = Debug::debugCallback;
 
         m_DebugMessenger = vk::raii::DebugUtilsMessengerEXT(m_Instance, debugUtilsMessengerCreateInfoEXT);
 #endif

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstring>
 #include <Engine/Math/Mat4.h>
 #include <Engine/Math/Vec3.h>
 #include <Engine/Scene/SceneTypes.h>
