@@ -84,16 +84,16 @@ namespace Zero
         std::vector<uint64_t> sortKeys;       // pre-built, updated on change
 
         // COLD: draw 
-        std::vector<RHI::BufferHandle>   vertexBuffers;
-        std::vector<RHI::BufferHandle>   indexBuffers;
+        std::vector<RHI::BufferHandle> vertexBuffers;
+        std::vector<RHI::BufferHandle> indexBuffers;
         std::vector<RHI::PipelineHandle> pipelines;
-        std::vector<uint32_t>            indexCount;
-        std::vector<uint32_t>            firstIndex;
-        std::vector<uint32_t>            vertexOffset;
-        std::vector<uint16_t>            materialId;
-        std::vector<uint16_t>            pipelineId;
-        std::vector<bool>                castsShadow;
-        std::vector<bool>                isTransparent;
+        std::vector<uint32_t> indexCount;
+        std::vector<uint32_t> firstIndex;
+        std::vector<uint32_t> vertexOffset;
+        std::vector<uint16_t> materialId;
+        std::vector<uint16_t> pipelineId;
+        std::vector<uint8_t> castsShadow;
+        std::vector<uint8_t> isTransparent;
 
         // Transforms indexed by transformIndex — kept cold
         std::vector<Mat4> transforms;
@@ -238,6 +238,7 @@ namespace Zero
     {
         uint32_t    id;
         std::string name;
+        RenderPath  renderPath = RenderPath::CPUDriven;  // set at creation
 
         RenderableStore renderables;
         LightStore      lights;
@@ -246,8 +247,8 @@ namespace Zero
         moodycamel::ConcurrentQueue<SceneCommand> commands;
         std::atomic<uint32_t> nextHandleId{ 1 };
 
-        Impl(uint32_t id_, std::string_view name_)
-            : id(id_), name(name_)
+        Impl(uint32_t id_, std::string_view name_, RenderPath path)
+            : id(id_), name(name_), renderPath(path)
         {
             renderables.Reserve(RenderableStore::DefaultCapacity);
         }

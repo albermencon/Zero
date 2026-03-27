@@ -29,7 +29,7 @@ namespace Zero
     void SceneManager::Init()
     {
         m_impl = new Impl();
-        m_impl->scenes.emplace_back(new Scene(MainSceneId, "Main"));
+        m_impl->scenes.emplace_back(new Scene(MainSceneId, "Main", RenderPath::CPUDriven));
         m_impl->activeIds.push_back(MainSceneId);
         ENGINE_CORE_INFO("SceneManager initialized.");
     }
@@ -42,10 +42,10 @@ namespace Zero
         m_impl = nullptr;
     }
 
-    SceneId SceneManager::CreateScene(std::string_view name)
+    SceneId SceneManager::CreateScene(std::string_view name, RenderPath path)
     {
         SceneId id = m_impl->nextSceneId++;
-        m_impl->scenes.emplace_back(new Scene(id, name));
+        m_impl->scenes.emplace_back(new Scene(id, name, path));
         return id;
     }
 
@@ -106,17 +106,25 @@ namespace Zero
         frame->frameIndex = frameIndex;
         frame->deltaTime = deltaTime;
 
-        uint32_t total = 0;
+        // Count per path for single Reserve()
+        uint32_t cpuDrawCount = 0, cpuTransformCount = 0, gpuBatchCount = 0;
         for (SceneId id : m_impl->activeIds)
-            if (Scene* s = GetScene(id)) total += s->m_impl->renderables.Count();
-
-        if (total != 0)
         {
-            ENGINE_CORE_TRACE("Total renderables: {}", total);
-            frame->Reserve(total);
+            Scene* s = GetScene(id);
+            if (!s) continue;
+            if (s->m_impl->renderPath == RenderPath::CPUDriven)
+            {
+                cpuDrawCount += s->m_impl->renderables.Count();
+                cpuTransformCount += static_cast<uint32_t>(s->m_impl->renderables.transforms.size());
+            }
+            else
+            {
+                ++gpuBatchCount;
+            }
         }
+        frame->Reserve(cpuDrawCount, cpuTransformCount, gpuBatchCount);
 
-        uint32_t offset = 0;
+        uint32_t cpuOffset = 0;
         uint32_t sceneIdx = 0;
 
         for (SceneId id : m_impl->activeIds)
@@ -125,51 +133,60 @@ namespace Zero
             Scene* scene = GetScene(id);
             if (!scene) continue;
 
+            const RenderPath path = scene->m_impl->renderPath;
             auto& store = scene->m_impl->renderables;
             const uint32_t count = store.Count();
 
-            frame->sceneRanges[sceneIdx] = { offset, count, sceneIdx };
+            frame->sceneRanges[sceneIdx] = { cpuOffset, count, sceneIdx, path };
             frame->cameras[sceneIdx] = scene->m_impl->camera;
             frame->sceneCount = sceneIdx + 1;
 
-            if (count > 0)
+            if (path == RenderPath::CPUDriven && count > 0)
             {
-                ENGINE_CORE_TRACE("Ok");
-                AppendArray(frame->renderables.boundsMinX, store.boundsMinX, offset);
-                AppendArray(frame->renderables.boundsMinY, store.boundsMinY, offset);
-                AppendArray(frame->renderables.boundsMinZ, store.boundsMinZ, offset);
-                AppendArray(frame->renderables.boundsMaxX, store.boundsMaxX, offset);
-                AppendArray(frame->renderables.boundsMaxY, store.boundsMaxY, offset);
-                AppendArray(frame->renderables.boundsMaxZ, store.boundsMaxZ, offset);
+                // memcpy HOT
+                AppendArray(frame->cpuDriven.boundsMinX, store.boundsMinX, cpuOffset);
+                AppendArray(frame->cpuDriven.boundsMinY, store.boundsMinY, cpuOffset);
+                AppendArray(frame->cpuDriven.boundsMinZ, store.boundsMinZ, cpuOffset);
+                AppendArray(frame->cpuDriven.boundsMaxX, store.boundsMaxX, cpuOffset);
+                AppendArray(frame->cpuDriven.boundsMaxY, store.boundsMaxY, cpuOffset);
+                AppendArray(frame->cpuDriven.boundsMaxZ, store.boundsMaxZ, cpuOffset);
 
-                AppendArray(frame->renderables.sortKeys, store.sortKeys, offset);
-                AppendArray(frame->renderables.transformIndex, store.transformIndex, offset);
+                // memcpy WARM
+                AppendArray(frame->cpuDriven.sortKeys, store.sortKeys, cpuOffset);
+                AppendArray(frame->cpuDriven.transformIndex, store.transformIndex, cpuOffset);
 
-                AppendArray(frame->renderables.vertexBuffers, store.vertexBuffers, offset);
-                AppendArray(frame->renderables.indexBuffers, store.indexBuffers, offset);
-                AppendArray(frame->renderables.pipelines, store.pipelines, offset);
-                AppendArray(frame->renderables.indexCount, store.indexCount, offset);
-                AppendArray(frame->renderables.firstIndex, store.firstIndex, offset);
-                AppendArray(frame->renderables.vertexOffset, store.vertexOffset, offset);
+                // memcpy COLD
+                AppendArray(frame->cpuDriven.vertexBuffers, store.vertexBuffers, cpuOffset);
+                AppendArray(frame->cpuDriven.indexBuffers, store.indexBuffers, cpuOffset);
+                AppendArray(frame->cpuDriven.indexCount, store.indexCount, cpuOffset);
+                AppendArray(frame->cpuDriven.firstIndex, store.firstIndex, cpuOffset);
+                AppendArray(frame->cpuDriven.vertexOffset, store.vertexOffset, cpuOffset);
+                AppendArray(frame->cpuDriven.materialId, store.materialId, cpuOffset);
+                AppendArray(frame->cpuDriven.castsShadow, store.castsShadow, cpuOffset);
+                AppendArray(frame->cpuDriven.isTransparent, store.isTransparent, cpuOffset);
 
-                // Transforms append after existing — offset is current size
-                const uint32_t tOffset = static_cast<uint32_t>(
-                    frame->renderables.transforms.size());
-                AppendArray(frame->renderables.transforms, store.transforms, tOffset);
+                const uint32_t tOffset = frame->cpuDriven.TransformCount();
+                AppendArray(frame->cpuDriven.transforms, store.transforms, tOffset);
 
-                // Lights
-                for (uint32_t i = 0; i < static_cast<uint32_t>(scene->m_impl->lights.dirLights.size()); ++i)
-                {
-                    const auto& l = scene->m_impl->lights.dirLights[i];
-                    frame->dirLights.push_back({ l.direction, l.intensity, l.color, 0.f });
-                }
-                for (uint32_t i = 0; i < static_cast<uint32_t>(scene->m_impl->lights.pointLights.size()); ++i)
-                {
-                    const auto& l = scene->m_impl->lights.pointLights[i];
-                    frame->pointLights.push_back({ l.position, l.radius, l.color, l.intensity });
-                }
+                cpuOffset += count;
+            }
+            else if (path == RenderPath::GPUDriven)
+            {
+                // GPU driven — just copy the batch handles, no SOA iteration
+                // SceneManager only forwards what the scene has
+                //frame->gpuDriven = scene->m_impl->gpuBatch;
+            }
 
-                offset += count;
+            // Lights (both paths)
+            for (uint32_t i = 0; i < static_cast<uint32_t>(scene->m_impl->lights.dirLights.size()); ++i)
+            {
+                const auto& l = scene->m_impl->lights.dirLights[i];
+                frame->dirLights.push_back({ l.direction, l.intensity, l.color, 0.f });
+            }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(scene->m_impl->lights.pointLights.size()); ++i)
+            {
+                const auto& l = scene->m_impl->lights.pointLights[i];
+                frame->pointLights.push_back({ l.position, l.radius, l.color, l.intensity });
             }
 
             ++sceneIdx;

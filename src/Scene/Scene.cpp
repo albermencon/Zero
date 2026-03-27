@@ -8,8 +8,8 @@
 
 namespace Zero
 {
-    Scene::Scene(uint32_t id, std::string_view name)
-        : m_impl(new Impl(id, name))
+    Scene::Scene(uint32_t id, std::string_view name, RenderPath path)
+        : m_impl(new Impl(id, name, path))
     {
     }
 
