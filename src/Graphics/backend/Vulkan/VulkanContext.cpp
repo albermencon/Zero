@@ -16,10 +16,6 @@
 import vulkan_hpp;
 #endif
 
-//temp
-#include <imgui.h>
-#include <backends/imgui_impl_vulkan.h>
-
 /*
 * TODO: Create a validation system for extensions and layers
 * TODO: Make present mode configurable
@@ -45,7 +41,6 @@ namespace Zero
     VulkanDevice::~VulkanDevice()
     {
         //cleanupSwapChain();
-        shutdownImGui();
     }
 
     void VulkanDevice::init() {
@@ -90,10 +85,6 @@ namespace Zero
             1,          // poolSizeCount
             &poolSize
         };
-
-        m_imguiDescPool = m_device.Get().createDescriptorPool(poolInfo);
-
-        initImGui();
 
         ENGINE_CORE_INFO("Memory allocator succesfully initialized");
 
@@ -154,19 +145,10 @@ namespace Zero
         m_currentImageIndex = imageIndex;
         m_frameAborted = false;
 
-        if (m_imguiInitialized)
-        {
-            ImGui_ImplVulkan_NewFrame();
-            ImGui::NewFrame();
-        }
-
     }
     void VulkanDevice::EndFrame()
     {
         if (m_frameAborted) return;
-
-        if (m_imguiInitialized)
-            ImGui::Render();
 
         m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
         m_commandcontext.GetCommandBuffers()[currentFrame].reset();
@@ -247,14 +229,6 @@ namespace Zero
 
         commandBuffer.draw(3, 1, 0, 0);
 
-        // Imgui
-        if (m_imguiInitialized && ImGui::GetDrawData())
-        {
-            ImGui_ImplVulkan_RenderDrawData(
-                ImGui::GetDrawData(), *commandBuffer
-            );
-        }
-
         commandBuffer.endRendering();
 
         // After rendering, transition the swapchain image to PRESENT_SRC
@@ -307,55 +281,6 @@ namespace Zero
         dependencyInfo.pImageMemoryBarriers = &barrier;
 
         commandBuffer.pipelineBarrier2(dependencyInfo);
-    }
-
-    void VulkanDevice::initImGui()
-    {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        ImGui::StyleColorsDark();
-
-        // Cache format
-        m_cachedSwapchainFormat = static_cast<VkFormat>(m_swapchain.GetFormat());
-
-        ImGui_ImplVulkan_InitInfo info{};
-        info.ApiVersion = VK_API_VERSION_1_3;
-        info.Instance = *m_instance.Get();
-        info.PhysicalDevice = *m_physicaldevice.Get();
-        info.Device = *m_device.Get();
-        info.QueueFamily = m_device.GetFamilyGraphicsIndex();
-        info.Queue = *m_device.GetGraphicsQueue();
-        info.DescriptorPool = *m_imguiDescPool;
-        info.MinImageCount = 2;
-        info.ImageCount = static_cast<uint32_t>(m_swapchain.GetImages().size());
-        
-        // Dynamic rendering — PipelineInfoMain
-        info.UseDynamicRendering = true;
-        info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        info.PipelineInfoMain.PipelineRenderingCreateInfo.sType =
-            VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-        info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-        info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &m_cachedSwapchainFormat;
-
-        ImGui_ImplVulkan_Init(&info);
-
-        // ImGui 1.92+
-        io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
-
-        m_imguiInitialized = true;
-        ENGINE_CORE_INFO("ImGui Vulkan backend initialized.");
-    }
-
-    void VulkanDevice::shutdownImGui()
-    {
-        if (!m_imguiInitialized) return;
-        m_device.Get().waitIdle();
-        ImGui_ImplVulkan_Shutdown();
-        ImGui::DestroyContext();
-        m_imguiInitialized = false;
     }
 
 }
