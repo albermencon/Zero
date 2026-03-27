@@ -11,6 +11,7 @@
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
+#include "JobSystem/BlockingThreadPool.h"
 
 namespace Zero
 {
@@ -47,6 +48,7 @@ namespace Zero
         
         Renderer::Get().Init(RHI::API::Vulkan, m_Window.get());
         SceneManager::Get().Init();
+        BlockingThreadPool::Get().Init(0); // default to hardware concurrency
     }
 
     Application::~Application()
@@ -89,7 +91,7 @@ namespace Zero
             SceneManager::Get().FlushCommands();
 
             // Build frame
-            Renderer::Get().RequestFrame();
+            Renderer::Get().RequestFrame(); // must add a timeout
 
             std::unique_ptr<FrameData> frame(SceneManager::Get().BuildFrame(0, dt));
 
@@ -98,6 +100,7 @@ namespace Zero
 
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
+        BlockingThreadPool::Get().Shutdown();
     }
 
     void Application::OnEvent(Event& e)
