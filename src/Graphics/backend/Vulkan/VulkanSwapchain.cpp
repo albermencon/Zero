@@ -6,6 +6,7 @@
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanSurface.h"
 #include <Engine/Log.h>
+#include <Engine/Thread/Thread.h>
 
 namespace Zero 
 {
@@ -19,13 +20,15 @@ namespace Zero
 
     void VulkanSwapchain::recreateSwapChain()
     {
-        int width = 0, height = 0;
+        int width, height;
+        while (true)
+        {
+            std::tie(width, height) = m_window->GetFrameBufferSize();
 
-        GLFWwindow* window = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
-        glfwGetFramebufferSize(window, &width, &height);
-        while (width == 0 || height == 0) {
-            glfwGetFramebufferSize(window, &width, &height);
-            glfwWaitEvents();
+            if (width > 0 && height > 0)
+                break;
+
+            Thread::Sleep(10);
         }
 
         m_Device->Get().waitIdle();
@@ -48,8 +51,9 @@ namespace Zero
 	{
         auto surfaceCapabilities = m_PhysicalDevice->Get().getSurfaceCapabilitiesKHR(*m_Surface->Get());
 
-        ENGINE_CORE_INFO("Surface supportedUsageFlags: {}",
-            vk::to_string(surfaceCapabilities.supportedUsageFlags));
+        // temp
+        //ENGINE_CORE_INFO("Surface supportedUsageFlags: {}",
+        //    vk::to_string(surfaceCapabilities.supportedUsageFlags));
 
         vk::SurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(m_PhysicalDevice->Get().getSurfaceFormatsKHR(*m_Surface->Get()));
 
