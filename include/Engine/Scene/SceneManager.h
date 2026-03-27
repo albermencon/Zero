@@ -28,7 +28,7 @@ namespace Zero
         // Scene management (public, any thread)
 
         // Creates a new scene. Returns its stable id.
-        [[nodiscard]] SceneId CreateScene(std::string_view name);
+        [[nodiscard]] SceneId CreateScene(std::string_view name, RenderPath path = RenderPath::CPUDriven);
 
         // Always valid. MainSceneId guaranteed to exist.
         [[nodiscard]] Scene* GetScene(SceneId id);

@@ -28,6 +28,12 @@ namespace Zero
         bool operator==(const LightHandle&) const = default;
     };
 
+    enum class ENGINE_API RenderPath : uint8_t
+    {
+        CPUDriven,  // standard meshes — CPU culls, sorts, generates DrawPackets
+        GPUDriven,  // chunks, foliage — compute culls, indirect draw
+    };
+
     // Descriptors — used to add objects to a Scene.
 
     struct ENGINE_API RenderableDesc

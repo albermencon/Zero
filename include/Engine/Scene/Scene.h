@@ -53,7 +53,7 @@ namespace Zero
         friend class SceneManager;
         friend void Scene_FlushCommands(Scene& scene);
 
-        explicit Scene(uint32_t id, std::string_view name);
+        explicit Scene(uint32_t id, std::string_view name, RenderPath path);
 
         Scene(const Scene&) = delete;
         Scene& operator=(const Scene&) = delete;
