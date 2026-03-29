@@ -4,8 +4,8 @@ project(Zero)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(BUILD_SHARED "Build as shared library" ON)
-option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" On) # profiling with tracy
+option(BUILD_SHARED "Build as shared library" OFF)
+option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" OFF) # profiling with tracy
 
 file(GLOB_RECURSE ENGINE_SOURCES
     "src/*.cpp"

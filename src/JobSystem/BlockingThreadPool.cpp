@@ -62,8 +62,9 @@ namespace Zero
 		
 		// poison pill
 		Job poison{};
-		poison.fn   = nullptr;
-		poison.mode = Job::Mode::Inline;
+		poison.fn 		= nullptr;
+		poison.counter 	= nullptr;
+		poison.mode 	= Job::Mode::Inline;
 
 		for (uint32_t i = 0; i < m_count; ++i)
 			m_queue.enqueue(poison);

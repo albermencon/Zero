@@ -16,8 +16,8 @@ namespace Zero
 
 	void VulkanPipeline::createGraphicsPipeline()
 	{
-        SpirVSource vertSource = SpirVSource::fromFile("Shaders\\shader.vert.spv");
-        SpirVSource fragSource = SpirVSource::fromFile("Shaders\\shader.frag.spv");
+        SpirVSource vertSource = SpirVSource::fromFile("Shaders/shader.vert.spv");
+        SpirVSource fragSource = SpirVSource::fromFile("Shaders/shader.frag.spv");
 
         auto shaderVertModule = ShaderModule(m_device->Get(), std::move(vertSource));
         auto shaderFragModule = ShaderModule(m_device->Get(), std::move(fragSource));

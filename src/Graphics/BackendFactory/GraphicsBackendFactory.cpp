@@ -35,6 +35,8 @@ namespace Zero
         case BackendType::DirectX12:
             return nullptr;
             //return std::make_unique<D3D12Backend>(nativeWindowHandle
+        default:
+            return nullptr;
         }
 
 #elif defined(PLATFORM_MACOS)
@@ -49,6 +51,8 @@ namespace Zero
 
         case BackendType::OpenGL:
             return std::make_unique<OpenGLDevice>(&window);
+        default:
+            return nullptr;
         }
 
 #elif defined(PLATFORM_LINUX)
@@ -60,6 +64,8 @@ namespace Zero
 
         case BackendType::OpenGL:
             return std::make_unique<OpenGLDevice>(&window);
+        default:
+            return nullptr;
         }
 
 #else
