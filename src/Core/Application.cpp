@@ -74,6 +74,7 @@ namespace Zero
         Time::Init();
 
         // Main loop
+        uint64_t frameIndex = 0;
         while (m_Running)
         {
             Time::Update();
@@ -93,9 +94,10 @@ namespace Zero
             // Build frame
             Renderer::Get().RequestFrame(); // must add a timeout
 
-            std::unique_ptr<FrameData> frame(SceneManager::Get().BuildFrame(0, dt));
+            FrameData* frame = SceneManager::Get().BuildFrame(frameIndex, dt);
 
-            Renderer::Get().SubmitFrame(std::move(frame));
+            Renderer::Get().SubmitFrame(frame);
+            frameIndex++;
         }
 
         Renderer::Get().Shutdown();

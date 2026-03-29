@@ -100,11 +100,20 @@ namespace Zero
         std::memcpy(dst.data() + offset, src.data(), src.size() * sizeof(T));
     }
 
-    FrameData* SceneManager::BuildFrame(uint64_t frameIndex, float deltaTime)
+    FrameData* SceneManager::BuildFrame(uint64_t frameNumber, float deltaTime)
     {
-        auto* frame = new FrameData();
+        // temp 
+        // UB -> Might use data that the gpu is still utilizing!
+        constexpr int BUFFER = 3;
+        static FrameData frames[BUFFER];
+
+        uint32_t frameIndex = frameNumber % BUFFER;
+        FrameData* frame = &frames[frameIndex];
+
         frame->frameIndex = frameIndex;
         frame->deltaTime = deltaTime;
+
+        // end of the UB
 
         // Count per path for single Reserve()
         uint32_t cpuDrawCount = 0, cpuTransformCount = 0, gpuBatchCount = 0;

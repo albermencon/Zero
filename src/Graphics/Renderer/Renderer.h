@@ -30,7 +30,7 @@ namespace Zero
 		// Called from main thread
 		void RequestFrame();
 
-		void SubmitFrame(std::unique_ptr<FrameData> frame);
+		void SubmitFrame(FrameData* frame);
 
 	private:
 		void RenderLoop();

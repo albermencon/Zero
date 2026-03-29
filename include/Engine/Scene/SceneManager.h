@@ -47,7 +47,7 @@ namespace Zero
         void Init();
         void Shutdown();
         void FlushCommands();
-        [[nodiscard]] struct FrameData* BuildFrame(uint64_t frameIndex, float deltaTime);
+        [[nodiscard]] struct FrameData* BuildFrame(uint64_t frameNumber, float deltaTime);
 
         SceneManager() = default;
         ~SceneManager() = default;

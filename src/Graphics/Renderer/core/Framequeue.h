@@ -13,13 +13,13 @@ namespace Zero
 
         FrameQueue(size_t frames_inflight = 3);
 
-        void Push(std::unique_ptr<FrameData> frame);
+        void Push(FrameData* frame);
 
         // Non-blocking attempt. Returns false immediately if no slot available.
-        [[nodiscard]] bool TryPush(std::unique_ptr<FrameData> frame);
+        [[nodiscard]] bool TryPush(FrameData* frame);
 
         // Dequeues one frame. Returns false if queue is empty (spin/yield caller).
-        [[nodiscard]] bool Pop(std::unique_ptr<FrameData>& out);
+        [[nodiscard]] bool Pop(FrameData*& out);
 
         // Must be called by RenderThread after it has finished consuming a frame
         // (after Present, when the FrameData can be safely destroyed or recycled).
@@ -30,7 +30,7 @@ namespace Zero
         void Adquire();
 
     private:
-        moodycamel::BlockingReaderWriterCircularBuffer<std::unique_ptr<FrameData>> m_queue;
+        moodycamel::BlockingReaderWriterCircularBuffer<FrameData*> m_queue;
         std::counting_semaphore<MAX_FRAMES_IN_FLIGHT> m_availableSlots;
     };
 }

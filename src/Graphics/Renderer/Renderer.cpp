@@ -66,9 +66,9 @@ namespace Zero
 		m_queue.Adquire();
 	}
 
-	void Renderer::SubmitFrame(std::unique_ptr<FrameData> frame)
+	void Renderer::SubmitFrame(FrameData* frame)
 	{
-		(void)m_queue.Push(std::move(frame));
+		(void)m_queue.Push(frame);
 	}
 
 	void Renderer::RenderLoop()
@@ -79,9 +79,9 @@ namespace Zero
 		ENGINE_CORE_INFO("Initialized render thread");
 
 		size_t idleCount = 0;
-		std::unique_ptr<FrameData> frame;
 		while (m_running.load())
 		{
+			FrameData* frame = nullptr;
 			if (!m_queue.Pop(frame))
 			{
 				if (idleCount < 50) 

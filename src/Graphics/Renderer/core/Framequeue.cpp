@@ -11,7 +11,7 @@ namespace Zero
 	{
 	}
 
-	void FrameQueue::Push(std::unique_ptr<FrameData> frame)
+	void FrameQueue::Push(FrameData* frame)
 	{
 		//m_availableSlots.acquire(); // blocks if no slots remaining
 		//m_queue.wait_enqueue(std::move(frame));
@@ -20,14 +20,14 @@ namespace Zero
 		ENGINE_CORE_ASSERT(ok, "Invariant broken: queue must have space after acquire");
 	}
 
-	bool FrameQueue::TryPush(std::unique_ptr<FrameData> frame)
+	bool FrameQueue::TryPush(FrameData* frame)
 	{
 		if (!m_availableSlots.try_acquire())
 			return false;
 		return m_queue.try_enqueue(std::move(frame));
 	}
 
-	bool FrameQueue::Pop(std::unique_ptr<FrameData>& out)
+	bool FrameQueue::Pop(FrameData*& out)
 	{
 		return m_queue.try_dequeue(out);
 	}
