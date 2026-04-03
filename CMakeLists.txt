@@ -50,6 +50,22 @@ target_link_libraries(Zero PRIVATE glad::glad)
 target_link_libraries(Zero PRIVATE imgui)
 target_link_libraries(Zero PRIVATE hwy)
 target_link_libraries(Zero PRIVATE moodycamel)
+target_link_libraries(Zero PRIVATE
+    slang::compiler
+    slang::rt
+)
+
+if(UNIX)
+    set_target_properties(Zero PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+elseif(APPLE)
+    set_target_properties(Zero PROPERTIES
+        BUILD_RPATH "@loader_path"
+        INSTALL_RPATH "@loader_path"
+    )
+endif()
 
 if (ENGINE_ENABLE_PROFILING)
 
