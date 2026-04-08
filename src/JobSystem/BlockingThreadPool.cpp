@@ -105,7 +105,12 @@ namespace Zero
     {
         counter.pending.fetch_add(
         static_cast<uint32_t>(jobs.size()), std::memory_order_relaxed);
-    	m_queue.try_enqueue_bulk(get_producer_token(), jobs.data(), jobs.size());
+
+		std::vector<Job> stamped(jobs.begin(), jobs.end());
+		for (auto& j : stamped)
+			j.counter = &counter;
+
+    	m_queue.try_enqueue_bulk(get_producer_token(), stamped.data(), stamped.size());
     }
 
     JobCounter &BlockingThreadPool::make_counter()
