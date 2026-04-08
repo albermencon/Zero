@@ -183,6 +183,19 @@ target_include_directories(slang::compiler
 
 # end of slang
 
+# joltphysics
+set(JPH_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(JPH_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(JPH_ENABLE_ASSERTS OFF CACHE BOOL "" FORCE) # optional
+set(JPH_ENABLE_DEBUG_RENDERER OFF CACHE BOOL "" FORCE)
+set(JPH_OBJECT_STREAM OFF CACHE BOOL "" FORCE) # optional
+set(JPH_USE_SSE4_1 ON CACHE BOOL "" FORCE)
+set(JPH_USE_AVX2 OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(joltphysics/Build)
+
+#end joltphysics
+
 # Add the Highway include directory explicitly for safety
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/highway)
 
