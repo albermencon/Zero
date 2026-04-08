@@ -4,7 +4,6 @@
 #include "SceneCommand.h"
 #include "SceneData.h"
 #include <concurrentqueue.h>
-#include <string>
 
 namespace Zero
 {
@@ -149,18 +148,32 @@ namespace Zero
                 break;
 
             case SceneCommandType::AddDirectionalLight:
-                impl.lights.dirLights.push_back(cmd.dirLight);
+                impl.lights.AddDirectionalLight(cmd.handleId, cmd.dirLight);
+                impl.lightTypeMap[cmd.handleId] = true;
                 break;
 
             case SceneCommandType::AddPointLight:
-                impl.lights.pointLights.push_back(cmd.pointLight);
+                impl.lights.AddPointLight(cmd.handleId, cmd.pointLight);
+                impl.lightTypeMap[cmd.handleId] = false;
                 break;
 
             case SceneCommandType::RemoveLight:
-                break; // TODO: slot tracking
+            {
+                auto it = impl.lightTypeMap.find(cmd.handleId);
+                if (it != impl.lightTypeMap.end())
+                {
+                    if (it->second)
+                        impl.lights.RemoveDirectionalLight(cmd.handleId);
+                    else
+                        impl.lights.RemovePointLight(cmd.handleId);
+                    impl.lightTypeMap.erase(it);
+                }
+                break;
+            }
 
             case SceneCommandType::UpdatePointLightPosition:
-                break; // TODO: slot lookup
+                impl.lights.UpdatePointLightPosition(cmd.handleId, cmd.updatePointLight.position);
+                break;
 
             case SceneCommandType::SetCamera:
                 impl.camera = cmd.camera;

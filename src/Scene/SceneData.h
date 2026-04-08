@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <atomic>
+#include <unordered_map>
 #include <Engine/Math/Mat4.h>
 #include <Engine/Math/Vec3.h>
 #include <Engine/Scene/SceneTypes.h>
@@ -95,7 +96,7 @@ namespace Zero
         std::vector<uint8_t> castsShadow;
         std::vector<uint8_t> isTransparent;
 
-        // Transforms indexed by transformIndex — kept cold
+        // Transforms — 1:1 with dense entries (each renderable owns its transform)
         std::vector<Mat4> transforms;
 
         // Count 
@@ -132,8 +133,7 @@ namespace Zero
             boundsMaxY.push_back(d.boundsMax.y);
             boundsMaxZ.push_back(d.boundsMax.z);
 
-            const uint32_t tIdx = static_cast<uint32_t>(transforms.size());
-            transformIndex.push_back(tIdx);
+            transformIndex.push_back(idx);
             sortKeys.push_back(0u);
             transforms.push_back(d.transform);
 
@@ -169,7 +169,7 @@ namespace Zero
 
                 boundsMinX[idx] = boundsMinX[last]; boundsMinY[idx] = boundsMinY[last]; boundsMinZ[idx] = boundsMinZ[last];
                 boundsMaxX[idx] = boundsMaxX[last]; boundsMaxY[idx] = boundsMaxY[last]; boundsMaxZ[idx] = boundsMaxZ[last];
-                transformIndex[idx] = transformIndex[last];
+                transformIndex[idx] = idx; // rebased — transform is 1:1 with dense index now
                 sortKeys[idx] = sortKeys[last];
                 vertexBuffers[idx] = vertexBuffers[last];
                 indexBuffers[idx] = indexBuffers[last];
@@ -181,13 +181,11 @@ namespace Zero
                 pipelineId[idx] = pipelineId[last];
                 castsShadow[idx] = castsShadow[last];
                 isTransparent[idx] = isTransparent[last];
+                transforms[idx] = transforms[last];
 
                 // Fixup index mapping for moved element
                 slotToIndex[lastSlot] = idx;
                 indexToSlot[idx] = lastSlot;
-
-                // Move transform (swap, not copy — avoids redundant Mat4 in transforms[])
-                transforms[transformIndex[idx]] = transforms[transformIndex[last]];
             }
 
             // Pop last
@@ -208,7 +206,7 @@ namespace Zero
         void UpdateTransform(uint32_t slot, const Mat4& t)
         {
             uint32_t idx = slotToIndex[slot];
-            transforms[transformIndex[idx]] = t;
+            transforms[idx] = t;
         }
 
         void UpdateBounds(uint32_t slot, const Vec3& mn, const Vec3& mx)
@@ -220,18 +218,101 @@ namespace Zero
     };
 
     // LightStore
-    //   AoS for lights — count is small (rarely > 64), SIMD not needed.
+    //   Slot-based dense storage for lights.
     struct LightStore
     {
-        SlotAllocator slots{ 256 };
-        std::vector<uint32_t>            slotToIndex;
-        std::vector<uint32_t>            indexToSlot;
-        std::vector<DirectionalLightDesc> dirLights;
-        std::vector<PointLightDesc>       pointLights;
-
-        // Separate slot spaces for dir vs point lights using high bit
         static constexpr uint32_t DirBit = 1u << 31;
         static constexpr uint32_t TypeMask = ~DirBit;
+
+        // Directional lights
+        SlotAllocator dirSlots{ 64 };
+        std::vector<uint32_t> dirSlotToIndex;
+        std::vector<uint32_t> dirIndexToSlot;
+        std::vector<DirectionalLightDesc> dirLights;
+
+        // Point lights
+        SlotAllocator pointSlots{ 256 };
+        std::vector<uint32_t> pointSlotToIndex;
+        std::vector<uint32_t> pointIndexToSlot;
+        std::vector<PointLightDesc> pointLights;
+
+        LightStore()
+        {
+            dirSlotToIndex.resize(dirSlots.Capacity() + 1, UINT32_MAX);
+            pointSlotToIndex.resize(pointSlots.Capacity() + 1, UINT32_MAX);
+        }
+
+        uint32_t AddDirectionalLight(uint32_t handleId, const DirectionalLightDesc& desc)
+        {
+            uint32_t slot = handleId;
+            if (slot >= dirSlotToIndex.size())
+                dirSlotToIndex.resize(slot + 1, UINT32_MAX);
+
+            uint32_t idx = static_cast<uint32_t>(dirLights.size());
+            dirSlotToIndex[slot] = idx;
+            dirIndexToSlot.push_back(slot);
+            dirLights.push_back(desc);
+            return idx;
+        }
+
+        uint32_t AddPointLight(uint32_t handleId, const PointLightDesc& desc)
+        {
+            uint32_t slot = handleId;
+            if (slot >= pointSlotToIndex.size())
+                pointSlotToIndex.resize(slot + 1, UINT32_MAX);
+
+            uint32_t idx = static_cast<uint32_t>(pointLights.size());
+            pointSlotToIndex[slot] = idx;
+            pointIndexToSlot.push_back(slot);
+            pointLights.push_back(desc);
+            return idx;
+        }
+
+        void RemoveDirectionalLight(uint32_t handleId)
+        {
+            if (handleId >= dirSlotToIndex.size()) return;
+            uint32_t idx = dirSlotToIndex[handleId];
+            if (idx == UINT32_MAX) return;
+
+            uint32_t last = static_cast<uint32_t>(dirLights.size()) - 1;
+            if (idx != last)
+            {
+                uint32_t lastSlot = dirIndexToSlot[last];
+                dirLights[idx] = dirLights[last];
+                dirSlotToIndex[lastSlot] = idx;
+                dirIndexToSlot[idx] = lastSlot;
+            }
+            dirLights.pop_back();
+            dirIndexToSlot.pop_back();
+            dirSlotToIndex[handleId] = UINT32_MAX;
+        }
+
+        void RemovePointLight(uint32_t handleId)
+        {
+            if (handleId >= pointSlotToIndex.size()) return;
+            uint32_t idx = pointSlotToIndex[handleId];
+            if (idx == UINT32_MAX) return;
+
+            uint32_t last = static_cast<uint32_t>(pointLights.size()) - 1;
+            if (idx != last)
+            {
+                uint32_t lastSlot = pointIndexToSlot[last];
+                pointLights[idx] = pointLights[last];
+                pointSlotToIndex[lastSlot] = idx;
+                pointIndexToSlot[idx] = lastSlot;
+            }
+            pointLights.pop_back();
+            pointIndexToSlot.pop_back();
+            pointSlotToIndex[handleId] = UINT32_MAX;
+        }
+
+        void UpdatePointLightPosition(uint32_t handleId, const Vec3& pos)
+        {
+            if (handleId >= pointSlotToIndex.size()) return;
+            uint32_t idx = pointSlotToIndex[handleId];
+            if (idx == UINT32_MAX) return;
+            pointLights[idx].position = pos;
+        }
     };
 
     struct Scene::Impl
@@ -246,6 +327,9 @@ namespace Zero
 
         moodycamel::ConcurrentQueue<SceneCommand> commands;
         std::atomic<uint32_t> nextHandleId{ 1 };
+
+        // Track light type per handle (true = directional, false = point)
+        std::unordered_map<uint32_t, bool> lightTypeMap;
 
         Impl(uint32_t id_, std::string_view name_, RenderPath path)
             : id(id_), name(name_), renderPath(path)

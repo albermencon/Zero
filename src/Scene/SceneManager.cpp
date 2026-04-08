@@ -110,6 +110,7 @@ namespace Zero
         uint32_t frameIndex = frameNumber % BUFFER;
         FrameData* frame = &frames[frameIndex];
 
+        frame->Clear();
         frame->frameIndex = frameIndex;
         frame->deltaTime = deltaTime;
 
@@ -167,6 +168,7 @@ namespace Zero
                 // memcpy COLD
                 AppendArray(frame->cpuDriven.vertexBuffers, store.vertexBuffers, cpuOffset);
                 AppendArray(frame->cpuDriven.indexBuffers, store.indexBuffers, cpuOffset);
+                AppendArray(frame->cpuDriven.pipelines, store.pipelines, cpuOffset);
                 AppendArray(frame->cpuDriven.indexCount, store.indexCount, cpuOffset);
                 AppendArray(frame->cpuDriven.firstIndex, store.firstIndex, cpuOffset);
                 AppendArray(frame->cpuDriven.vertexOffset, store.vertexOffset, cpuOffset);
