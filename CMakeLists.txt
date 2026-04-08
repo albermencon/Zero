@@ -49,6 +49,7 @@ target_link_libraries(Zero PRIVATE glfw)
 target_link_libraries(Zero PRIVATE glad::glad)
 target_link_libraries(Zero PRIVATE imgui)
 target_link_libraries(Zero PRIVATE hwy)
+target_link_libraries(Zero PRIVATE Jolt)
 target_link_libraries(Zero PRIVATE moodycamel)
 target_link_libraries(Zero PRIVATE
     slang::compiler
