@@ -1,5 +1,6 @@
 #pragma once
 #include <Engine/Core.h>
+#include <Engine/Log.h>
 #include <cstdint>
 #include <array>
 #include "GraphicsTypes.h"

@@ -11,10 +11,10 @@
 #define ENGINE_DEBUG
 
 #ifdef ENGINE_ENABLE_ASSERTS
-    #define ENGINE_ASSERT(x, ...) { if(!(x)) { ENGINE_ERROR("Assertion Failed: {0}", __VA_ARGS__); DEBUGBREAK(); } }
+    #define CLIENT_ASSERT(x, ...) { if(!(x)) { CLIENT_ERROR("Assertion Failed: {0}", __VA_ARGS__); DEBUGBREAK(); } }
     #define ENGINE_CORE_ASSERT(x, ...) { if(!(x)) { ENGINE_CORE_ERROR("Assertion Failed: {0}", __VA_ARGS__); DEBUGBREAK(); } }
 #else
-    #define ENGINE_ASSERT(x, ...)
+    #define CLIENT_ASSERT(x, ...)
     #define ENGINE_CORE_ASSERT(x, ...)
 #endif
 

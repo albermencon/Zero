@@ -7,7 +7,6 @@
 #include <Engine/Log.h>
 #include <Engine/Time.h>
 #include <Engine/Scene/SceneManager.h>
-#include "Platform/WindowImpl.h"
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"

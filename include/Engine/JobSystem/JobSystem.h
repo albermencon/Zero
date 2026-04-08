@@ -43,12 +43,11 @@ namespace Zero
     ENGINE_API void EnqueueBulk(std::span<const Job> jobs);
     ENGINE_API void EnqueueBulk(std::span<const Job> jobs, JobCounter& counter);
 
-    //  Counter
+    // Sync + Counter
 
     // Allocate from pool — always pair with counter.Release() after Wait()
     [[nodiscard]] ENGINE_API JobCounter& MakeCounter();
 
-    //  Sync
     void ENGINE_API WaitIdle();
 }
 
