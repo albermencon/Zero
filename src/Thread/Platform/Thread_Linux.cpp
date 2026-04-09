@@ -15,6 +15,7 @@ namespace Zero::PlatformThread
     void SetName(void* nativeHandle, std::string_view name)
     {
         pthread_t handle = reinterpret_cast<pthread_t>(nativeHandle);
+        if (!handle) handle = pthread_self();
 
         // pthread limit: 15 chars + null
         char buf[16];
@@ -28,6 +29,7 @@ namespace Zero::PlatformThread
     void SetPriority(void* nativeHandle, ThreadPriority priority)
     {
         pthread_t handle = reinterpret_cast<pthread_t>(nativeHandle);
+        if (!handle) handle = pthread_self();
 
         // SCHED_OTHER (default CFS) ignores sched_priority — use nice-like approach.
         // For real-time: SCHED_RR with priority 1-99.
@@ -60,6 +62,8 @@ namespace Zero::PlatformThread
     void SetAffinity(void* nativeHandle, uint64_t mask)
     {
         pthread_t handle = reinterpret_cast<pthread_t>(nativeHandle);
+        if (!handle) handle = pthread_self();
+        
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
         for (int i = 0; i < 64; ++i)
