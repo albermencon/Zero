@@ -86,12 +86,12 @@ namespace Zero
 
     void BlockingThreadPool::enqueue(Job job)
     {
-		m_queue.try_enqueue(get_producer_token(),job);
+		m_queue.enqueue(get_producer_token(),job);
     }
 
     void BlockingThreadPool::enqueue_bulk(std::span<const Job> jobs)
     {
-		m_queue.try_enqueue_bulk(get_producer_token(), jobs.data(), jobs.size());
+		m_queue.enqueue_bulk(get_producer_token(), jobs.data(), jobs.size());
     }
 
     void BlockingThreadPool::enqueue(Job job, JobCounter &counter)
@@ -110,7 +110,7 @@ namespace Zero
 		for (auto& j : stamped)
 			j.counter = &counter;
 
-    	m_queue.try_enqueue_bulk(get_producer_token(), stamped.data(), stamped.size());
+    	m_queue.enqueue_bulk(get_producer_token(), stamped.data(), stamped.size());
     }
 
     JobCounter &BlockingThreadPool::make_counter()
