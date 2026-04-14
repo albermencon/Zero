@@ -2,6 +2,8 @@
 #include "BlockingThreadPool.h"
 #include "JobCounterPool.h"
 #include <Engine/Log.h>
+#include <atomic>
+#include <cstddef>
 
 namespace Zero
 {
@@ -59,15 +61,6 @@ namespace Zero
 			return;
 
 		m_running.store(false, std::memory_order_release);
-		
-		// poison pill
-		Job poison{};
-		poison.fn 		= nullptr;
-		poison.counter 	= nullptr;
-		poison.mode 	= Job::Mode::Inline;
-
-		for (uint32_t i = 0; i < m_count; ++i)
-			m_queue.enqueue(poison);
 
 		for (uint32_t i = 0; i < m_count; ++i)
 			m_threads[i].Join();
@@ -127,23 +120,23 @@ namespace Zero
     void BlockingThreadPool::worker_loop(uint32_t threadID)
 	{
 		moodycamel::ConsumerToken token(m_queue);
-
-		while (true)
+		while (m_running.load(std::memory_order_relaxed))
 		{
-			Job job;
-			m_queue.wait_dequeue(token, job);
+			Job buffer[64];
+			size_t count = m_queue.wait_dequeue_bulk_timed(token, buffer, 64, 250000); // 250ms
 			
-			// stop signal
-			if (job.fn == nullptr && !m_running.load(std::memory_order_acquire))
-				break;
+			for (size_t i = 0; i < count; ++i)
+			{
+				Job& job = buffer[i];
 
-			if (job.mode == Job::Mode::Inline)
-				job.fn(job.payload);
-			else
-				job.fn(job.ptr);
+				if (job.mode == Job::Mode::Inline)
+					job.fn(job.payload);
+				else
+					job.fn(job.ptr);
 
-			if (job.counter)
-            	job.counter->Decrement(); // wake waiter if this was the last job
+				if (job.counter)
+            		job.counter->Decrement(); // wake waiter if this was the last job
+			}
 		}
 	}
 	
