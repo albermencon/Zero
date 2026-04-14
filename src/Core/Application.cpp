@@ -52,6 +52,10 @@ namespace Zero
 
     Application::~Application()
     {
+        m_LayerStack.reset(); // Destroy layers first to make sure no user code is generating work 
+        Renderer::Get().Shutdown();
+        SceneManager::Get().Shutdown();
+        BlockingThreadPool::Get().Shutdown();
     }
 
     void Application::PushLayer(std::unique_ptr<Layer> layer)
@@ -98,10 +102,6 @@ namespace Zero
             Renderer::Get().SubmitFrame(frame);
             frameIndex++;
         }
-
-        Renderer::Get().Shutdown();
-        SceneManager::Get().Shutdown();
-        BlockingThreadPool::Get().Shutdown();
     }
 
     void Application::OnEvent(Event& e)
