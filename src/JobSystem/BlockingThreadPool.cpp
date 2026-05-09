@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "Engine/Thread/Thread.h"
 #include "BlockingThreadPool.h"
 #include "JobCounterPool.h"
 #include <Engine/Log.h>
@@ -33,6 +34,8 @@ namespace Zero
 		{
 			threadCount = (hc > 1) ? (hc - 1) : 1;
 		}
+
+		ENGINE_CORE_TRACE("Initializing thread pool with {} threads", threadCount);
 
 		m_threads = new Thread[threadCount];
 		m_count = threadCount;
@@ -91,7 +94,7 @@ namespace Zero
     {
         counter.pending.fetch_add(1, std::memory_order_relaxed);
 		job.counter = &counter;  // stamp before enqueue
-		m_queue.try_enqueue(get_producer_token(), job);
+		m_queue.enqueue(get_producer_token(), job);
     }
 
     void BlockingThreadPool::enqueue_bulk(std::span<const Job> jobs, JobCounter &counter)
