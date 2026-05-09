@@ -42,6 +42,11 @@ namespace Zero
         static void Sleep(uint32_t ms);
         static void Yield();
 
+        // Static variants
+        //static void SetName(std::string_view name);
+        //static void SetPriority(ThreadPriority priority);
+        //static void SetAffinity(uint64_t mask);
+
     private:
         // Returns the native handle as void* for platform layer
         void* NativeHandle();
@@ -49,4 +54,11 @@ namespace Zero
         std::string   m_name;
         std::thread   m_thread;
     };
+
+    namespace this_thread
+    {
+        static void SetName(std::string_view name);
+        static void SetPriority(ThreadPriority priority);
+        static void SetAffinity(uint64_t mask);
+    }
 }
