@@ -8,6 +8,9 @@ import vulkan_hpp;
 #include <Engine/Graphics/GraphicsTypes.h>
 #include <Engine/Graphics/ImageDesc.h>
 #include <Engine/Graphics/VertexLayout.h>
+#include <Engine/Graphics/BufferUsage.h>
+#include <Engine/Graphics/MemoryDomain.h>
+#include <vk_mem_alloc.h>
 
 namespace Zero::Vulkan
 {
@@ -248,6 +251,11 @@ namespace Zero::Vulkan
         return vk::LogicOp::eCopy;
     }
 
+    [[nodiscard]] constexpr bool hasFlag(ColorWriteMask mask, ColorWriteMask bit)
+    {
+        return (mask & bit) != ColorWriteMask::None;
+    }
+
     [[nodiscard]] constexpr vk::ColorComponentFlags toVkColorWriteMask(ColorWriteMask mask)
     {
         vk::ColorComponentFlags out{};
@@ -325,10 +333,32 @@ namespace Zero::Vulkan
         return vk::ImageLayout::eUndefined;
     }
 
-    // Helper ColorWriteMask bit check
-    [[nodiscard]] constexpr bool hasFlag(ColorWriteMask mask, ColorWriteMask bit)
+
+
+    [[nodiscard]] inline VkBufferUsageFlags toVkBufferUsage(BufferUsage usage)
     {
-        return (mask & bit) != ColorWriteMask::None;
+        VkBufferUsageFlags flags = 0;
+        if (hasUsage(usage, BufferUsage::Vertex))      flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        if (hasUsage(usage, BufferUsage::Index))        flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        if (hasUsage(usage, BufferUsage::Uniform))      flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        if (hasUsage(usage, BufferUsage::Storage))      flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        if (hasUsage(usage, BufferUsage::Indirect))     flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+        if (hasUsage(usage, BufferUsage::TransferSrc))  flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        if (hasUsage(usage, BufferUsage::TransferDst))  flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        return flags;
+    }
+
+    [[nodiscard]] inline VmaMemoryUsage toVmaMemoryUsage(MemoryDomain domain)
+    {
+        switch (domain)
+        {
+        case MemoryDomain::GPU:              return VMA_MEMORY_USAGE_GPU_ONLY;
+        case MemoryDomain::CPUtoGPU:         return VMA_MEMORY_USAGE_CPU_TO_GPU;
+        case MemoryDomain::GPUtoCPU:         return VMA_MEMORY_USAGE_GPU_TO_CPU;
+        case MemoryDomain::CPUtoGPU_Coherent: return VMA_MEMORY_USAGE_CPU_TO_GPU;
+        }
+        return VMA_MEMORY_USAGE_GPU_ONLY;
     }
 
 }
+

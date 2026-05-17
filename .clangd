@@ -1,0 +1,4 @@
+Diagnostics:
+  Includes:
+    IgnoreHeader:
+      - '.*pch\.h'
