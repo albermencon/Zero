@@ -12,6 +12,7 @@
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
 #include "JobSystem/BlockingThreadPool.h"
+#include <Engine/Profiler/Profiler.h>
 
 namespace Zero
 {
@@ -92,6 +93,7 @@ namespace Zero
     void Application::Run()
     {
         ENGINE_CORE_TRACE("Application started.");
+        ENGINE_PROFILE_THREAD("Main Thread");
 
         Time::Init();
 
@@ -120,6 +122,7 @@ namespace Zero
 
             Renderer::Get().SubmitFrame(frame);
             frameIndex++;
+            ENGINE_PROFILE_FRAME();
         }
     }
 
