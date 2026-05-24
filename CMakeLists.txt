@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED "Build as shared library" OFF)
-option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" OFF) # profiling with tracy
+option(ENGINE_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
 
 file(GLOB_RECURSE ENGINE_SOURCES
     "src/*.cpp"
@@ -70,9 +70,9 @@ endif()
 
 if (ENGINE_ENABLE_PROFILING)
 
-    target_link_libraries(Zero PRIVATE Tracy::TracyClient)
+    target_link_libraries(Zero PUBLIC Tracy::TracyClient)
 
-    target_compile_definitions(Zero PRIVATE
+    target_compile_definitions(Zero PUBLIC
         ENGINE_ENABLE_PROFILING
         TRACY_ENABLE
         TRACY_VK_USE_SYMBOL_TABLE
