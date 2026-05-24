@@ -5,6 +5,7 @@
 #include <Engine/Log.h>
 #include <atomic>
 #include <cstddef>
+#include <Engine/Profiler/Profiler.h>
 
 namespace Zero
 {
@@ -45,11 +46,9 @@ namespace Zero
 			WorkerDesc* desc = new WorkerDesc{ this, i, &m_threads[i] };
 			m_threads[i] = Thread([desc]()
 			{
-				// desc owns itself — no race on m_threads indexing
-				desc->thread->SetPriority(ThreadPriority::Low);
-
 				char name[32];
-				snprintf(name, sizeof(name), "Worker{%u}", desc->id);
+				snprintf(name, sizeof(name), "Worker {%u}", desc->id);
+				ENGINE_PROFILE_THREAD(name);
 				desc->thread->SetName(name);
 
 				desc->pool->worker_loop(desc->id);
@@ -130,6 +129,7 @@ namespace Zero
 			
 			for (size_t i = 0; i < count; ++i)
 			{
+				ENGINE_PROFILE_SCOPE("Job");
 				Job& job = buffer[i];
 
 				if (job.mode == Job::Mode::Inline)
