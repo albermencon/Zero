@@ -7,6 +7,7 @@
 #include <Engine/Log.h>
 #include <Engine/Time.h>
 #include <Engine/Scene/SceneManager.h>
+#include <Engine/ConfigSystem.h>
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
@@ -30,24 +31,42 @@ namespace Zero
 
         m_LayerStack = std::make_unique<LayerStack>();
         
-        // TODO: Replace this with a CLI, NativeWindow request factory maker
-        // Create a window
-        std::string Title = "Voxel Engine";
-        BackendType backend = BackendType::Vulkan;
-        uint32_t Width = 1920;
-        uint32_t Height = 1080;
-        bool Fullscreen = false;
-        bool VSync = true;
-        bool Resizable = true;
-        bool Visible = true;
-        WindowProps props(Title, backend, Width, Height, Fullscreen, VSync, Resizable, Visible);
+        if (!ConfigSystem::Get().Load("config.ini"))
+        {
+            ConfigSystem::Get().SetString("Window", "Title", "Zero");
+            ConfigSystem::Get().SetUInt("Window", "Width", 1920);
+            ConfigSystem::Get().SetUInt("Window", "Height", 1080);
+            ConfigSystem::Get().SetBool("Window", "Fullscreen", false);
+            ConfigSystem::Get().SetBool("Window", "VSync", true);
+            ConfigSystem::Get().SetBool("Window", "Resizable", true);
+            ConfigSystem::Get().SetBool("Window", "Visible", true);
+            
+            ConfigSystem::Get().SetUInt("Workers", "Number", 0);
+
+            ConfigSystem::Get().Save("config.ini");
+        }
+
+        std::string Title = ConfigSystem::Get().GetString("Window", "Title", "Zero");
+        uint32_t Width = ConfigSystem::Get().GetUInt("Window", "Width", 1920);
+        uint32_t Height = ConfigSystem::Get().GetUInt("Window", "Height", 1080);
+        bool Fullscreen = ConfigSystem::Get().GetBool("Window", "Fullscreen", false);
+        bool VSync = ConfigSystem::Get().GetBool("Window", "VSync", true);
+        bool Resizable = ConfigSystem::Get().GetBool("Window", "Resizable", true);
+        bool Visible = ConfigSystem::Get().GetBool("Window", "Visible", true);
+        WindowProps props(Title, BackendType::Vulkan, Width, Height, Fullscreen, VSync, Resizable, Visible);
+
+        uint32_t NumWorkers = ConfigSystem::Get().GetUInt("Workers", "Number", 0);
+        if (NumWorkers > std::thread::hardware_concurrency()) // limit to avaible cores
+        {
+            NumWorkers = 0;
+        }
 
         m_Window = std::make_unique<Zero::Window>(props);
         m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
         
         Renderer::Get().Init(RHI::API::Vulkan, m_Window.get());
         SceneManager::Get().Init();
-        BlockingThreadPool::Get().Init(0); // default to hardware concurrency
+        BlockingThreadPool::Get().Init(NumWorkers);
     }
 
     Application::~Application()
