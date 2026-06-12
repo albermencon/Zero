@@ -99,6 +99,19 @@ namespace Zero
             castsShadow.reserve(n); isTransparent.reserve(n);
             transforms.reserve(transformCount);
         }
+        void Clear()
+        {
+            boundsMinX.clear(); boundsMinY.clear(); boundsMinZ.clear();
+            boundsMaxX.clear(); boundsMaxY.clear(); boundsMaxZ.clear();
+            visibilityMask.clear();
+            sortKeys.clear();
+            transformIndex.clear();
+            vertexBuffers.clear(); indexBuffers.clear();
+            indexCount.clear(); firstIndex.clear(); vertexOffset.clear();
+            materialId.clear();
+            castsShadow.clear(); isTransparent.clear();
+            transforms.clear();
+        }
     };
 
     struct FrameData
@@ -124,6 +137,15 @@ namespace Zero
             cpuDriven.Reserve(cpuDrawCount, cpuTransformCount);
             gpuDriven.Reserve(gpuBatchCount);
             pendingUploads.reserve(uploadCount);
+        }
+
+        void Clear()
+        {
+            cpuDriven.Clear();
+            dirLights.clear();
+            pointLights.clear();
+            pendingUploads.clear();
+            sceneCount = 0;
         }
 
         // no copy

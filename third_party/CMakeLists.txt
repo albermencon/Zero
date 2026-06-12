@@ -111,6 +111,8 @@ if(WIN32)
     set(_SLANG_BYPRODUCTS
         "${SLANG_BINARY_DIR}/Release/lib/${SLANG_COMPILER_NAME}.dll"
         "${SLANG_BINARY_DIR}/Release/lib/${SLANG_RT_NAME}.dll"
+        "${SLANG_BINARY_DIR}/Release/lib/${SLANG_COMPILER_NAME}.lib"
+        "${SLANG_BINARY_DIR}/Release/lib/${SLANG_RT_NAME}.lib"
     )
 elseif(APPLE)
     set(_SLANG_BYPRODUCTS
@@ -191,6 +193,7 @@ set(JPH_ENABLE_DEBUG_RENDERER OFF CACHE BOOL "" FORCE)
 set(JPH_OBJECT_STREAM OFF CACHE BOOL "" FORCE) # optional
 set(JPH_USE_SSE4_1 ON CACHE BOOL "" FORCE)
 set(JPH_USE_AVX2 OFF CACHE BOOL "" FORCE)
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(joltphysics/Build)
 

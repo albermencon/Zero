@@ -108,8 +108,11 @@ namespace Zero
 		vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{};
 		debugUtilsMessengerCreateInfoEXT.messageSeverity = severityFlags;
 		debugUtilsMessengerCreateInfoEXT.messageType = messageTypeFlags;
+#ifdef PLATFORM_WINDOWS // It needs to be this way in Windows
+		debugUtilsMessengerCreateInfoEXT.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(Debug::debugCallback);
+#else
 		debugUtilsMessengerCreateInfoEXT.pfnUserCallback = Debug::debugCallback;
-
+#endif
         m_DebugMessenger = vk::raii::DebugUtilsMessengerEXT(m_Instance, debugUtilsMessengerCreateInfoEXT);
 #endif
 	}
