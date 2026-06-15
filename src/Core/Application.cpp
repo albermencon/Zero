@@ -13,6 +13,8 @@
 #include "Graphics/Renderer/Renderer.h"
 #include "JobSystem/BlockingThreadPool.h"
 #include <Engine/Profiler/Profiler.h>
+#include <thread>
+#include <chrono>
 
 namespace Zero
 {
@@ -105,6 +107,12 @@ namespace Zero
             m_Window->PollEvents(); // Poll OS events
             Input::UpdateInput();
 
+            if (m_Minimized)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(16));
+                continue;
+            }
+
             float dt = Time::GetDeltaTime();
 
             // Game logic
@@ -150,6 +158,13 @@ namespace Zero
 
     bool Application::OnRenderSurfaceResize(RenderSurfaceResize& e)
     {
+        if (e.GetWidth() == 0 || e.GetHeight() == 0)
+        {
+            m_Minimized = true;
+            return false;
+        }
+
+        m_Minimized = false;
         Renderer::Get().OnRenderSurfaceResize();
         return true; // the layers don't need to see this event
     }

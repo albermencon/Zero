@@ -36,6 +36,7 @@ namespace Zero
         std::unique_ptr<LayerStack> m_LayerStack;
         static Application* s_Instance;
         bool m_Running = true;
+        bool m_Minimized = false;
     };
 
     // To be defined in client
