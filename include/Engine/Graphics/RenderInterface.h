@@ -78,10 +78,9 @@ namespace Zero
         // Query 
 
         // Returns true if the resource has been materialised on the GPU.
-        // Equivalent to handle.IsReady() — provided for generic call sites.
-        [[nodiscard]] bool IsReady(BufferHandle   handle) const noexcept { return handle.IsReady(); }
-        [[nodiscard]] bool IsReady(TextureHandle  handle) const noexcept { return handle.IsReady(); }
-        [[nodiscard]] bool IsReady(PipelineHandle handle) const noexcept { return handle.IsReady(); }
+        [[nodiscard]] bool IsReady(BufferHandle   handle) const noexcept;
+        [[nodiscard]] bool IsReady(TextureHandle  handle) const noexcept;
+        [[nodiscard]] bool IsReady(PipelineHandle handle) const noexcept;
 
     private:
         RenderInterface() = default;
