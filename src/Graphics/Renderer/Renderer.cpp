@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Graphics/Renderer/Renderer.h"
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
+#include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Log.h>
 
 namespace Zero
@@ -93,8 +94,10 @@ namespace Zero
 			}
 			idleCount = 0;
 
-			// Just drawing a triangule temp
 			m_backend->BeginFrame();
+
+			ProcessResourceRequests();
+
 			m_backend->EndFrame();
 			m_backend->SwapBuffers();
 
@@ -106,5 +109,76 @@ namespace Zero
 			Thread::Yield();
 			m_queue.FrameConsumed();
 		}
+	}
+
+	void Renderer::ProcessResourceRequests()
+	{
+		auto& impl = RenderInterfaceImpl::Get();
+
+		static std::vector<BufferCreateRequest> localBuffers;
+		static std::vector<TextureCreateRequest> localTextures;
+		static std::vector<PipelineCreateRequest> localPipelines;
+		static std::vector<ResourceDestroyRequest> localDestroys;
+
+		{
+			std::lock_guard<std::mutex> lock(impl.queueMutex);
+			localBuffers.swap(impl.pendingBuffers);
+			localTextures.swap(impl.pendingTextures);
+			localPipelines.swap(impl.pendingPipelines);
+			localDestroys.swap(impl.pendingDestroys);
+		}
+
+		// Process Buffer Creations
+		for (auto& req : localBuffers)
+		{
+			if (!req.ownedInitialData.empty())
+			{
+				req.desc.initialData = req.ownedInitialData.data();
+				req.desc.initialDataSize = req.ownedInitialData.size();
+			}
+			// TODO: call backend to create buffer
+			RHI::BufferHandle dummyHandle{ 1, 1 }; 
+			impl.bufferRegistry.MarkReady(req.handle.GetIndex(), dummyHandle);
+		}
+
+		// Process Texture Creations
+		for (const auto& req : localTextures)
+		{
+			RHI::TextureHandle dummyHandle{ 1, 1 };
+			impl.textureRegistry.MarkReady(req.handle.GetIndex(), dummyHandle);
+		}
+
+		// Process Pipeline Creations
+		for (const auto& req : localPipelines)
+		{
+			RHI::PipelineHandle dummyHandle{ 1, 1 };
+			impl.pipelineRegistry.MarkReady(req.handle.GetIndex(), dummyHandle);
+		}
+
+		// Process Destructions
+		// WARNING: Currently reclaiming immediately. When real backend destroy
+		// calls are wired up, defer by MAX_FRAMES_IN_FLIGHT to avoid
+		// use-after-free on in-flight GPU resources.
+		for (const auto& req : localDestroys)
+		{
+			uint16_t index = static_cast<uint16_t>(req.handleValue & 0xFFFFu);
+			if (req.type == ResourceDestroyRequest::Type::Buffer)
+			{
+				impl.bufferRegistry.ReclaimSlot(index);
+			}
+			else if (req.type == ResourceDestroyRequest::Type::Texture)
+			{
+				impl.textureRegistry.ReclaimSlot(index);
+			}
+			else if (req.type == ResourceDestroyRequest::Type::Pipeline)
+			{
+				impl.pipelineRegistry.ReclaimSlot(index);
+			}
+		}
+
+		localBuffers.clear();
+		localTextures.clear();
+		localPipelines.clear();
+		localDestroys.clear();
 	}
 }

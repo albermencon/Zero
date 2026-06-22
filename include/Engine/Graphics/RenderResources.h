@@ -102,8 +102,6 @@ namespace Zero
         BufferHandle vertexBuffer;
         BufferHandle indexBuffer;
 
-        [[nodiscard]] bool IsReady()   const noexcept { return vertexBuffer.IsReady() && indexBuffer.IsReady(); }
-        [[nodiscard]] bool IsPending() const noexcept { return vertexBuffer.IsPending() || indexBuffer.IsPending(); }
         [[nodiscard]] bool IsValid()   const noexcept { return vertexBuffer.IsValid() && indexBuffer.IsValid(); }
     };
 }

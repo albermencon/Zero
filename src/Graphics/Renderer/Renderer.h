@@ -34,6 +34,7 @@ namespace Zero
 
 	private:
 		void RenderLoop();
+		void ProcessResourceRequests();
 
 	private:
 		std::unique_ptr<class GraphicsDevice> m_backend;
