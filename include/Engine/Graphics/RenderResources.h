@@ -5,6 +5,7 @@
 #include <Engine/Graphics/BufferUsage.h>
 #include <Engine/Graphics/MemoryDomain.h>
 #include <Engine/Graphics/VertexLayout.h>
+#include <Engine/Graphics/ResourceHandle.h>
 
 namespace Zero
 {
