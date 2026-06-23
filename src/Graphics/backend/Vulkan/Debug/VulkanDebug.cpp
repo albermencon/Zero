@@ -59,7 +59,7 @@ namespace Zero::Debug
 
     void SetObjectName(VkDevice device, uint64_t objectHandle, VkObjectType objectType, const char* name)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         if (!name) return;
 
         VkDebugUtilsObjectNameInfoEXT info{};
@@ -76,14 +76,14 @@ namespace Zero::Debug
 
     void SetObjectName(const vk::raii::Device& device, uint64_t objectHandle, vk::ObjectType objectType, const char* name)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         SetObjectName(*device, objectHandle, static_cast<VkObjectType>(objectType), name);
 #endif
     }
 
     void BeginLabel(VkCommandBuffer cmd, const char* name, float r, float g, float b, float a)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pLabelName = name;
@@ -97,7 +97,7 @@ namespace Zero::Debug
 
     void EndLabel(VkCommandBuffer cmd)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         static auto fn = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
             vkGetInstanceProcAddr(nullptr, "vkCmdEndDebugUtilsLabelEXT"));
         if (fn) fn(cmd);
@@ -106,7 +106,7 @@ namespace Zero::Debug
 
     void InsertLabel(VkCommandBuffer cmd, const char* name, float r, float g, float b, float a)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pLabelName = name;
@@ -120,7 +120,7 @@ namespace Zero::Debug
 
     void BeginLabel(VkQueue queue, const char* name, float r, float g, float b, float a)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pLabelName = name;
@@ -134,7 +134,7 @@ namespace Zero::Debug
 
     void EndLabel(VkQueue queue)
     {
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         static auto fn = reinterpret_cast<PFN_vkQueueEndDebugUtilsLabelEXT>(
             vkGetInstanceProcAddr(nullptr, "vkQueueEndDebugUtilsLabelEXT"));
         if (fn) fn(queue);

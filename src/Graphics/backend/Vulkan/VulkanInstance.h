@@ -24,7 +24,7 @@ namespace Zero
 	private:
 		vk::raii::Context m_Context;
 		vk::raii::Instance m_Instance = nullptr;
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
 		vk::raii::DebugUtilsMessengerEXT m_DebugMessenger{ nullptr };
 #endif
 	};

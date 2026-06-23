@@ -35,7 +35,7 @@ namespace Zero
         for (uint32_t i = 0; i < glfwExtensionCount; ++i)
             extensions.push_back(glfwExtensions[i]);
 
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         // Add debug utils extension (REQUIRED for debug messenger)
         extensions.push_back(vk::EXTDebugUtilsExtensionName);
 #endif
@@ -61,7 +61,7 @@ namespace Zero
 
         }
 
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
         const std::vector<const char*> validationLayers =
         {
             "VK_LAYER_KHRONOS_validation"
@@ -99,7 +99,7 @@ namespace Zero
 
 	void VulkanInstance::SetupDebugMessenger()
 	{
-#ifdef ENGINE_DEBUG
+#ifdef ZERO_DEBUG
 		vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
 			vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
 			vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
