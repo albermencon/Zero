@@ -2,10 +2,11 @@
 #include <cstdint>
 #include <Engine/Core.h>
 #include <Engine/Graphics/ResourceHandle.h>
+#include <Engine/Window.h>
 
 namespace Zero::RHI
 {
-	enum class API { Vulkan, D3D12, OpenGL, Metal, COUNT };
+	using API = Zero::BackendType;
 
 	union DrawSortKey 
 	{

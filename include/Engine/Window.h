@@ -10,10 +10,11 @@ namespace Zero
 
     enum class BackendType
     {
-        Vulkan,
-        DirectX12,
+        Vulkan = 0,
+        D3D12,
         OpenGL,
-        Metal // fuck it
+        Metal, // fuck it
+        COUNT
     };
 
     struct WindowProps

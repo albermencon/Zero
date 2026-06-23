@@ -1,3 +1,4 @@
+#include "Engine/Window.h"
 #include "pch.h"
 #include "Graphics/Renderer/Renderer.h"
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
@@ -28,7 +29,7 @@ namespace Zero
 		m_API = api;
 		m_window = window;
 
-		m_backend = GraphicsBackend::Create(BackendType::Vulkan, *window);
+		m_backend = GraphicsBackend::Create(api, *window);
 		ENGINE_CORE_ASSERT(m_backend, "Failed to create RenderBackend");
 
 		// 

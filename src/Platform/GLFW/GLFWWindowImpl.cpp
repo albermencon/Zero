@@ -79,7 +79,7 @@ namespace Zero
             break;
         }
 
-        case BackendType::DirectX12:
+        case BackendType::D3D12:
         {
             // DirectX12 is only available on Windows. GLFW windows should be created with NO_API.
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);

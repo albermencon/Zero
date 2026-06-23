@@ -13,6 +13,7 @@
 #include "Graphics/Renderer/Renderer.h"
 #include "JobSystem/BlockingThreadPool.h"
 #include <Engine/Profiler/Profiler.h>
+#include <cstdint>
 #include <thread>
 #include <chrono>
 
@@ -43,6 +44,7 @@ namespace Zero
             ConfigSystem::Get().SetBool("Window", "VSync", true);
             ConfigSystem::Get().SetBool("Window", "Resizable", true);
             ConfigSystem::Get().SetBool("Window", "Visible", true);
+            ConfigSystem::Get().SetUInt("Window", "Backend", static_cast<uint32_t>(BackendType::Vulkan));
             
             ConfigSystem::Get().SetUInt("Workers", "Number", 0);
 
@@ -56,7 +58,8 @@ namespace Zero
         bool VSync = ConfigSystem::Get().GetBool("Window", "VSync", true);
         bool Resizable = ConfigSystem::Get().GetBool("Window", "Resizable", true);
         bool Visible = ConfigSystem::Get().GetBool("Window", "Visible", true);
-        WindowProps props(Title, BackendType::Vulkan, Width, Height, Fullscreen, VSync, Resizable, Visible);
+        RHI::API api = static_cast<RHI::API>(ConfigSystem::Get().GetUInt("Window", "Backend", static_cast<uint32_t>(BackendType::Vulkan)));
+        WindowProps props(Title, api, Width, Height, Fullscreen, VSync, Resizable, Visible);
 
         uint32_t NumWorkers = ConfigSystem::Get().GetUInt("Workers", "Number", 0);
         if (NumWorkers > std::thread::hardware_concurrency()) // limit to avaible cores
@@ -67,7 +70,7 @@ namespace Zero
         m_Window = std::make_unique<Zero::Window>(props);
         m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
         
-        Renderer::Get().Init(RHI::API::Vulkan, m_Window.get());
+        Renderer::Get().Init(api, m_Window.get());
         SceneManager::Get().Init();
         BlockingThreadPool::Get().Init(NumWorkers);
     }

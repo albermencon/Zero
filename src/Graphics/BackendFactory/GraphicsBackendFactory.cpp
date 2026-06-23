@@ -32,7 +32,7 @@ namespace Zero
         case BackendType::OpenGL:
             return std::make_unique<OpenGLDevice>(&window);
 
-        case BackendType::DirectX12:
+        case BackendType::D3D12:
             return nullptr;
             //return std::make_unique<D3D12Backend>(nativeWindowHandle
         default:
