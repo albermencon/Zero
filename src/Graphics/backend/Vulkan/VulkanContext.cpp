@@ -9,6 +9,7 @@
 #include "Graphics/backend/Vulkan/ShaderModule.h"
 #include "Graphics/backend/Vulkan/ShaderProgram.h"
 #include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
+#include "Graphics/backend/Vulkan/Translator/VulkanTranslator.h"
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
@@ -289,31 +290,11 @@ namespace Zero
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = desc.size;
         
-        VkBufferUsageFlags vkUsage = 0;
-        if (hasUsage(desc.usage, BufferUsage::Vertex))      vkUsage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        if (hasUsage(desc.usage, BufferUsage::Index))       vkUsage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        if (hasUsage(desc.usage, BufferUsage::Uniform))     vkUsage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        if (hasUsage(desc.usage, BufferUsage::Storage))     vkUsage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        if (hasUsage(desc.usage, BufferUsage::Indirect))    vkUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-        if (hasUsage(desc.usage, BufferUsage::TransferSrc)) vkUsage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        if (hasUsage(desc.usage, BufferUsage::TransferDst)) vkUsage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        
-        bufferInfo.usage = vkUsage;
+        bufferInfo.usage = Vulkan::toVkBufferUsage(desc.usage);
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         VmaAllocationCreateInfo allocInfo{};
-        if (desc.memory == MemoryDomain::GPU)
-        {
-            allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-        }
-        else if (desc.memory == MemoryDomain::GPUtoCPU)
-        {
-            allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
-        }
-        else if (desc.memory == MemoryDomain::CPUtoGPU || desc.memory == MemoryDomain::CPUtoGPU_Coherent)
-        {
-            allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-        }
+        allocInfo.usage = Vulkan::toVmaMemoryUsage(desc.memory);
 
         VkBuffer buffer = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;

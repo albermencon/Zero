@@ -10,6 +10,7 @@ import vulkan_hpp;
 #include <Engine/Graphics/VertexLayout.h>
 #include <Engine/Graphics/BufferUsage.h>
 #include <Engine/Graphics/MemoryDomain.h>
+#include <Engine/Graphics/PipelineDesc.h>
 #include <vk_mem_alloc.h>
 
 namespace Zero::Vulkan
@@ -176,7 +177,7 @@ namespace Zero::Vulkan
     }
 
     [[nodiscard]] constexpr vk::StencilOpState toVkStencilOpState(
-        const StencilOpState& s, uint32_t readMask, uint32_t writeMask, uint32_t ref)
+        const Zero::StencilOpState& s, uint32_t readMask, uint32_t writeMask, uint32_t ref)
     {
         vk::StencilOpState out{};
         out.failOp = toVkStencilOp(s.failOp);
