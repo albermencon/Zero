@@ -9,6 +9,7 @@ namespace Zero
     {
     public:
         OpenGLDevice(Window* window);
+        virtual ~OpenGLDevice() override;
 
         virtual void init() override;
         virtual void SwapBuffers() override;
@@ -27,5 +28,8 @@ namespace Zero
     private:
         Window* m_window = nullptr;
         bool m_SwapChainDirty = false;
+        unsigned int m_shaderProgram = 0;
+        unsigned int m_vao = 0;
+        bool m_contextMadeCurrentOnRenderThread = false;
     };
 }
