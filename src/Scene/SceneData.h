@@ -85,9 +85,9 @@ namespace Zero
         std::vector<uint64_t> sortKeys;       // pre-built, updated on change
 
         // COLD: draw 
-        std::vector<RHI::BufferHandle> vertexBuffers;
-        std::vector<RHI::BufferHandle> indexBuffers;
-        std::vector<RHI::PipelineHandle> pipelines;
+        std::vector<BufferHandle> vertexBuffers;
+        std::vector<BufferHandle> indexBuffers;
+        std::vector<PipelineHandle> pipelines;
         std::vector<uint32_t> indexCount;
         std::vector<uint32_t> firstIndex;
         std::vector<uint32_t> vertexOffset;
@@ -138,9 +138,9 @@ namespace Zero
             transforms.push_back(d.transform);
 
             // Reconstruct RHI handles from stored IDs
-            RHI::BufferHandle   vb;  vb.idx = d.vertexBufferId;
-            RHI::BufferHandle   ib;  ib.idx = d.indexBufferId;
-            RHI::PipelineHandle pso; pso.idx = d.pipelineId_;
+            BufferHandle   vb{ d.vertexBufferId };
+            BufferHandle   ib{ d.indexBufferId };
+            PipelineHandle pso{ d.pipelineId_ };
 
             vertexBuffers.push_back(vb);
             indexBuffers.push_back(ib);

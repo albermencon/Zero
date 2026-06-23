@@ -104,11 +104,17 @@ namespace Zero
         }
 
         // Called by RenderThread when resource is created.
-        void MarkReady(uint16_t index, const BackendType& backendResource)
+        void MarkReady(HandleType handle, const BackendType& backendResource)
         {
+            uint16_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return;
             
             Detail::ResourceSlot<BackendType>& slot = m_slots[index];
+            if (slot.generation.load(std::memory_order_acquire) != handle.GetGeneration())
+            {
+                return; // stale handle request abort
+            }
+
             slot.resource = backendResource;
             slot.state.store(ResourceState::Ready, std::memory_order_release);
         }

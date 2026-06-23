@@ -37,10 +37,10 @@ namespace Zero
 
     struct GPUDrivenBatch
     {
-        RHI::BufferHandle   objectDataBuffer;  // SSBO
-        RHI::BufferHandle   indirectBuffer;    // filled by cull compute
-        RHI::BufferHandle   countBuffer;       // for vkCmdDrawIndexedIndirectCount
-        RHI::PipelineHandle cullPipeline;      // compute cull PSO
+        BufferHandle   objectDataBuffer;  // SSBO
+        BufferHandle   indirectBuffer;    // filled by cull compute
+        BufferHandle   countBuffer;       // for vkCmdDrawIndexedIndirectCount
+        PipelineHandle cullPipeline;      // compute cull PSO
         uint32_t            maxObjects = 0;
 
         void Reserve(uint32_t n) { maxObjects = n; }
@@ -58,8 +58,8 @@ namespace Zero
         std::vector<uint32_t> transformIndex; // Index into transforms[] — multiple entries can share the same transform
 
         // COLD
-        std::vector<RHI::BufferHandle> vertexBuffers; // same handle for same mesh
-        std::vector<RHI::BufferHandle> indexBuffers;  // same handle for same mesh
+        std::vector<Zero::BufferHandle> vertexBuffers; // same handle for same mesh
+        std::vector<Zero::BufferHandle> indexBuffers;  // same handle for same mesh
         std::vector<uint32_t> indexCount;
         std::vector<uint32_t> firstIndex;
         std::vector<uint32_t> vertexOffset;

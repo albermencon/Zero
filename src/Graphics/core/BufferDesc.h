@@ -11,5 +11,6 @@ namespace Zero
 		MemoryDomain memory = MemoryDomain::GPU;
 
 		const void* initialData = nullptr;
+		size_t initialDataSize = 0;
 	};
 }

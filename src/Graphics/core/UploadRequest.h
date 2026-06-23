@@ -17,20 +17,20 @@ namespace Zero
         UploadType          type = UploadType::Buffer;
 
         // Source: CPU-visible staging buffer, already populated
-        RHI::BufferHandle   staging;
+        BufferHandle   staging;
 
         union
         {
             struct
             {
-                RHI::BufferHandle   dst;
+                BufferHandle        dst;
                 uint64_t            size;
                 uint64_t            dstOffset;
             } buffer;
 
             struct
             {
-                RHI::TextureHandle  dst;
+                TextureHandle       dst;
                 uint32_t            mipLevel;
                 uint32_t            arrayLayer;
                 uint32_t            width;

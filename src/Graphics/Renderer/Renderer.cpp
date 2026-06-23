@@ -136,23 +136,20 @@ namespace Zero
 				req.desc.initialData = req.ownedInitialData.data();
 				req.desc.initialDataSize = req.ownedInitialData.size();
 			}
-			// TODO: call backend to create buffer
-			RHI::BufferHandle dummyHandle{ 1, 1 }; 
-			impl.bufferRegistry.MarkReady(req.handle.GetIndex(), dummyHandle);
+			Buffer* buffer = m_backend->CreateBuffer(req.desc);
+			impl.bufferRegistry.MarkReady(req.handle, buffer);
 		}
 
 		// Process Texture Creations
 		for (const auto& req : localTextures)
 		{
-			RHI::TextureHandle dummyHandle{ 1, 1 };
-			impl.textureRegistry.MarkReady(req.handle.GetIndex(), dummyHandle);
+			impl.textureRegistry.MarkReady(req.handle, nullptr);
 		}
 
 		// Process Pipeline Creations
 		for (const auto& req : localPipelines)
 		{
-			RHI::PipelineHandle dummyHandle{ 1, 1 };
-			impl.pipelineRegistry.MarkReady(req.handle.GetIndex(), dummyHandle);
+			impl.pipelineRegistry.MarkReady(req.handle, nullptr);
 		}
 
 		// Process Destructions
@@ -164,6 +161,9 @@ namespace Zero
 			uint16_t index = static_cast<uint16_t>(req.handleValue & 0xFFFFu);
 			if (req.type == ResourceDestroyRequest::Type::Buffer)
 			{
+				BufferHandle handle{ req.handleValue };
+				Buffer* buffer = impl.bufferRegistry.GetBackendResource(handle);
+				if (buffer) m_backend->DestroyBuffer(buffer);
 				impl.bufferRegistry.ReclaimSlot(index);
 			}
 			else if (req.type == ResourceDestroyRequest::Type::Texture)

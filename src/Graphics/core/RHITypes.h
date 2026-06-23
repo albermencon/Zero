@@ -1,31 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <Engine/Core.h>
+#include <Engine/Graphics/ResourceHandle.h>
 
 namespace Zero::RHI
 {
-	template<typename Tag>
-	struct Handle
-	{
-		uint32_t idx : 20 = 0;  // 0 == invalid (pools start at index 1)
-		uint32_t gen : 12 = 0;
-
-		[[nodiscard]] constexpr bool IsValid() const { return idx != 0; }
-		constexpr bool operator==(const Handle&) const = default;
-		constexpr bool operator!=(const Handle&) const = default;
-	};
-	static_assert(sizeof(Handle<void>) == 4);
-
-	struct BufferTag {};
-	struct TextureTag {};
-	struct PipelineTag {};
-	struct ShaderTag {};
-
-	using BufferHandle = Handle<BufferTag>;
-	using TextureHandle = Handle<TextureTag>;
-	using PipelineHandle = Handle<PipelineTag>;
-	using ShaderHandle = Handle<ShaderTag>;
-
 	enum class API { Vulkan, D3D12, OpenGL, Metal, COUNT };
 
 	union DrawSortKey 
@@ -57,9 +36,9 @@ namespace Zero::RHI
 	{
 		DrawSortKey     sortKey;
 
-		BufferHandle    vertexBuffer;
-		BufferHandle    indexBuffer;
-		PipelineHandle  pipeline;
+		Zero::BufferHandle    vertexBuffer;
+		Zero::BufferHandle    indexBuffer;
+		Zero::PipelineHandle  pipeline;
 
 		uint32_t        indexCount = 0;
 		uint32_t        firstIndex = 0;
