@@ -39,6 +39,10 @@ namespace Zero
 
         virtual void OnRenderSurfaceResize() override;
 
+        virtual Buffer* CreateBuffer(const BufferDesc& desc) override;
+        virtual void DestroyBuffer(Buffer* buffer) override;
+        virtual void UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes) override;
+
         void recreateSwapChain();
 
         void recordCommandBuffer(uint32_t imageIndex);

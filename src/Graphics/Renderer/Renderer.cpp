@@ -50,7 +50,24 @@ namespace Zero
 			m_renderThread.Join();
 
 		if (m_backend)
+		{
 			m_backend->OnFinished();
+
+			auto& impl = RenderInterfaceImpl::Get();
+			
+			impl.bufferRegistry.ForEach([this](BufferHandle h, Buffer* b) {
+				if (b) m_backend->DestroyBuffer(b);
+			});
+			impl.textureRegistry.ForEach([this](TextureHandle h, Texture* t) {
+				// if (t) m_backend->DestroyTexture(t);
+			});
+			impl.pipelineRegistry.ForEach([this](PipelineHandle h, Pipeline* p) {
+				// if (p) m_backend->DestroyPipeline(p);
+			});
+
+			impl.Clear();
+			m_deferredDestroys.clear();
+		}
 
 		m_backend.reset();
 		m_initialized.store(false, std::memory_order_release);
@@ -137,7 +154,15 @@ namespace Zero
 				req.desc.initialDataSize = req.ownedInitialData.size();
 			}
 			Buffer* buffer = m_backend->CreateBuffer(req.desc);
-			impl.bufferRegistry.MarkReady(req.handle, buffer);
+			if (buffer)
+			{
+				impl.bufferRegistry.MarkReady(req.handle, buffer);
+			}
+			else
+			{
+				ENGINE_CORE_ERROR("Failed to create buffer for handle {0}", req.handle.GetId());
+				impl.bufferRegistry.MarkFailed(req.handle);
+			}
 		}
 
 		// Process Texture Creations
@@ -152,28 +177,39 @@ namespace Zero
 			impl.pipelineRegistry.MarkReady(req.handle, nullptr);
 		}
 
-		// Process Destructions
-		// WARNING: Currently reclaiming immediately. When real backend destroy
-		// calls are wired up, defer by MAX_FRAMES_IN_FLIGHT to avoid
-		// use-after-free on in-flight GPU resources.
 		for (const auto& req : localDestroys)
 		{
-			uint16_t index = static_cast<uint16_t>(req.handleValue & 0xFFFFu);
-			if (req.type == ResourceDestroyRequest::Type::Buffer)
+			m_deferredDestroys.push_back({ req.handleValue, static_cast<uint32_t>(req.type), 2 }); // MAX_FRAMES_IN_FLIGHT = 2
+		}
+
+		for (auto it = m_deferredDestroys.begin(); it != m_deferredDestroys.end(); )
+		{
+			if (it->frameCountdown > 0)
 			{
-				BufferHandle handle{ req.handleValue };
+				it->frameCountdown--;
+				++it;
+				continue;
+			}
+
+			if (it->type == static_cast<uint32_t>(ResourceDestroyRequest::Type::Buffer))
+			{
+				BufferHandle handle{ it->handleValue };
 				Buffer* buffer = impl.bufferRegistry.GetBackendResource(handle);
 				if (buffer) m_backend->DestroyBuffer(buffer);
-				impl.bufferRegistry.ReclaimSlot(index);
+				impl.bufferRegistry.ReclaimSlot(handle);
 			}
-			else if (req.type == ResourceDestroyRequest::Type::Texture)
+			else if (it->type == static_cast<uint32_t>(ResourceDestroyRequest::Type::Texture))
 			{
-				impl.textureRegistry.ReclaimSlot(index);
+				TextureHandle handle{ it->handleValue };
+				impl.textureRegistry.ReclaimSlot(handle);
 			}
-			else if (req.type == ResourceDestroyRequest::Type::Pipeline)
+			else if (it->type == static_cast<uint32_t>(ResourceDestroyRequest::Type::Pipeline))
 			{
-				impl.pipelineRegistry.ReclaimSlot(index);
+				PipelineHandle handle{ it->handleValue };
+				impl.pipelineRegistry.ReclaimSlot(handle);
 			}
+
+			it = m_deferredDestroys.erase(it);
 		}
 
 		localBuffers.clear();

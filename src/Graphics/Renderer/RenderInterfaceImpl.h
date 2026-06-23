@@ -56,5 +56,14 @@ namespace Zero
         std::vector<TextureCreateRequest> pendingTextures;
         std::vector<PipelineCreateRequest> pendingPipelines;
         std::vector<ResourceDestroyRequest> pendingDestroys;
+
+        void Clear()
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            pendingBuffers.clear();
+            pendingTextures.clear();
+            pendingPipelines.clear();
+            pendingDestroys.clear();
+        }
     };
 }

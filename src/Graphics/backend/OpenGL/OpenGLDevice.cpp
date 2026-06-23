@@ -40,4 +40,17 @@ namespace Zero
     {
         m_SwapChainDirty = true;
     }
+
+    Buffer* OpenGLDevice::CreateBuffer(const BufferDesc& desc)
+    {
+        return nullptr;
+    }
+
+    void OpenGLDevice::DestroyBuffer(Buffer* buffer)
+    {
+    }
+
+    void OpenGLDevice::UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes)
+    {
+    }
 }

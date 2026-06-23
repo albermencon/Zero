@@ -20,6 +20,10 @@ namespace Zero
         virtual void init() = 0;
         virtual void SwapBuffers() = 0;
 
+        virtual Buffer* CreateBuffer(const BufferDesc& desc) = 0;
+        virtual void DestroyBuffer(Buffer* buffer) = 0;
+        virtual void UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes) = 0;
+
         virtual void OnFinished() = 0;
 
         virtual void OnRenderSurfaceResize() = 0;

@@ -3,9 +3,9 @@
 #include <Engine/Window.h>
 #include <Engine/Log.h>
 #include "VulkanContext.h"
-#include <map>
 #include <GLFW/glfw3.h>
-
+#include <Engine/Graphics/RenderResources.h>
+#include "Graphics/backend/Vulkan/VulkanBuffer.h"
 #include "Graphics/backend/Vulkan/ShaderModule.h"
 #include "Graphics/backend/Vulkan/ShaderProgram.h"
 #include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
@@ -281,6 +281,105 @@ namespace Zero
         dependencyInfo.pImageMemoryBarriers = &barrier;
 
         commandBuffer.pipelineBarrier2(dependencyInfo);
+    }
+
+    Buffer* VulkanDevice::CreateBuffer(const BufferDesc& desc)
+    {
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = desc.size;
+        
+        VkBufferUsageFlags vkUsage = 0;
+        if (hasUsage(desc.usage, BufferUsage::Vertex))      vkUsage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        if (hasUsage(desc.usage, BufferUsage::Index))       vkUsage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        if (hasUsage(desc.usage, BufferUsage::Uniform))     vkUsage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        if (hasUsage(desc.usage, BufferUsage::Storage))     vkUsage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        if (hasUsage(desc.usage, BufferUsage::Indirect))    vkUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+        if (hasUsage(desc.usage, BufferUsage::TransferSrc)) vkUsage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        if (hasUsage(desc.usage, BufferUsage::TransferDst)) vkUsage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        
+        bufferInfo.usage = vkUsage;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        if (desc.memory == MemoryDomain::GPU)
+        {
+            allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        }
+        else if (desc.memory == MemoryDomain::GPUtoCPU)
+        {
+            allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+        }
+        else if (desc.memory == MemoryDomain::CPUtoGPU || desc.memory == MemoryDomain::CPUtoGPU_Coherent)
+        {
+            allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+        }
+
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+
+        VkResult result = vmaCreateBuffer(
+            m_memoryAllocator.GetAllocator(),
+            &bufferInfo,
+            &allocInfo,
+            &buffer,
+            &allocation,
+            nullptr
+        );
+
+        if (result != VK_SUCCESS)
+        {
+            ENGINE_CORE_ERROR("Failed to create Vulkan Buffer");
+            return nullptr;
+        }
+
+        VulkanBuffer* vulkanBuffer = new VulkanBuffer(&m_memoryAllocator, buffer, allocation, desc.size, desc.usage, desc.memory);
+
+        if (desc.initialData)
+        {
+            if (vulkanBuffer->IsMappable())
+            {
+                void* mapped = vulkanBuffer->Map();
+                if (mapped)
+                {
+                    memcpy(mapped, desc.initialData, desc.initialDataSize);
+                    vulkanBuffer->Unmap();
+                }
+            }
+            else
+            {
+                ENGINE_CORE_WARN("initialData provided for GPU-only buffer without Staging Buffer support yet.");
+            }
+        }
+
+        return vulkanBuffer;
+    }
+
+    void VulkanDevice::DestroyBuffer(Buffer* buffer)
+    {
+        if (buffer)
+        {
+            delete buffer;
+        }
+    }
+
+    void VulkanDevice::UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes)
+    {
+        if (!buffer || !data) return;
+        VulkanBuffer* vkb = static_cast<VulkanBuffer*>(buffer);
+        if (vkb->IsMappable())
+        {
+            void* mapped = vkb->Map();
+            if (mapped)
+            {
+                memcpy(static_cast<uint8_t*>(mapped) + offsetBytes, data, sizeBytes);
+                vkb->Unmap();
+            }
+        }
+        else
+        {
+            ENGINE_CORE_WARN("UpdateBufferData on GPU-only buffer not supported yet without Staging.");
+        }
     }
 
 }

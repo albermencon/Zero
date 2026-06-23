@@ -45,5 +45,12 @@ namespace Zero
 		Thread m_renderThread;
 		std::atomic<bool> m_running{false};
 		std::atomic<bool> m_initialized{ false };
+
+		struct DeferredDestroy {
+			uint32_t handleValue;
+			uint32_t type; // casted from ResourceDestroyRequest::Type
+			uint32_t frameCountdown;
+		};
+		std::vector<DeferredDestroy> m_deferredDestroys;
 	};
 }

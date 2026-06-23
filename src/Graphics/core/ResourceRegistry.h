@@ -70,7 +70,7 @@ namespace Zero
         // Thread-safe.
         void Deallocate(HandleType handle)
         {
-            uint16_t index = handle.GetIndex();
+            uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return;
 
             Detail::ResourceSlot<BackendType>& slot = m_slots[index];
@@ -83,12 +83,16 @@ namespace Zero
         }
 
         // Called by RenderThread after safe destruction.
-        void ReclaimSlot(uint16_t index)
+        void ReclaimSlot(HandleType handle)
         {
+            uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return;
 
             std::lock_guard<std::mutex> lock(m_mutex);
             Detail::ResourceSlot<BackendType>& slot = m_slots[index];
+
+            if (slot.generation.load(std::memory_order_relaxed) != handle.GetGeneration())
+                return;
 
             if (slot.state.load(std::memory_order_relaxed) != ResourceState::DestroyPending)
                 return;
@@ -103,10 +107,35 @@ namespace Zero
             m_freeIndices.push_back(index);
         }
 
+        // Called if resource creation fails, skipping DestroyPending
+        void MarkFailed(HandleType handle)
+        {
+            uint32_t index = handle.GetIndex();
+            if (index == 0 || index >= Capacity) return;
+
+            std::lock_guard<std::mutex> lock(m_mutex);
+            Detail::ResourceSlot<BackendType>& slot = m_slots[index];
+
+            if (slot.generation.load(std::memory_order_relaxed) != handle.GetGeneration())
+                return;
+
+            // Ensure we only mark failed if it was pending
+            if (slot.state.load(std::memory_order_relaxed) != ResourceState::Pending)
+                return;
+
+            slot.state.store(ResourceState::Invalid, std::memory_order_release);
+            slot.generation.store(slot.generation.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+
+#ifdef ZERO_DEBUG
+            slot.debugName.clear();
+#endif
+            m_freeIndices.push_back(index);
+        }
+
         // Called by RenderThread when resource is created.
         void MarkReady(HandleType handle, const BackendType& backendResource)
         {
-            uint16_t index = handle.GetIndex();
+            uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return;
             
             Detail::ResourceSlot<BackendType>& slot = m_slots[index];
@@ -120,7 +149,7 @@ namespace Zero
         }
         
 #ifdef ZERO_DEBUG
-        void SetDebugName(uint16_t index, const std::string& name)
+        void SetDebugName(uint32_t index, const std::string& name)
         {
             if (index == 0 || index >= Capacity) return;
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -131,7 +160,7 @@ namespace Zero
         // Client query. Thread-safe lock-free read.
         ResourceState GetState(HandleType handle) const
         {
-            uint16_t index = handle.GetIndex();
+            uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return ResourceState::Invalid;
 
             const Detail::ResourceSlot<BackendType>& slot = m_slots[index];
@@ -146,7 +175,7 @@ namespace Zero
         // Fast internal access for RenderThread / backend. Lock-free.
         BackendType GetBackendResource(HandleType handle) const
         {
-            uint16_t index = handle.GetIndex();
+            uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return BackendType{};
 
             const Detail::ResourceSlot<BackendType>& slot = m_slots[index];
@@ -155,12 +184,29 @@ namespace Zero
                 return BackendType{};
             }
 
-            if (slot.state.load(std::memory_order_acquire) == ResourceState::Ready)
+            ResourceState currentState = slot.state.load(std::memory_order_acquire);
+            if (currentState == ResourceState::Ready || currentState == ResourceState::DestroyPending)
             {
                 return slot.resource;
             }
 
             return BackendType{};
+        }
+
+        template<typename Func>
+        void ForEach(Func func)
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (uint32_t i = 1; i < Capacity; ++i)
+            {
+                ResourceState currentState = m_slots[i].state.load(std::memory_order_relaxed);
+                if (currentState == ResourceState::Ready || currentState == ResourceState::DestroyPending)
+                {
+                    HandleType h;
+                    h.value = (static_cast<uint32_t>(m_slots[i].generation.load(std::memory_order_relaxed)) << 16) | i;
+                    func(h, m_slots[i].resource);
+                }
+            }
         }
 
     private:
