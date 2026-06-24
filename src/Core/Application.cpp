@@ -11,6 +11,7 @@
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
+#include "Graphics/ShaderCompiler/ShaderCompiler.h"
 #include "JobSystem/BlockingThreadPool.h"
 #include <Engine/Profiler/Profiler.h>
 #include <cstdint>
@@ -70,6 +71,19 @@ namespace Zero
         m_Window = std::make_unique<Zero::Window>(props);
         m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
         
+        ShaderTarget compilerTarget = ShaderTarget::SPIRV;
+        switch(api)
+        {
+            case RHI::API::Vulkan: compilerTarget = ShaderTarget::SPIRV; break;
+            case RHI::API::OpenGL: compilerTarget = ShaderTarget::GLSL; break;
+            case RHI::API::D3D12: compilerTarget = ShaderTarget::DXIL; break;
+            case RHI::API::Metal: compilerTarget = ShaderTarget::MSL; break;
+            default:
+                ENGINE_CORE_ASSERT(false, "Invalid backend type.");
+                break;
+        }
+        ShaderCompiler::Get().Init(compilerTarget);
+
         Renderer::Get().Init(api, m_Window.get());
         SceneManager::Get().Init();
         BlockingThreadPool::Get().Init(NumWorkers);
