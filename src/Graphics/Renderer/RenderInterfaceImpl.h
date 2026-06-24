@@ -3,7 +3,6 @@
 #include <Engine/Graphics/RenderInterface.h>
 #include <Engine/Graphics/RenderResources.h>
 #include "Graphics/core/ResourceRegistry.h"
-#include "Graphics/core/RHITypes.h"
 #include <mutex>
 #include <vector>
 
