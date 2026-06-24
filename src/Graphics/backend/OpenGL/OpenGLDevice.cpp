@@ -144,7 +144,11 @@ namespace Zero
         GLbitfield flags = OpenGL::toGLBufferStorageFlags(desc.memory);
 
         glBindBuffer(GL_COPY_WRITE_BUFFER, id);
-        glBufferStorage(GL_COPY_WRITE_BUFFER, desc.size, desc.initialData, flags);
+        glBufferStorage(GL_COPY_WRITE_BUFFER, desc.size, nullptr, flags);
+        if (desc.initialData && desc.initialDataSize > 0)
+        {
+            glBufferSubData(GL_COPY_WRITE_BUFFER, 0, desc.initialDataSize, desc.initialData);
+        }
         glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
 
         return new OpenGLBuffer(id, desc.size, desc.usage, desc.memory);
