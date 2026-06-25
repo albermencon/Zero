@@ -5,7 +5,7 @@
 namespace Zero
 {
     // Bitmask — declare intended usage at creation time.
-    enum class ENGINE_API BufferUsage : uint32_t
+    enum class ZERO_API BufferUsage : uint32_t
     {
         None = 0,
         Vertex = 1 << 0,

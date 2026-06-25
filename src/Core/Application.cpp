@@ -29,7 +29,7 @@ namespace Zero
 
     Application::Application()
     {
-        ENGINE_CORE_ASSERT(!s_Instance, "Application already exists!");
+        ZERO_CORE_ASSERT(!s_Instance, "Application already exists!");
         s_Instance = this;
 
         Zero::Log::Init();
@@ -79,7 +79,7 @@ namespace Zero
             case RHI::API::D3D12: compilerTarget = ShaderTarget::DXIL; break;
             case RHI::API::Metal: compilerTarget = ShaderTarget::MSL; break;
             default:
-                ENGINE_CORE_ASSERT(false, "Invalid backend type.");
+                ZERO_CORE_ASSERT(false, "Invalid backend type.");
                 break;
         }
         ShaderCompiler::Get().Init(compilerTarget);
@@ -111,8 +111,8 @@ namespace Zero
 
     void Application::Run()
     {
-        ENGINE_CORE_TRACE("Application started.");
-        ENGINE_PROFILE_THREAD("Main Thread");
+        ZERO_CORE_TRACE("Application started.");
+        ZERO_PROFILE_THREAD("Main Thread");
 
         Time::Init();
 
@@ -147,7 +147,7 @@ namespace Zero
 
             Renderer::Get().SubmitFrame(frame);
             frameIndex++;
-            ENGINE_PROFILE_FRAME();
+            ZERO_PROFILE_FRAME();
         }
     }
 
@@ -157,7 +157,7 @@ namespace Zero
         dispatcher.Dispatch<WindowCloseEvent>(BIND_EVENT_FN(Application::OnWindowClose));
         dispatcher.Dispatch<RenderSurfaceResize>(BIND_EVENT_FN(Application::OnRenderSurfaceResize));
 
-        ENGINE_CORE_ASSERT(m_LayerStack, "LayerStack is null!");
+        ZERO_CORE_ASSERT(m_LayerStack, "LayerStack is null!");
 
         for (auto it = m_LayerStack->rbegin(); it != m_LayerStack->rend(); ++it)
         {

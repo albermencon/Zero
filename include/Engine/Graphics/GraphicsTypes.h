@@ -5,7 +5,7 @@
 namespace Zero
 {
     // Primitive Topology
-    enum class ENGINE_API PrimitiveTopology : uint8_t
+    enum class ZERO_API PrimitiveTopology : uint8_t
     {
         PointList,
         LineList,
@@ -16,7 +16,7 @@ namespace Zero
     };
 
     // Pixel / Texture Formats
-    enum class ENGINE_API PixelFormat : uint8_t
+    enum class ZERO_API PixelFormat : uint8_t
     {
         Undefined,
 
@@ -67,7 +67,7 @@ namespace Zero
     };
 
     // Sample Count (MSAA)
-    enum class ENGINE_API SampleCount : uint8_t
+    enum class ZERO_API SampleCount : uint8_t
     {
         Count1 = 1,
         Count2 = 2,
@@ -77,7 +77,7 @@ namespace Zero
     };
 
     // Vertex Attribute Formats
-    enum class ENGINE_API VertexFormat : uint8_t
+    enum class ZERO_API VertexFormat : uint8_t
     {
         // Floats
         Float1,
@@ -111,21 +111,21 @@ namespace Zero
         Int4,
     };
 
-    enum class ENGINE_API VertexInputRate : uint8_t
+    enum class ZERO_API VertexInputRate : uint8_t
     {
         PerVertex,
         PerInstance,
     };
 
     // Rasterizer State Enums
-    enum class ENGINE_API FillMode : uint8_t
+    enum class ZERO_API FillMode : uint8_t
     {
         Solid,
         Wireframe,
         Point,
     };
 
-    enum class ENGINE_API CullMode : uint8_t
+    enum class ZERO_API CullMode : uint8_t
     {
         None,
         Front,
@@ -133,14 +133,14 @@ namespace Zero
         FrontAndBack,   // Vulkan only - useful for depth-pass geometry
     };
 
-    enum class ENGINE_API FrontFace : uint8_t
+    enum class ZERO_API FrontFace : uint8_t
     {
         CounterClockwise,
         Clockwise,
     };
 
     // Depth / Stencil State Enums
-    enum class ENGINE_API CompareOp : uint8_t
+    enum class ZERO_API CompareOp : uint8_t
     {
         Never,
         Less,
@@ -152,7 +152,7 @@ namespace Zero
         Always,
     };
 
-    enum class ENGINE_API StencilOp : uint8_t
+    enum class ZERO_API StencilOp : uint8_t
     {
         Keep,
         Zero,
@@ -165,7 +165,7 @@ namespace Zero
     };
 
     // Blend State Enums
-    enum class ENGINE_API BlendFactor : uint8_t
+    enum class ZERO_API BlendFactor : uint8_t
     {
         Zero,
         One,
@@ -186,7 +186,7 @@ namespace Zero
         OneMinusSrc1Alpha,
     };
 
-    enum class ENGINE_API BlendOp : uint8_t
+    enum class ZERO_API BlendOp : uint8_t
     {
         Add,
         Subtract,
@@ -195,7 +195,7 @@ namespace Zero
         Max,
     };
 
-    enum class ENGINE_API LogicOp : uint8_t
+    enum class ZERO_API LogicOp : uint8_t
     {
         Clear,
         Set,
@@ -216,7 +216,7 @@ namespace Zero
     };
 
     // Bitmask
-    enum class ENGINE_API ColorWriteMask : uint8_t
+    enum class ZERO_API ColorWriteMask : uint8_t
     {
         None = 0,
         R = 1 << 0,

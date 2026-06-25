@@ -45,7 +45,7 @@ namespace Zero
     // Forward declare platform-specific window implementation
     class WindowImpl;
 
-    class ENGINE_API Window
+    class ZERO_API Window
     {
     public:
         using EventCallbackFn = std::function<void(Event&)>;

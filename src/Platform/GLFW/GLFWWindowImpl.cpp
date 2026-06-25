@@ -43,7 +43,7 @@ namespace Zero
             int success = glfwInit();
             if (success == GLFW_FALSE)
             {
-                ENGINE_CORE_CRITICAL("Could not initialize GLFW!");
+                ZERO_CORE_CRITICAL("Could not initialize GLFW!");
                 return;
             }
             s_GLFWInitialized = true;
@@ -84,7 +84,7 @@ namespace Zero
             // DirectX12 is only available on Windows. GLFW windows should be created with NO_API.
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 #if !defined(PLATFORM_WINDOWS)
-            ENGINE_CORE_WARN("DirectX12 backend selected but current platform is not Windows. Window created with NO_API anyway.");
+            ZERO_CORE_WARN("DirectX12 backend selected but current platform is not Windows. Window created with NO_API anyway.");
 #endif
             break;
         }
@@ -94,7 +94,7 @@ namespace Zero
             // Metal targets macOS / iOS. GLFW should be created with NO_API for Metal rendering.
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 #if !defined(PLATFORM_MACOS)
-            ENGINE_CORE_WARN("Metal backend selected but current platform is not macOS. Window created with NO_API anyway.");
+            ZERO_CORE_WARN("Metal backend selected but current platform is not macOS. Window created with NO_API anyway.");
 #endif
             break;
         }
@@ -103,7 +103,7 @@ namespace Zero
         {
             // Safe fallback: no client API. Log the occurrence.
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-            ENGINE_CORE_WARN("Unknown BackendType: defaulting to NO_API window hints.");
+            ZERO_CORE_WARN("Unknown BackendType: defaulting to NO_API window hints.");
             break;
         }
         }
@@ -121,7 +121,7 @@ namespace Zero
 
         if (!m_Window)
         {
-            ENGINE_CORE_CRITICAL("Failed to create GLFW window!");
+            ZERO_CORE_CRITICAL("Failed to create GLFW window!");
             return;
         }
 

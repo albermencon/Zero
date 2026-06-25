@@ -8,12 +8,12 @@ namespace Zero
 {
     namespace Input
     {
-        ENGINE_API bool IsKeyPressed(KeyCode key);
-        ENGINE_API bool IsMouseButtonPressed(MouseButton button);
-        ENGINE_API bool IsKeyJustPressed(KeyCode key);
-        ENGINE_API bool IsKeyJustReleased(KeyCode key);
-        ENGINE_API bool IsMouseButtonJustPressed(MouseButton button);
-        ENGINE_API bool IsMouseButtonJustReleased(MouseButton button);
-        ENGINE_API std::pair<float, float> GetMousePosition();
+        ZERO_API bool IsKeyPressed(KeyCode key);
+        ZERO_API bool IsMouseButtonPressed(MouseButton button);
+        ZERO_API bool IsKeyJustPressed(KeyCode key);
+        ZERO_API bool IsKeyJustReleased(KeyCode key);
+        ZERO_API bool IsMouseButtonJustPressed(MouseButton button);
+        ZERO_API bool IsMouseButtonJustReleased(MouseButton button);
+        ZERO_API std::pair<float, float> GetMousePosition();
     }
 }

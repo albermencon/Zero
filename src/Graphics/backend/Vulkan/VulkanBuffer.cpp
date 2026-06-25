@@ -27,7 +27,7 @@ namespace Zero
     {
         if (!IsMappable())
         {
-            ENGINE_CORE_WARN("Attempting to map unmappable buffer");
+            ZERO_CORE_WARN("Attempting to map unmappable buffer");
             return nullptr;
         }
 
@@ -35,7 +35,7 @@ namespace Zero
         VkResult result = vmaMapMemory(m_allocator->GetAllocator(), m_allocation, &mappedData);
         if (result != VK_SUCCESS)
         {
-            ENGINE_CORE_ERROR("Failed to map Vulkan buffer memory");
+            ZERO_CORE_ERROR("Failed to map Vulkan buffer memory");
             return nullptr;
         }
 

@@ -4,7 +4,7 @@
 
 namespace Zero
 {
-    class ENGINE_API EventDispatcher
+    class ZERO_API EventDispatcher
     {
     public:
         EventDispatcher(Event &event);

@@ -33,7 +33,7 @@ namespace Zero
     //     Pipelines are expensive. CreatePipeline is fire-and-forget;
     //     the RenderThread compiles the PSO asynchronously.
     //     IsReady() on the handle reflects compilation status.
-    class ENGINE_API RenderInterface
+    class ZERO_API RenderInterface
     {
     public:
         static RenderInterface& Get();

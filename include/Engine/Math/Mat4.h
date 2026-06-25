@@ -3,7 +3,7 @@
 
 namespace Zero
 {
-	struct ENGINE_API alignas(16) Mat4
+	struct ZERO_API alignas(16) Mat4
 	{
 		float m[16];
 

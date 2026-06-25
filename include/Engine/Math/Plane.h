@@ -4,7 +4,7 @@
 
 namespace Zero
 {
-    struct ENGINE_API Plane
+    struct ZERO_API Plane
     {
         Vec3 normal;
         float distance;

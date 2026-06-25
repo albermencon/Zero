@@ -7,7 +7,7 @@
 
 namespace Zero
 {
-    class ENGINE_API ConfigSystem
+    class ZERO_API ConfigSystem
     {
     public:
         static ConfigSystem& Get();

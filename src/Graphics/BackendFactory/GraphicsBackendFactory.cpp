@@ -72,7 +72,7 @@ namespace Zero
 #error Unsupported platform
 #endif
 
-        ENGINE_CORE_ERROR("Invalid backend type.");
+        ZERO_CORE_ERROR("Invalid backend type.");
         return nullptr;
     }
 }

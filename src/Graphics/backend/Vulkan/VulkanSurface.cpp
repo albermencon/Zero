@@ -25,7 +25,7 @@ namespace Zero
         GLFWwindow* window = static_cast<GLFWwindow*>(m_window.GetNativeWindow());
         if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0)
         {
-            ENGINE_CORE_ERROR("failed to create window surface!");
+            ZERO_CORE_ERROR("failed to create window surface!");
             throw std::runtime_error("failed to create window surface!");
         }
 

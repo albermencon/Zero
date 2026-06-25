@@ -6,7 +6,7 @@
 
 namespace Zero
 {
-    struct ENGINE_API Job
+    struct ZERO_API Job
     {
         using JobFn = void(*)(void*);
 

@@ -54,7 +54,7 @@ namespace Zero
 
             if (!found)
             {
-                ENGINE_CORE_ERROR("Required extension not supported: {}", requiredExtension);
+                ZERO_CORE_ERROR("Required extension not supported: {}", requiredExtension);
                 throw std::runtime_error(
                     std::string("Required extension not supported: ") + requiredExtension);
             }
@@ -80,7 +80,7 @@ namespace Zero
 
             if (!found)
             {
-                ENGINE_CORE_ERROR("Validation layer not supported");
+                ZERO_CORE_ERROR("Validation layer not supported");
                 throw std::runtime_error("Validation layer not supported");
             }
         }
@@ -88,7 +88,7 @@ namespace Zero
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
 
-        ENGINE_CORE_TRACE("Enabled VK_LAYER_KHRONOS_validation");
+        ZERO_CORE_TRACE("Enabled VK_LAYER_KHRONOS_validation");
 #endif
 
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());

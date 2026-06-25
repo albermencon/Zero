@@ -62,7 +62,7 @@ namespace Zero
      * The `ToString` method can be overridden to provide a string representation
      * of the event for debugging or logging purposes.
      */
-    class ENGINE_API Event
+    class ZERO_API Event
     {
     public:
         virtual ~Event() = default;

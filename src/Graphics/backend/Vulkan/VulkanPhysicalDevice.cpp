@@ -18,8 +18,8 @@ namespace Zero
         std::vector<vk::raii::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
         if (devices.empty())
         {
-            ENGINE_CORE_ERROR("failed to find GPUs with Vulkan support");
-            ENGINE_CORE_ERROR("failed to find GPUs with Vulkan support");
+            ZERO_CORE_ERROR("failed to find GPUs with Vulkan support");
+            ZERO_CORE_ERROR("failed to find GPUs with Vulkan support");
         }
 
         // Use an ordered map to automatically sort candidates by increasing score
@@ -55,7 +55,7 @@ namespace Zero
             m_physicalDevice = candidates.rbegin()->second;
         }
         else {
-            ENGINE_CORE_ERROR("failed to find a suitable GPU");
+            ZERO_CORE_ERROR("failed to find a suitable GPU");
             throw std::runtime_error("failed to find a suitable GPU!");
         }
 
@@ -88,16 +88,16 @@ namespace Zero
         uint32_t apiVersion = props.apiVersion;
         uint32_t driverVersion = props.driverVersion;
         const char* deviceName = props.deviceName;
-        ENGINE_CORE_INFO("GPU Name: {}", deviceName);
-        ENGINE_CORE_INFO("Vulkan API Version: {}.{}.{}",
+        ZERO_CORE_INFO("GPU Name: {}", deviceName);
+        ZERO_CORE_INFO("Vulkan API Version: {}.{}.{}",
             VK_VERSION_MAJOR(apiVersion),
             VK_VERSION_MINOR(apiVersion),
             VK_VERSION_PATCH(apiVersion));
-        ENGINE_CORE_INFO("Driver Version: {}.{}.{}",
+        ZERO_CORE_INFO("Driver Version: {}.{}.{}",
             VK_VERSION_MAJOR(driverVersion),
             VK_VERSION_MINOR(driverVersion),
             VK_VERSION_PATCH(driverVersion));
-        ENGINE_CORE_INFO("VRAM: {:.0f} GB", vramGB);
-        ENGINE_CORE_INFO("Vendor: {0}", vendorName);
+        ZERO_CORE_INFO("VRAM: {:.0f} GB", vramGB);
+        ZERO_CORE_INFO("Vendor: {0}", vendorName);
 	}
 }

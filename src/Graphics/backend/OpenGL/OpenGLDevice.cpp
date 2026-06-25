@@ -40,7 +40,7 @@ namespace Zero
         int status = gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
         if (!status)
         {
-            ENGINE_CORE_CRITICAL("Failed to initialize Glad!");
+            ZERO_CORE_CRITICAL("Failed to initialize Glad!");
             return;
         }
 

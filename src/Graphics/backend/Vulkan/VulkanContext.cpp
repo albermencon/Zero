@@ -35,7 +35,7 @@ namespace Zero
         , m_syncobjects(&m_device, &m_swapchain)
         , m_Window(window)
     {
-        ENGINE_CORE_INFO("Initializing Vulkan Device...");
+        ZERO_CORE_INFO("Initializing Vulkan Device...");
         init();
     }
 
@@ -87,9 +87,9 @@ namespace Zero
             &poolSize
         };
 
-        ENGINE_CORE_INFO("Memory allocator succesfully initialized");
+        ZERO_CORE_INFO("Memory allocator succesfully initialized");
 
-        ENGINE_CORE_INFO("Vulkan Device initialized successfully.");
+        ZERO_CORE_INFO("Vulkan Device initialized successfully.");
     }
 
     void VulkanDevice::SwapBuffers()
@@ -118,7 +118,7 @@ namespace Zero
         // Wait for the previus frame to complete
         auto fenceResult = m_device.Get().waitForFences(*m_syncobjects.GetInFlightFences()[currentFrame], vk::True, UINT64_MAX);
 
-        ENGINE_CORE_ASSERT(fenceResult == vk::Result::eSuccess, "failed to wait for fence");
+        ZERO_CORE_ASSERT(fenceResult == vk::Result::eSuccess, "failed to wait for fence");
 
         // Grab an image from the framebuffer
         // First parameter indices the timeout in nanoseconds, beign the max unsigned 64 bit integer effictivily disable the timeout
@@ -137,7 +137,7 @@ namespace Zero
 
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
         {
-            ENGINE_CORE_WARN("Failed to acquire swap chain image");
+            ZERO_CORE_WARN("Failed to acquire swap chain image");
             currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT; // avanza
             m_frameAborted = true;
             return;
@@ -310,7 +310,7 @@ namespace Zero
 
         if (result != VK_SUCCESS)
         {
-            ENGINE_CORE_ERROR("Failed to create Vulkan Buffer");
+            ZERO_CORE_ERROR("Failed to create Vulkan Buffer");
             return nullptr;
         }
 
@@ -329,7 +329,7 @@ namespace Zero
             }
             else
             {
-                ENGINE_CORE_WARN("initialData provided for GPU-only buffer without Staging Buffer support yet.");
+                ZERO_CORE_WARN("initialData provided for GPU-only buffer without Staging Buffer support yet.");
             }
         }
 
@@ -359,7 +359,7 @@ namespace Zero
         }
         else
         {
-            ENGINE_CORE_WARN("UpdateBufferData on GPU-only buffer not supported yet without Staging.");
+            ZERO_CORE_WARN("UpdateBufferData on GPU-only buffer not supported yet without Staging.");
         }
     }
 

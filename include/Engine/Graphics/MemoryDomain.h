@@ -4,7 +4,7 @@
 
 namespace Zero 
 {
-    enum class ENGINE_API MemoryDomain : uint8_t
+    enum class ZERO_API MemoryDomain : uint8_t
     {
         GPU,                // device-local, no CPU access —- fastest for GPU reads
         CPUtoGPU,           // upload heap, persistently mappable (UBOs, streaming)

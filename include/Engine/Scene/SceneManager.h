@@ -20,7 +20,7 @@ namespace Zero
     //   Additional scenes can be created, activated, and destroyed at will.
     //
     //   All scene mutation calls (via Scene API) are thread-safe.
-    class ENGINE_API SceneManager
+    class ZERO_API SceneManager
     {
     public:
         static SceneManager& Get();

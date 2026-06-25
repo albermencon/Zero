@@ -6,7 +6,7 @@
 
 namespace Zero
 {
-    struct ENGINE_API JobCounter
+    struct ZERO_API JobCounter
     {
         std::atomic<uint32_t> pending{0};
         std::binary_semaphore semaphore{ 0 };

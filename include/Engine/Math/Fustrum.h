@@ -5,7 +5,7 @@
 
 namespace Zero
 {
-	struct ENGINE_API Fustrum
+	struct ZERO_API Fustrum
 	{
 		Plane planes[6];
 

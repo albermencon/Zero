@@ -6,7 +6,7 @@
 namespace Zero
 {
 
-    class ENGINE_API KeyEvent : public Event
+    class ZERO_API KeyEvent : public Event
     {
     public:
         inline int GetKeyCode() const { return m_KeyCode; }
@@ -18,7 +18,7 @@ namespace Zero
         int m_KeyCode;
     };
 
-    class ENGINE_API KeyPressedEvent : public KeyEvent
+    class ZERO_API KeyPressedEvent : public KeyEvent
     {
     public:
         KeyPressedEvent(int keycode, int repeatCount)
@@ -38,7 +38,7 @@ namespace Zero
         int m_RepeatCount;
     };
 
-    class ENGINE_API KeyReleasedEvent : public KeyEvent
+    class ZERO_API KeyReleasedEvent : public KeyEvent
     {
     public:
         KeyReleasedEvent(int keycode)
@@ -54,7 +54,7 @@ namespace Zero
         EVENT_CLASS_TYPE(KeyReleased)
     };
 
-    class ENGINE_API KeyTypedEvent : public KeyEvent
+    class ZERO_API KeyTypedEvent : public KeyEvent
     {
     public:
         KeyTypedEvent(int keycode)

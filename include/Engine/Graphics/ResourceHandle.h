@@ -6,7 +6,7 @@
 namespace Zero
 {
     // Lifecycle of a GPU resource as seen by client code.
-    enum class ENGINE_API ResourceState : uint8_t
+    enum class ZERO_API ResourceState : uint8_t
     {
         Invalid = 0,    // not created, or destroyed
         Pending,        // command enqueued, RenderThread hasn't processed it yet
@@ -22,7 +22,7 @@ namespace Zero
     //   - State queries (IsReady) must be done through RenderInterface.
     //   - Never exposes internal RHI indices.
     template<typename Tag>
-    struct ENGINE_API ResourceHandle
+    struct ZERO_API ResourceHandle
     {
         uint32_t value = 0; // 16-bit generation | 16-bit index
 
@@ -39,13 +39,16 @@ namespace Zero
     struct BufferTag {};
     struct TextureTag {};
     struct PipelineTag {};
+    struct AssetTag {};
 
     using BufferHandle = ResourceHandle<BufferTag>;
     using TextureHandle = ResourceHandle<TextureTag>;
     using PipelineHandle = ResourceHandle<PipelineTag>;
+    using AssetHandle = ResourceHandle<AssetTag>;
 
     static_assert(std::is_trivially_copyable_v<BufferHandle>, "Handles must be trivially copyable.");
     static_assert(sizeof(BufferHandle) == 4, "Handles must be exactly 4 bytes.");
     static_assert(sizeof(TextureHandle) == 4, "Handles must be exactly 4 bytes.");
     static_assert(sizeof(PipelineHandle) == 4, "Handles must be exactly 4 bytes.");
+    static_assert(sizeof(AssetHandle) == 4, "Handles must be exactly 4 bytes.");
 }

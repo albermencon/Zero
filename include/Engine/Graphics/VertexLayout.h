@@ -16,7 +16,7 @@ namespace Zero
     //   - binding  : which vertex buffer stream this attribute belongs to
     //   - format   : data type and component count
     //   - offset   : byte offset within the binding's stride block
-    struct ENGINE_API VertexAttribute
+    struct ZERO_API VertexAttribute
     {
         uint32_t     location = 0;
         uint32_t     binding = 0;
@@ -38,7 +38,7 @@ namespace Zero
     //   - binding   : index matching VertexAttribute::binding
     //   - stride    : byte distance between consecutive vertex elements
     //   - inputRate : PerVertex for geometry, PerInstance for instancing
-    struct ENGINE_API VertexBinding
+    struct ZERO_API VertexBinding
     {
         uint32_t        binding = 0;
         uint32_t        stride = 0;
@@ -53,7 +53,7 @@ namespace Zero
         }
     };
 
-    struct ENGINE_API VertexLayout
+    struct ZERO_API VertexLayout
     {
         std::array<VertexAttribute, MaxVertexAttributes> attributes{};
         std::array<VertexBinding, MaxVertexBindings>   bindings{};
@@ -66,7 +66,7 @@ namespace Zero
             uint32_t stride,
             VertexInputRate rate = VertexInputRate::PerVertex)
         {
-            ENGINE_CORE_ASSERT(bindingCount < MaxVertexBindings, "Too many vertex bindings")
+            ZERO_CORE_ASSERT(bindingCount < MaxVertexBindings, "Too many vertex bindings")
             bindings[bindingCount++] = VertexBinding{ bindingIndex, stride, rate };
             return *this;
         }
@@ -76,7 +76,7 @@ namespace Zero
             VertexFormat format,
             uint32_t offset)
         {
-            ENGINE_CORE_ASSERT(attributeCount < MaxVertexAttributes,"Too many vertex attributes");
+            ZERO_CORE_ASSERT(attributeCount < MaxVertexAttributes,"Too many vertex attributes");
             attributes[attributeCount++] = VertexAttribute{ location, bindingIndex, format, offset };
             return *this;
         }

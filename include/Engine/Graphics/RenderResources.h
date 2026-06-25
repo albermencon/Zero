@@ -14,7 +14,7 @@ namespace Zero
     //   initialData / initialDataSize: optional immediate upload on creation.
     //   The data pointer must remain valid until the MainThread drains the
     //   pending upload queue (i.e. within the same frame the call is made).
-    struct ENGINE_API BufferDesc
+    struct ZERO_API BufferDesc
     {
         const char* debugName = nullptr;
         uint64_t     size = 0;
@@ -55,7 +55,7 @@ namespace Zero
     //   Convenience: upload vertex + index data in a single call.
     //   RenderInterface::CreateMesh() allocates both buffers and enqueues
     //   their UploadRequests. Returns a MeshHandle (pair of BufferHandles).
-    struct ENGINE_API MeshDesc
+    struct ZERO_API MeshDesc
     {
         const char* debugName = nullptr;
 
@@ -74,7 +74,7 @@ namespace Zero
     // TextureDesc  (alias — ImageDesc is already the full public descriptor)
     //   Defined in include/Engine/Graphics/ImageDesc.h.
     //   TextureUpdate describes a CPU→GPU upload for one mip/layer slice.
-    struct ENGINE_API TextureUpdate
+    struct ZERO_API TextureUpdate
     {
         const void* data = nullptr;
         uint64_t    dataSize = 0;     // bytes
@@ -88,7 +88,7 @@ namespace Zero
     //   Partial or full CPU→GPU buffer write from any thread.
     //   data pointer must remain valid until MainThread drains pending uploads
     //   (same frame). For cross-frame async updates, use a staging buffer.
-    struct ENGINE_API BufferUpdate
+    struct ZERO_API BufferUpdate
     {
         const void* data = nullptr;
         uint64_t    size = 0;
@@ -98,7 +98,7 @@ namespace Zero
     // MeshHandle
     //   Lightweight pair returned by RenderInterface::CreateMesh().
     //   Both handles become Ready together (same frame).
-    struct ENGINE_API MeshHandle
+    struct ZERO_API MeshHandle
     {
         BufferHandle vertexBuffer;
         BufferHandle indexBuffer;

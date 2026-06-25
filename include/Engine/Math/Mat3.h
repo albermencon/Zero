@@ -3,7 +3,7 @@
 
 namespace Zero
 {
-	struct ENGINE_API Mat3
+	struct ZERO_API Mat3
 	{
 		float m[9];
 

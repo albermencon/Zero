@@ -17,7 +17,7 @@ namespace Zero
 		//m_queue.wait_enqueue(std::move(frame));
 
 		bool ok = m_queue.try_enqueue(std::move(frame));
-		ENGINE_CORE_ASSERT(ok, "Invariant broken: queue must have space after acquire");
+		ZERO_CORE_ASSERT(ok, "Invariant broken: queue must have space after acquire");
 	}
 
 	bool FrameQueue::TryPush(FrameData* frame)

@@ -7,7 +7,7 @@ namespace Zero
 {
     class FrameData;
 
-    class ENGINE_API Layer
+    class ZERO_API Layer
     {
     public:
         explicit Layer(std::string name = "Layer")

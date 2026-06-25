@@ -31,7 +31,7 @@ namespace Zero
         m_impl = new Impl();
         m_impl->scenes.emplace_back(new Scene(MainSceneId, "Main", RenderPath::CPUDriven));
         m_impl->activeIds.push_back(MainSceneId);
-        ENGINE_CORE_INFO("SceneManager initialized.");
+        ZERO_CORE_INFO("SceneManager initialized.");
     }
 
     void SceneManager::Shutdown()
@@ -70,7 +70,7 @@ namespace Zero
             if (ids.size() < MaxActiveScenes)
                 ids.push_back(id);
             else
-                ENGINE_CORE_WARN("MaxActiveScenes reached, cannot activate scene {0}", id);
+                ZERO_CORE_WARN("MaxActiveScenes reached, cannot activate scene {0}", id);
         }
         else
         {

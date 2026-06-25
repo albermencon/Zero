@@ -25,12 +25,12 @@ namespace Zero
 
 	void Renderer::Init(RHI::API api, Window* window)
 	{
-		ENGINE_CORE_ASSERT(!m_initialized.load(), "Renderer already initialized");
+		ZERO_CORE_ASSERT(!m_initialized.load(), "Renderer already initialized");
 		m_API = api;
 		m_window = window;
 
 		m_backend = GraphicsBackend::Create(api, *window);
-		ENGINE_CORE_ASSERT(m_backend, "Failed to create RenderBackend");
+		ZERO_CORE_ASSERT(m_backend, "Failed to create RenderBackend");
 
 		// 
 		m_running.store(true, std::memory_order_release);
@@ -38,7 +38,7 @@ namespace Zero
 		// Backend must exist before the thread starts
 		m_renderThread = Thread(&Renderer::RenderLoop, this);
 		m_initialized.store(true);
-		ENGINE_CORE_INFO("Renderer initialized");
+		ZERO_CORE_INFO("Renderer initialized");
 	}
 
 	void Renderer::Shutdown()
@@ -72,7 +72,7 @@ namespace Zero
 
 		m_backend.reset();
 		m_initialized.store(false, std::memory_order_release);
-		ENGINE_CORE_WARN("Renderer shut down");
+		ZERO_CORE_WARN("Renderer shut down");
 	}
 
 	void Renderer::OnRenderSurfaceResize()
@@ -95,7 +95,7 @@ namespace Zero
 		m_renderThread.SetName("RendererThread");
 		m_renderThread.SetPriority(ThreadPriority::High);
 		m_renderThread.SetAffinity(1ull << 1); // temp pinned to core 1
-		ENGINE_CORE_INFO("Initialized render thread");
+		ZERO_CORE_INFO("Initialized render thread");
 
 		size_t idleCount = 0;
 		while (m_running.load())
@@ -161,7 +161,7 @@ namespace Zero
 			}
 			else
 			{
-				ENGINE_CORE_ERROR("Failed to create buffer for handle {0}", req.handle.GetId());
+				ZERO_CORE_ERROR("Failed to create buffer for handle {0}", req.handle.GetId());
 				impl.bufferRegistry.MarkFailed(req.handle);
 			}
 		}

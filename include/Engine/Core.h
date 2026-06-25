@@ -4,17 +4,17 @@
 #include "Export.h"
 
 #ifdef ZERO_DEBUG
-    #define ENGINE_ENABLE_ASSERTS
+    #define ZERO_ENABLE_ASSERTS
 #endif
 
-#define ENGINE_ENABLE_ASSERTS
+#define ZERO_ENABLE_ASSERTS
 #define ZERO_DEBUG
 
-#ifdef ENGINE_ENABLE_ASSERTS
+#ifdef ZERO_ENABLE_ASSERTS
     #define CLIENT_ASSERT(x, ...) { if(!(x)) { CLIENT_ERROR("Assertion Failed: {0}", __VA_ARGS__); DEBUGBREAK(); } }
-    #define ENGINE_CORE_ASSERT(x, ...) { if(!(x)) { ENGINE_CORE_ERROR("Assertion Failed: {0}", __VA_ARGS__); DEBUGBREAK(); } }
+    #define ZERO_CORE_ASSERT(x, ...) { if(!(x)) { ZERO_CORE_ERROR("Assertion Failed: {0}", __VA_ARGS__); DEBUGBREAK(); } }
 #else
     #define CLIENT_ASSERT(x, ...)
-    #define ENGINE_CORE_ASSERT(x, ...)
+    #define ZERO_CORE_ASSERT(x, ...)
 #endif
 

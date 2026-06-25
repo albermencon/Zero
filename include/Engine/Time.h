@@ -3,7 +3,7 @@
 
 namespace Zero
 {
-    class ENGINE_API Time
+    class ZERO_API Time
     {
     public:
         static void Init();

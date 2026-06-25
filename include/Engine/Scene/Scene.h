@@ -21,7 +21,7 @@ namespace Zero
     //   All mutating calls are thread-safe — internally enqueued into a
     //   lock-free MPSC queue, drained by the engine each frame.
     //   Changes are visible the following frame.
-    class ENGINE_API Scene
+    class ZERO_API Scene
     {
     public:
         ~Scene();  // public — unique_ptr needs access    

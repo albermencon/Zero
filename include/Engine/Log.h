@@ -16,7 +16,7 @@ namespace Zero
         Critical
     };
 
-    class ENGINE_API Log
+    class ZERO_API Log
     {
     public:
         static void Init();
@@ -39,11 +39,11 @@ namespace Zero
     ::Zero::Log::LogMessage(isCore, level, std::format(__VA_ARGS__))
 
 // Core Logging
-#define ENGINE_CORE_TRACE(...) LOG_CALL(true, ::Zero::LogLevel::Trace, __VA_ARGS__)
-#define ENGINE_CORE_INFO(...) LOG_CALL(true, ::Zero::LogLevel::Info, __VA_ARGS__)
-#define ENGINE_CORE_WARN(...) LOG_CALL(true, ::Zero::LogLevel::Warn, __VA_ARGS__)
-#define ENGINE_CORE_ERROR(...) LOG_CALL(true, ::Zero::LogLevel::Error, __VA_ARGS__)
-#define ENGINE_CORE_CRITICAL(...) LOG_CALL(true, ::Zero::LogLevel::Critical, __VA_ARGS__)
+#define ZERO_CORE_TRACE(...) LOG_CALL(true, ::Zero::LogLevel::Trace, __VA_ARGS__)
+#define ZERO_CORE_INFO(...) LOG_CALL(true, ::Zero::LogLevel::Info, __VA_ARGS__)
+#define ZERO_CORE_WARN(...) LOG_CALL(true, ::Zero::LogLevel::Warn, __VA_ARGS__)
+#define ZERO_CORE_ERROR(...) LOG_CALL(true, ::Zero::LogLevel::Error, __VA_ARGS__)
+#define ZERO_CORE_CRITICAL(...) LOG_CALL(true, ::Zero::LogLevel::Critical, __VA_ARGS__)
 
 // Client Logging
 #define CLIENT_TRACE(...) LOG_CALL(false, ::Zero::LogLevel::Trace, __VA_ARGS__)

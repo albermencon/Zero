@@ -36,7 +36,7 @@ namespace Zero
 			threadCount = (hc > 1) ? (hc - 1) : 1;
 		}
 
-		ENGINE_CORE_TRACE("Initializing thread pool with {} threads", threadCount);
+		ZERO_CORE_TRACE("Initializing thread pool with {} threads", threadCount);
 
 		m_threads = new Thread[threadCount];
 		m_count = threadCount;
@@ -48,7 +48,7 @@ namespace Zero
 			{
 				char name[32];
 				snprintf(name, sizeof(name), "Worker {%u}", desc->id);
-				ENGINE_PROFILE_THREAD(name);
+				ZERO_PROFILE_THREAD(name);
 				desc->thread->SetName(name);
 
 				desc->pool->worker_loop(desc->id);
@@ -129,7 +129,7 @@ namespace Zero
 			
 			for (size_t i = 0; i < count; ++i)
 			{
-				ENGINE_PROFILE_SCOPE("Job");
+				ZERO_PROFILE_SCOPE("Job");
 				Job& job = buffer[i];
 
 				if (job.mode == Job::Mode::Inline)

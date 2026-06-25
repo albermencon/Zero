@@ -6,7 +6,7 @@
 namespace Zero
 {
 
-    class ENGINE_API WindowResizeEvent : public Event
+    class ZERO_API WindowResizeEvent : public Event
     {
     public:
         WindowResizeEvent(unsigned int width, unsigned int height)
@@ -28,7 +28,7 @@ namespace Zero
         unsigned int m_Width, m_Height;
     };
 
-    class ENGINE_API WindowCloseEvent : public Event
+    class ZERO_API WindowCloseEvent : public Event
     {
     public:
         WindowCloseEvent() = default;
@@ -37,7 +37,7 @@ namespace Zero
             EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
-    class ENGINE_API RenderSurfaceResize : public Event
+    class ZERO_API RenderSurfaceResize : public Event
     {
     public:
         RenderSurfaceResize(unsigned int width, unsigned int height)

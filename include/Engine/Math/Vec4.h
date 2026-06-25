@@ -3,7 +3,7 @@
 
 namespace Zero
 {
-	struct ENGINE_API Vec4
+	struct ZERO_API Vec4
 	{
 		float x, y, z, w;
 

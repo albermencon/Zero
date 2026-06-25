@@ -11,7 +11,7 @@ namespace Zero
     class WindowCloseEvent;
     class RenderSurfaceResize;
 
-    class ENGINE_API Application
+    class ZERO_API Application
     {
     public:
         Application();

@@ -8,7 +8,7 @@
 namespace Zero
 {
     template<typename TData>
-    [[nodiscard]] ENGINE_API Job make_job(void(*fn)(void*), const TData& data)
+    [[nodiscard]] ZERO_API Job make_job(void(*fn)(void*), const TData& data)
     {
         static_assert(sizeof(TData) <= sizeof(Job::payload),
             "Data too large for inline payload — use make_job_external().");
@@ -23,7 +23,7 @@ namespace Zero
     }
 
     // External pointer — caller owns and guarantees lifetime
-    [[nodiscard]] ENGINE_API inline Job make_job_external(void(*fn)(void*), void* ptr)
+    [[nodiscard]] ZERO_API inline Job make_job_external(void(*fn)(void*), void* ptr)
     {
         Job job;
         job.fn   = fn;
@@ -33,22 +33,22 @@ namespace Zero
     }
 
     // Fire-and-forget
-    ENGINE_API void Enqueue(Job job);
+    ZERO_API void Enqueue(Job job);
 
     // Tracked — counter.pending is pre-incremented before the job hits the queue
-    ENGINE_API void Enqueue(Job job, JobCounter& counter);
+    ZERO_API void Enqueue(Job job, JobCounter& counter);
 
     //  Bulk enqueue
 
-    ENGINE_API void EnqueueBulk(std::span<const Job> jobs);
-    ENGINE_API void EnqueueBulk(std::span<const Job> jobs, JobCounter& counter);
+    ZERO_API void EnqueueBulk(std::span<const Job> jobs);
+    ZERO_API void EnqueueBulk(std::span<const Job> jobs, JobCounter& counter);
 
     // Sync + Counter
 
     // Allocate from pool — always pair with counter.Release() after Wait()
-    [[nodiscard]] ENGINE_API JobCounter& MakeCounter();
+    [[nodiscard]] ZERO_API JobCounter& MakeCounter();
 
-    void ENGINE_API WaitIdle();
+    void ZERO_API WaitIdle();
 }
 
 // Fire-and-forget

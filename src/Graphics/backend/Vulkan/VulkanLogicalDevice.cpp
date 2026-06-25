@@ -50,7 +50,7 @@ namespace Zero
         }
         if ((graphicsIndex == queueFamilyProperties.size()) || (presentIndex == queueFamilyProperties.size()))
         {
-            ENGINE_CORE_ERROR("Could not find a queue for graphics or present -> terminating");
+            ZERO_CORE_ERROR("Could not find a queue for graphics or present -> terminating");
             throw std::runtime_error("Could not find a queue for graphics or present -> terminating");
         }
 

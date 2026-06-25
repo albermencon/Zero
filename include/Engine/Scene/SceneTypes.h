@@ -14,21 +14,21 @@ namespace Zero
     // Scene object handles — opaque IDs returned by Scene mutation calls.
     // Stable for the lifetime of the object. Use to update or remove.
 
-    struct ENGINE_API RenderableHandle
+    struct ZERO_API RenderableHandle
     {
         uint32_t id = 0;
         [[nodiscard]] bool IsValid() const noexcept { return id != 0; }
         bool operator==(const RenderableHandle&) const = default;
     };
 
-    struct ENGINE_API LightHandle
+    struct ZERO_API LightHandle
     {
         uint32_t id = 0;
         [[nodiscard]] bool IsValid() const noexcept { return id != 0; }
         bool operator==(const LightHandle&) const = default;
     };
 
-    enum class ENGINE_API RenderPath : uint8_t
+    enum class ZERO_API RenderPath : uint8_t
     {
         CPUDriven,  // standard meshes — CPU culls, sorts, generates DrawPackets
         GPUDriven,  // chunks, foliage — compute culls, indirect draw
@@ -36,7 +36,7 @@ namespace Zero
 
     // Descriptors — used to add objects to a Scene.
 
-    struct ENGINE_API RenderableDesc
+    struct ZERO_API RenderableDesc
     {
         Vec3 boundsMin;
         Vec3 boundsMax;
@@ -57,14 +57,14 @@ namespace Zero
         bool isTransparent = false;
     };
 
-    struct ENGINE_API DirectionalLightDesc
+    struct ZERO_API DirectionalLightDesc
     {
         Vec3  direction = { 0.f, -1.f, 0.f };
         Vec3  color = { 1.f,  1.f, 1.f };
         float intensity = 1.f;
     };
 
-    struct ENGINE_API PointLightDesc
+    struct ZERO_API PointLightDesc
     {
         Vec3  position = { 0.f, 0.f, 0.f };
         Vec3  color = { 1.f, 1.f, 1.f };

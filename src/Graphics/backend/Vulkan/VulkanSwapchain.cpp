@@ -52,7 +52,7 @@ namespace Zero
         auto surfaceCapabilities = m_PhysicalDevice->Get().getSurfaceCapabilitiesKHR(*m_Surface->Get());
 
         // temp
-        //ENGINE_CORE_INFO("Surface supportedUsageFlags: {}",
+        //ZERO_CORE_INFO("Surface supportedUsageFlags: {}",
         //    vk::to_string(surfaceCapabilities.supportedUsageFlags));
 
         vk::SurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(m_PhysicalDevice->Get().getSurfaceFormatsKHR(*m_Surface->Get()));
@@ -159,7 +159,7 @@ namespace Zero
             }
         }
 
-        ENGINE_CORE_WARN("Defaulted");
+        ZERO_CORE_WARN("Defaulted");
 
         // Vulkan always gurantees at least one value for swapchain creation
         return avaibleFormats[0];

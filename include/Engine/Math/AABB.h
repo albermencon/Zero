@@ -4,7 +4,7 @@
 
 namespace Zero
 {
-	struct ENGINE_API AABB
+	struct ZERO_API AABB
 	{
 		Vec3 min;
 		Vec3 max;

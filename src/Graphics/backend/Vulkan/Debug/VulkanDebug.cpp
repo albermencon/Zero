@@ -21,25 +21,25 @@ namespace Zero::Debug
         switch (severity)
         {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            ENGINE_CORE_ERROR("[{0} Error] [ {1} ] {2}",
+            ZERO_CORE_ERROR("[{0} Error] [ {1} ] {2}",
                 typeStr, data->pMessageIdName ? data->pMessageIdName : "?", data->pMessage);
             break;
 
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            ENGINE_CORE_WARN("[{0} Warning] [ {1} ] {2}",
+            ZERO_CORE_WARN("[{0} Warning] [ {1} ] {2}",
                 typeStr, data->pMessageIdName ? data->pMessageIdName : "?", data->pMessage);
             break;
 
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            ENGINE_CORE_INFO("[{0}] {1}", typeStr, data->pMessage);
+            ZERO_CORE_INFO("[{0}] {1}", typeStr, data->pMessage);
             break;
 
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-            ENGINE_CORE_TRACE("[{0}] {1}", typeStr, data->pMessage);
+            ZERO_CORE_TRACE("[{0}] {1}", typeStr, data->pMessage);
             break;
 
         default:
-            ENGINE_CORE_WARN("[Vulkan] {0}", data->pMessage);
+            ZERO_CORE_WARN("[Vulkan] {0}", data->pMessage);
             break;
         }
 
@@ -49,7 +49,7 @@ namespace Zero::Debug
             {
                 const auto& obj = data->pObjects[i];
                 if (obj.pObjectName)
-                    ENGINE_CORE_WARN("  Object {0}: [{1}] {2}",
+                    ZERO_CORE_WARN("  Object {0}: [{1}] {2}",
                         i, vk::to_string(static_cast<vk::ObjectType>(obj.objectType)), obj.pObjectName);
             }
         }
