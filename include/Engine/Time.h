@@ -1,5 +1,5 @@
 #pragma once
-#include "Core.h"
+#include <cstdint>
 
 namespace Zero
 {
@@ -11,6 +11,8 @@ namespace Zero
 
         static float GetTime();      // Seconds since engine start
         static float GetDeltaTime(); // Seconds between frames
+        static uint64_t GetTimeMs();    // Miliseconds since engine start
+        static uint64_t GetDeltaTimeMs(); // Miliseconds between frames
 
     private:
         static double s_StartTime;

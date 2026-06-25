@@ -42,4 +42,16 @@ namespace Zero
     {
         return static_cast<float>(s_DeltaTime);
     }
+
+    uint64_t Time::GetTimeMs()
+    {
+        auto now = Clock::now();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(now - s_EngineStart).count();
+    }
+
+    uint64_t Time::GetDeltaTimeMs()
+    {
+        auto now = Clock::now();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(now - s_LastFrame).count();
+    }
 }
