@@ -8,6 +8,7 @@
 #include <Engine/Time.h>
 #include <Engine/Scene/SceneManager.h>
 #include <Engine/ConfigSystem.h>
+#include <Engine/File/FileWatcher.h>
 #include "Layers/LayerStack.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
@@ -87,10 +88,12 @@ namespace Zero
         Renderer::Get().Init(api, m_Window.get());
         SceneManager::Get().Init();
         BlockingThreadPool::Get().Init(NumWorkers);
+        FileWatcher::Get().Init();
     }
 
     Application::~Application()
     {
+        FileWatcher::Get().Shutdown();
         m_LayerStack.reset(); // Destroy layers first to make sure no user code is generating work 
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
@@ -123,6 +126,7 @@ namespace Zero
             Time::Update();
             m_Window->PollEvents(); // Poll OS events
             Input::UpdateInput();
+            FileWatcher::Get().Poll();
 
             if (m_Minimized)
             {

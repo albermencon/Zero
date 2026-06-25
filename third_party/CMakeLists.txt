@@ -57,6 +57,11 @@ add_subdirectory(GLFW)
 add_subdirectory(glad)
 add_subdirectory(highway)
 
+# libuv
+set(LIBUV_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(LIBUV_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(libuv)
+
 #slang
 include(ExternalProject)
 
