@@ -2,6 +2,7 @@
 #include <Engine/Core.h>
 #ifdef PLATFORM_MACOS
 
+#include <Engine/Thread/Thread.h>
 #include "../PlatformThread.h"
 #include <pthread.h>
 #include <mach/mach.h>
@@ -57,6 +58,80 @@ namespace Zero::PlatformThread
     void YieldT()
     {
         sched_yield();
+    }
+}
+
+namespace Zero
+{
+    Thread::~Thread()
+    {
+        Detach();
+    }
+
+    void Thread::Start(size_t stackSize, void*(*threadFunc)(void*), void* param)
+    {
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        if (stackSize > 0)
+        {
+            size_t minStack = 16384;
+#ifdef PTHREAD_STACK_MIN
+            minStack = PTHREAD_STACK_MIN;
+#endif
+            if (stackSize < minStack) stackSize = minStack;
+
+            pthread_attr_setstacksize(&attr, stackSize);
+        }
+
+        pthread_t thread;
+        int result = pthread_create(&thread, &attr, threadFunc, param);
+        pthread_attr_destroy(&attr);
+
+        if (result == 0)
+        {
+            m_handle = reinterpret_cast<void*>(thread);
+            m_id = static_cast<uint64_t>(thread);
+        }
+        else
+        {
+            m_handle = nullptr;
+            m_id = 0;
+        }
+    }
+
+    void Thread::Detach()
+    {
+        if (Joinable())
+        {
+            pthread_detach(reinterpret_cast<pthread_t>(m_handle));
+            m_handle = nullptr;
+            m_id = 0;
+        }
+    }
+
+    void Thread::Join()
+    {
+        if (Joinable())
+        {
+            pthread_join(reinterpret_cast<pthread_t>(m_handle), nullptr);
+            m_handle = nullptr;
+            m_id = 0;
+        }
+    }
+
+    bool Thread::Joinable() const
+    {
+        return m_handle != nullptr;
+    }
+
+    ThreadId Thread::GetId() const
+    {
+        return m_id;
+    }
+
+    ThreadId Thread::GetCurrentThreadId()
+    {
+        return static_cast<uint64_t>(pthread_self());
     }
 }
 #endif

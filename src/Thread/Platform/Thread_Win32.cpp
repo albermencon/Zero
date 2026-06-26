@@ -2,6 +2,7 @@
 #include <Engine/Core.h>
 #ifdef PLATFORM_WINDOWS
 
+#include <Engine/Thread/Thread.h>
 #include "../PlatformThread.h"
 #include <windows.h>
 #include <string>
@@ -107,6 +108,70 @@ namespace Zero::PlatformThread
     void YieldT()
     {
         SwitchToThread(); // more cooperative than Sleep(0) on Windows
+    }
+}
+
+namespace Zero
+{
+    Thread::~Thread()
+    {
+        Detach();
+    }
+
+    void Thread::Start(size_t stackSize, void*(*threadFunc)(void*), void* param)
+    {
+        DWORD flags = 0;
+        if (stackSize > 0)
+        {
+            flags = STACK_SIZE_PARAM_IS_A_RESERVATION;
+        }
+
+        DWORD threadId = 0;
+        m_handle = CreateThread(
+            nullptr,
+            static_cast<SIZE_T>(stackSize),
+            reinterpret_cast<LPTHREAD_START_ROUTINE>(threadFunc),
+            param,
+            flags,
+            &threadId
+        );
+        m_id = static_cast<uint64_t>(threadId);
+    }
+
+    void Thread::Detach()
+    {
+        if (Joinable())
+        {
+            CloseHandle(static_cast<HANDLE>(m_handle));
+            m_handle = nullptr;
+            m_id = 0;
+        }
+    }
+
+    void Thread::Join()
+    {
+        if (Joinable())
+        {
+            WaitForSingleObject(static_cast<HANDLE>(m_handle), INFINITE);
+            CloseHandle(static_cast<HANDLE>(m_handle));
+            m_handle = nullptr;
+            m_id = 0;
+        }
+    }
+
+    bool Thread::Joinable() const
+    {
+        return m_handle != nullptr;
+    }
+
+    ThreadId Thread::GetId() const
+    {
+        return m_id;
+    }
+
+    ThreadId Thread::GetCurrentThreadId()
+    {
+        return static_cast<uint64_t>(::GetCurrentThreadId());
     }
 }
 #endif
