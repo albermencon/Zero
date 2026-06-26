@@ -32,3 +32,10 @@ endif()
 
 # Register the test executable with CTest
 add_test(NAME ZeroTestRun COMMAND ZeroTests)
+
+# Add a convenient target to build and execute tests in one command
+add_custom_target(run_tests
+    COMMAND ZeroTests
+    DEPENDS ZeroTests
+    COMMENT "Running Zero Engine Test Suite..."
+)

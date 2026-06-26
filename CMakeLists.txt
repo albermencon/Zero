@@ -107,5 +107,8 @@ target_precompile_headers(Zero
 )
 
 # Testing
-enable_testing()
-add_subdirectory(tests)
+option(ZERO_BUILD_TESTS "Build and include the testing suite" ON)
+if(ZERO_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
