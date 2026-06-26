@@ -44,7 +44,8 @@ namespace Zero
 		for (uint32_t i = 0; i < threadCount; ++i)
 		{
 			WorkerDesc* desc = new WorkerDesc{ this, i, &m_threads[i] };
-			m_threads[i] = Thread([desc]()
+			// 256KB of stack size
+			m_threads[i] = Thread(256 * 1024, [desc]() 
 			{
 				char name[32];
 				snprintf(name, sizeof(name), "Worker {%u}", desc->id);
