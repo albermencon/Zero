@@ -2,7 +2,7 @@
 #include <memory>
 #include <string>
 #include <functional>
-#include "Core.h"
+#include "Engine/Application.h"
 #include "Event.h"
 
 namespace Zero
@@ -44,6 +44,7 @@ namespace Zero
 
     // Forward declare platform-specific window implementation
     class WindowImpl;
+    class Application;
 
     class ZERO_API Window
     {
@@ -62,8 +63,6 @@ namespace Zero
         Window& operator=(Window&& other) noexcept;
 
         // Core functionality
-        void PollEvents();
-        void SetEventCallback(const EventCallbackFn& callback);
         void SetVSync(bool enabled);
         bool IsVSync() const;
 
@@ -97,6 +96,10 @@ namespace Zero
         static std::string GetPlatformName();
 
     private:
+        friend Application;
+        void PollEvents();
+        void SetEventCallback(const EventCallbackFn& callback);
+
         std::unique_ptr<WindowImpl> m_Impl;
     };
 }
