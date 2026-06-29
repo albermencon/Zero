@@ -2,9 +2,12 @@
 add_library(doctest INTERFACE)
 target_include_directories(doctest INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/doctest)
 
+# Find all test source files automatically
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
+
 # Define the test executable
 add_executable(ZeroTests
-    TestRef.cpp
+    ${TEST_SOURCES}
 )
 
 # Link against the engine (Zero) and doctest
