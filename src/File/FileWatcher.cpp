@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "uv.h"
 #include <Engine/File/FileWatcher.h>
+#include <Engine/File/FileSystem.h>
 #include <Engine/Thread/Thread.h>
 #include <Engine/Core.h>
 #include <Engine/Log.h>
@@ -10,7 +11,6 @@
 #include <vector>
 #include <mutex>
 #include <string>
-#include <chrono>
 #include <atomic>
 #include <concurrentqueue.h>
 
@@ -152,7 +152,8 @@ namespace Zero
     {
         ZERO_PROFILE_FUNCTION();
         std::error_code ec;
-        std::filesystem::path normPath = std::filesystem::canonical(path, ec);
+        std::filesystem::path resolved = FileSystem::Resolve(path.generic_string());
+        std::filesystem::path normPath = std::filesystem::canonical(resolved, ec);
         if (ec) return InvalidWatchHandle;
 
         WatchHandle handle = 0;
@@ -176,7 +177,8 @@ namespace Zero
     {
         ZERO_PROFILE_FUNCTION();
         std::error_code ec;
-        std::filesystem::path normPath = std::filesystem::canonical(path, ec);
+        std::filesystem::path resolved = FileSystem::Resolve(path.generic_string());
+        std::filesystem::path normPath = std::filesystem::canonical(resolved, ec);
         if (ec) return InvalidWatchHandle;
 
         WatchHandle handle = 0;
@@ -253,9 +255,7 @@ namespace Zero
         {
             if (ev.type == FileEventType::Renamed)
             {
-                std::error_code ec;
-                bool exists = std::filesystem::exists(ev.path, ec);
-                ev.type = exists ? FileEventType::Created : FileEventType::Deleted;
+                ev.type = FileSystem::Exists(ev.path) ? FileEventType::Created : FileEventType::Deleted;
             }
 
             std::string pathStr = ev.path.generic_string();
