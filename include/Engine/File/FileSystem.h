@@ -39,7 +39,8 @@ namespace Zero
 
         static bool Exists(const std::filesystem::path& path);
         static bool IsDirectory(const std::filesystem::path& path);
-        static std::chrono::file_time<std::chrono::system_clock> GetLastWriteTime(const std::filesystem::path& path);
+        static std::chrono::file_time<std::chrono::file_clock::duration> GetLastWriteTime(const std::filesystem::path& path);
+        static bool Delete(const std::filesystem::path& path);
 
         static std::expected<FileHandle, std::error_code> Open(const std::filesystem::path& path, FileAccess access);
         static void Close(FileHandle& file);
