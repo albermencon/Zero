@@ -248,8 +248,8 @@ namespace Zero
         m_Impl->m_dispatches.clear();
 
         FileEvent ev;
-
-        while (m_Impl->m_eventBuffer.try_dequeue(ev))
+        static thread_local moodycamel::ConsumerToken token(m_Impl->m_eventBuffer);
+        while (m_Impl->m_eventBuffer.try_dequeue(token, ev))
         {
             if (ev.type == FileEventType::Renamed)
             {
