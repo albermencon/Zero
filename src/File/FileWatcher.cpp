@@ -9,7 +9,8 @@
 #include <unordered_map>
 #include <Engine/Time.h>
 #include <vector>
-#include <mutex>
+#include <Engine/Thread/Mutex.h>
+#include <Engine/Thread/ScopedLock.h>
 #include <string>
 #include <atomic>
 #include <concurrentqueue.h>
@@ -62,12 +63,12 @@ namespace Zero
         Zero::Thread m_thread;
         std::atomic<bool> m_running{false};
 
-        std::mutex m_commandMutex;
+        Zero::Mutex m_commandMutex;
         std::vector<Command> m_pendingCommands;
 
         std::unordered_map<std::string, std::unique_ptr<WatchInfo>> m_activeWatches;
 
-        std::mutex m_registryMutex;
+        Zero::Mutex m_registryMutex;
         WatchHandle m_nextHandle = 1;
         std::unordered_map<WatchHandle, CallbackEntry> m_callbacks;
 
@@ -130,7 +131,7 @@ namespace Zero
         m_Impl->m_running.store(false, std::memory_order_release);
 
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_commandMutex);
+            Zero::ScopedLock lock(m_Impl->m_commandMutex);
             m_Impl->m_pendingCommands.push_back({ Impl::CommandType::Shutdown, {}, InvalidWatchHandle });
         }
         uv_async_send(&m_Impl->m_wakeup);
@@ -159,13 +160,13 @@ namespace Zero
         WatchHandle handle = 0;
 
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_registryMutex);
+            Zero::ScopedLock lock(m_Impl->m_registryMutex);
             handle = m_Impl->m_nextHandle++;
             m_Impl->m_callbacks[handle] = { callback, userData, true, normPath };
         }
 
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_commandMutex);
+            Zero::ScopedLock lock(m_Impl->m_commandMutex);
             m_Impl->m_pendingCommands.push_back({ Impl::CommandType::Watch, normPath, handle });
         }
 
@@ -184,13 +185,13 @@ namespace Zero
         WatchHandle handle = 0;
 
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_registryMutex);
+            Zero::ScopedLock lock(m_Impl->m_registryMutex);
             handle = m_Impl->m_nextHandle++;
             m_Impl->m_callbacks[handle] = { callback, userData, false, normPath };
         }
 
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_commandMutex);
+            Zero::ScopedLock lock(m_Impl->m_commandMutex);
             m_Impl->m_pendingCommands.push_back({ Impl::CommandType::Watch, normPath, handle });
         }
 
@@ -205,7 +206,7 @@ namespace Zero
 
         std::filesystem::path watchedPath;
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_registryMutex);
+            Zero::ScopedLock lock(m_Impl->m_registryMutex);
             auto it = m_Impl->m_callbacks.find(handle);
             if (it == m_Impl->m_callbacks.end()) return;
 
@@ -216,7 +217,7 @@ namespace Zero
         }
 
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_commandMutex);
+            Zero::ScopedLock lock(m_Impl->m_commandMutex);
             m_Impl->m_pendingCommands.push_back({ Impl::CommandType::UnWatch, watchedPath, handle });
         }
 
@@ -229,13 +230,13 @@ namespace Zero
 
         {
             ZERO_PROFILE_SCOPE("Mutex registry");
-            std::lock_guard<std::mutex> lock(m_Impl->m_registryMutex);
+            Zero::ScopedLock lock(m_Impl->m_registryMutex);
             m_Impl->m_callbacks.clear();
         }
 
         {
             ZERO_PROFILE_SCOPE("Mutex command");
-            std::lock_guard<std::mutex> lock(m_Impl->m_commandMutex);
+            Zero::ScopedLock lock(m_Impl->m_commandMutex);
             m_Impl->m_pendingCommands.push_back({ Impl::CommandType::UnWatchAll, {}, InvalidWatchHandle });
         }
 
@@ -290,7 +291,7 @@ namespace Zero
 
         {
             ZERO_PROFILE_SCOPE("Mutex registry")
-            std::lock_guard<std::mutex> lock(m_Impl->m_registryMutex);
+            Zero::ScopedLock lock(m_Impl->m_registryMutex);
             for (const auto& [pathStr, netEvent] : m_Impl->m_coalescedEvents)
             {
                 for (const auto& [handle, cbEntry] : m_Impl->m_callbacks)
@@ -329,7 +330,7 @@ namespace Zero
         ZERO_PROFILE_FUNCTION();
         std::vector<Impl::Command> commands;
         {
-            std::lock_guard<std::mutex> lock(m_Impl->m_commandMutex);
+            Zero::ScopedLock lock(m_Impl->m_commandMutex);
             commands.swap(m_Impl->m_pendingCommands);
         }
 

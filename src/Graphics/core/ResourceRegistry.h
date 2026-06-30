@@ -1,7 +1,8 @@
 #pragma once
 
 #include <vector>
-#include <mutex>
+#include <Engine/Thread/Mutex.h>
+#include <Engine/Thread/ScopedLock.h>
 #include <atomic>
 #include <cstdint>
 #include <string>
@@ -47,7 +48,7 @@ namespace Zero
         // Called by any worker thread. Thread-safe.
         HandleType Allocate()
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            Zero::ScopedLock lock(m_mutex);
 
             if (m_freeIndices.empty())
             {
@@ -88,7 +89,7 @@ namespace Zero
             uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return;
 
-            std::lock_guard<std::mutex> lock(m_mutex);
+            Zero::ScopedLock lock(m_mutex);
             Detail::ResourceSlot<BackendType>& slot = m_slots[index];
 
             if (slot.generation.load(std::memory_order_relaxed) != handle.GetGeneration())
@@ -113,7 +114,7 @@ namespace Zero
             uint32_t index = handle.GetIndex();
             if (index == 0 || index >= Capacity) return;
 
-            std::lock_guard<std::mutex> lock(m_mutex);
+            Zero::ScopedLock lock(m_mutex);
             Detail::ResourceSlot<BackendType>& slot = m_slots[index];
 
             if (slot.generation.load(std::memory_order_relaxed) != handle.GetGeneration())
@@ -152,7 +153,7 @@ namespace Zero
         void SetDebugName(uint32_t index, const std::string& name)
         {
             if (index == 0 || index >= Capacity) return;
-            std::lock_guard<std::mutex> lock(m_mutex);
+            Zero::ScopedLock lock(m_mutex);
             m_slots[index].debugName = name;
         }
 #endif
@@ -196,7 +197,7 @@ namespace Zero
         template<typename Func>
         void ForEach(Func func)
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            Zero::ScopedLock lock(m_mutex);
             for (uint32_t i = 1; i < Capacity; ++i)
             {
                 ResourceState currentState = m_slots[i].state.load(std::memory_order_relaxed);
@@ -212,7 +213,7 @@ namespace Zero
     private:
         std::unique_ptr<Detail::ResourceSlot<BackendType>[]> m_slots;
         
-        std::mutex m_mutex;
+        Zero::Mutex m_mutex;
         std::vector<uint16_t> m_freeIndices;
     };
 }

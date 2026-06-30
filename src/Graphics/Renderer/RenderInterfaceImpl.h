@@ -3,7 +3,8 @@
 #include <Engine/Graphics/RenderInterface.h>
 #include <Engine/Graphics/RenderResources.h>
 #include "Graphics/core/ResourceRegistry.h"
-#include <mutex>
+#include <Engine/Thread/Mutex.h>
+#include <Engine/Thread/ScopedLock.h>
 #include <vector>
 
 namespace Zero
@@ -50,7 +51,7 @@ namespace Zero
         ResourceRegistry<Texture*, TextureHandle, 16384> textureRegistry;
         ResourceRegistry<Pipeline*, PipelineHandle, 4096> pipelineRegistry;
 
-        std::mutex queueMutex;
+        Zero::Mutex queueMutex;
         std::vector<BufferCreateRequest> pendingBuffers;
         std::vector<TextureCreateRequest> pendingTextures;
         std::vector<PipelineCreateRequest> pendingPipelines;
@@ -58,7 +59,7 @@ namespace Zero
 
         void Clear()
         {
-            std::lock_guard<std::mutex> lock(queueMutex);
+            Zero::ScopedLock lock(queueMutex);
             pendingBuffers.clear();
             pendingTextures.clear();
             pendingPipelines.clear();

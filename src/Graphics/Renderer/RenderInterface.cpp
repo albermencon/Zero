@@ -1,5 +1,6 @@
 #include <Engine/Graphics/RenderInterface.h>
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
+#include <Engine/Thread/ScopedLock.h>
 
 namespace Zero
 {
@@ -29,7 +30,7 @@ namespace Zero
             }
             req.desc.initialData = nullptr;
 
-            std::lock_guard<std::mutex> lock(impl.queueMutex);
+            Zero::ScopedLock lock(impl.queueMutex);
             impl.pendingBuffers.push_back(std::move(req));
         }
         return handle;
@@ -47,7 +48,7 @@ namespace Zero
         auto& impl = RenderInterfaceImpl::Get();
         impl.bufferRegistry.Deallocate(handle);
         
-        std::lock_guard<std::mutex> lock(impl.queueMutex);
+        Zero::ScopedLock lock(impl.queueMutex);
         impl.pendingDestroys.push_back({ handle.value, ResourceDestroyRequest::Type::Buffer });
     }
 
@@ -89,7 +90,7 @@ namespace Zero
                 impl.textureRegistry.SetDebugName(handle.GetIndex(), desc.debugName);
 #endif
 
-            std::lock_guard<std::mutex> lock(impl.queueMutex);
+            Zero::ScopedLock lock(impl.queueMutex);
             impl.pendingTextures.push_back({ handle, desc });
         }
         return handle;
@@ -104,7 +105,7 @@ namespace Zero
         auto& impl = RenderInterfaceImpl::Get();
         impl.textureRegistry.Deallocate(handle);
         
-        std::lock_guard<std::mutex> lock(impl.queueMutex);
+        Zero::ScopedLock lock(impl.queueMutex);
         impl.pendingDestroys.push_back({ handle.value, ResourceDestroyRequest::Type::Texture });
     }
 
@@ -120,7 +121,7 @@ namespace Zero
                 impl.pipelineRegistry.SetDebugName(handle.GetIndex(), desc.debugName);
 #endif
 
-            std::lock_guard<std::mutex> lock(impl.queueMutex);
+            Zero::ScopedLock lock(impl.queueMutex);
             impl.pendingPipelines.push_back({ handle, desc });
         }
         return handle;
@@ -131,7 +132,7 @@ namespace Zero
         auto& impl = RenderInterfaceImpl::Get();
         impl.pipelineRegistry.Deallocate(handle);
         
-        std::lock_guard<std::mutex> lock(impl.queueMutex);
+        Zero::ScopedLock lock(impl.queueMutex);
         impl.pendingDestroys.push_back({ handle.value, ResourceDestroyRequest::Type::Pipeline });
     }
 

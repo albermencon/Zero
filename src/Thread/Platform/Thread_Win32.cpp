@@ -3,6 +3,10 @@
 #ifdef PLATFORM_WINDOWS
 
 #include <Engine/Thread/Thread.h>
+#include <Engine/Thread/Mutex.h>
+#include <Engine/Thread/RecursiveMutex.h>
+#include <Engine/Thread/ConditionVariable.h>
+#include <Engine/Thread/Semaphore.h>
 #include "../PlatformThread.h"
 #include <windows.h>
 #include <string>
@@ -172,6 +176,90 @@ namespace Zero
     ThreadId Thread::GetCurrentThreadId()
     {
         return static_cast<uint64_t>(::GetCurrentThreadId());
+    }
+
+    static_assert(sizeof(SRWLOCK) <= 64, "SRWLOCK size exceeds storage buffer");
+    static_assert(alignof(SRWLOCK) <= 8, "SRWLOCK alignment exceeds storage buffer");
+
+    Mutex::Mutex()
+    {
+        InitializeSRWLock(reinterpret_cast<PSRWLOCK>(m_storage));
+    }
+    
+    Mutex::~Mutex() {}
+    void Mutex::Lock() { AcquireSRWLockExclusive(reinterpret_cast<PSRWLOCK>(m_storage)); }
+    void Mutex::Unlock() { ReleaseSRWLockExclusive(reinterpret_cast<PSRWLOCK>(m_storage)); }
+    bool Mutex::TryLock() { return TryAcquireSRWLockExclusive(reinterpret_cast<PSRWLOCK>(m_storage)) != 0; }
+
+    static_assert(sizeof(CRITICAL_SECTION) <= 64, "CRITICAL_SECTION size exceeds storage buffer");
+    static_assert(alignof(CRITICAL_SECTION) <= 8, "CRITICAL_SECTION alignment exceeds storage buffer");
+
+    RecursiveMutex::RecursiveMutex()
+    {
+        InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(m_storage));
+    }
+
+    RecursiveMutex::~RecursiveMutex()
+    {
+        DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(m_storage));
+    }
+
+    void RecursiveMutex::Lock() { EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(m_storage)); }
+    void RecursiveMutex::Unlock() { LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(m_storage)); }
+    bool RecursiveMutex::TryLock() { return TryEnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(m_storage)) != 0; }
+
+    static_assert(sizeof(CONDITION_VARIABLE) <= 48, "CONDITION_VARIABLE size exceeds storage buffer");
+    static_assert(alignof(CONDITION_VARIABLE) <= 8, "CONDITION_VARIABLE alignment exceeds storage buffer");
+
+    ConditionVariable::ConditionVariable()
+    {
+        InitializeConditionVariable(reinterpret_cast<PCONDITION_VARIABLE>(m_storage));
+    }
+
+    ConditionVariable::~ConditionVariable() {}
+    void ConditionVariable::Wait(Mutex& mutex)
+    {
+        SleepConditionVariableSRW(reinterpret_cast<PCONDITION_VARIABLE>(m_storage), reinterpret_cast<PSRWLOCK>(mutex.GetNativeHandle()), INFINITE, 0);
+    }
+
+    void ConditionVariable::NotifyOne()
+    {
+        WakeConditionVariable(reinterpret_cast<PCONDITION_VARIABLE>(m_storage));
+    }
+
+    void ConditionVariable::NotifyAll()
+    {
+        WakeAllConditionVariable(reinterpret_cast<PCONDITION_VARIABLE>(m_storage));
+    }
+
+    static_assert(sizeof(HANDLE) <= 32, "HANDLE size exceeds storage buffer");
+    static_assert(alignof(HANDLE) <= 8, "HANDLE alignment exceeds storage buffer");
+
+    Semaphore::Semaphore(int initialCount)
+    {
+        HANDLE handle = CreateSemaphoreA(nullptr, initialCount, LONG_MAX, nullptr);
+        std::memcpy(m_storage, &handle, sizeof(HANDLE));
+    }
+
+    Semaphore::~Semaphore()
+    {
+        HANDLE handle;
+        std::memcpy(&handle, m_storage, sizeof(HANDLE));
+        CloseHandle(handle);
+    }
+
+    void Semaphore::Wait()
+    {
+        HANDLE handle;
+        std::memcpy(&handle, m_storage, sizeof(HANDLE));
+        WaitForSingleObject(handle, INFINITE);
+    }
+
+    void Semaphore::Signal()
+    {
+        HANDLE handle;
+        std::memcpy(&handle, m_storage, sizeof(HANDLE));
+        ReleaseSemaphore(handle, 1, nullptr);
     }
 }
 #endif

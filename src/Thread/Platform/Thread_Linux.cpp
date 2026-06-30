@@ -3,8 +3,13 @@
 #if defined(PLATFORM_LINUX) || defined(PLATFORM_ANDROID)
 
 #include <Engine/Thread/Thread.h>
+#include <Engine/Thread/Mutex.h>
+#include <Engine/Thread/RecursiveMutex.h>
+#include <Engine/Thread/ConditionVariable.h>
+#include <Engine/Thread/Semaphore.h>
 #include "../PlatformThread.h"
 #include <pthread.h>
+#include <semaphore.h>
 #include <sched.h>
 #include <time.h>
 #include <cstring>
@@ -161,6 +166,92 @@ namespace Zero
     ThreadId Thread::GetCurrentThreadId()
     {
         return static_cast<uint64_t>(pthread_self());
+    }
+
+    static_assert(sizeof(pthread_mutex_t) <= 64, "pthread_mutex_t size exceeds storage buffer");
+    static_assert(alignof(pthread_mutex_t) <= 8, "pthread_mutex_t alignment exceeds storage buffer");
+
+    Mutex::Mutex()
+    {
+        pthread_mutex_init(reinterpret_cast<pthread_mutex_t*>(m_storage), nullptr);
+    }
+
+    Mutex::~Mutex()
+    {
+        pthread_mutex_destroy(reinterpret_cast<pthread_mutex_t*>(m_storage));
+    }
+    
+    void Mutex::Lock() { pthread_mutex_lock(reinterpret_cast<pthread_mutex_t*>(m_storage)); }
+    void Mutex::Unlock() { pthread_mutex_unlock(reinterpret_cast<pthread_mutex_t*>(m_storage)); }
+    bool Mutex::TryLock() { return pthread_mutex_trylock(reinterpret_cast<pthread_mutex_t*>(m_storage)) == 0; }
+
+    RecursiveMutex::RecursiveMutex()
+    {
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(reinterpret_cast<pthread_mutex_t*>(m_storage), &attr);
+        pthread_mutexattr_destroy(&attr);
+    }
+
+    RecursiveMutex::~RecursiveMutex()
+    {
+        pthread_mutex_destroy(reinterpret_cast<pthread_mutex_t*>(m_storage));
+    }
+
+    void RecursiveMutex::Lock() { pthread_mutex_lock(reinterpret_cast<pthread_mutex_t*>(m_storage)); }
+    void RecursiveMutex::Unlock() { pthread_mutex_unlock(reinterpret_cast<pthread_mutex_t*>(m_storage)); }
+    bool RecursiveMutex::TryLock() { return pthread_mutex_trylock(reinterpret_cast<pthread_mutex_t*>(m_storage)) == 0; }
+
+    static_assert(sizeof(pthread_cond_t) <= 48, "pthread_cond_t size exceeds storage buffer");
+    static_assert(alignof(pthread_cond_t) <= 8, "pthread_cond_t alignment exceeds storage buffer");
+
+    ConditionVariable::ConditionVariable()
+    {
+        pthread_cond_init(reinterpret_cast<pthread_cond_t*>(m_storage), nullptr);
+    }
+
+    ConditionVariable::~ConditionVariable()
+    {
+        pthread_cond_destroy(reinterpret_cast<pthread_cond_t*>(m_storage));
+    }
+
+    void ConditionVariable::Wait(Mutex& mutex)
+    {
+        pthread_cond_wait(reinterpret_cast<pthread_cond_t*>(m_storage), reinterpret_cast<pthread_mutex_t*>(mutex.GetNativeHandle()));
+    }
+    
+    void ConditionVariable::NotifyOne()
+    {
+        pthread_cond_signal(reinterpret_cast<pthread_cond_t*>(m_storage));
+    }
+
+    void ConditionVariable::NotifyAll()
+    {
+        pthread_cond_broadcast(reinterpret_cast<pthread_cond_t*>(m_storage));
+    }
+
+    static_assert(sizeof(sem_t) <= 32, "sem_t size exceeds storage buffer");
+    static_assert(alignof(sem_t) <= 8, "sem_t alignment exceeds storage buffer");
+
+    Semaphore::Semaphore(int initialCount)
+    {
+        sem_init(reinterpret_cast<sem_t*>(m_storage), 0, static_cast<unsigned int>(initialCount));
+    }
+
+    Semaphore::~Semaphore()
+    {
+        sem_destroy(reinterpret_cast<sem_t*>(m_storage));
+    }
+
+    void Semaphore::Wait()
+    {
+        while (sem_wait(reinterpret_cast<sem_t*>(m_storage)) == -1 && errno == EINTR) {}
+    }
+
+    void Semaphore::Signal()
+    {
+        sem_post(reinterpret_cast<sem_t*>(m_storage));
     }
 }
 #endif
