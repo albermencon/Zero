@@ -29,11 +29,12 @@ namespace Zero
         , m_surface(m_instance.Get(), *window)
         , m_physicaldevice(m_instance.Get())
         , m_device(m_surface.Get(), m_physicaldevice.Get())
-        , m_swapchain(&m_device, &m_physicaldevice, &m_surface, window)
+        , m_swapchain(&m_device, &m_physicaldevice, &m_surface, window, window->GetPresentModePolicy())
         , m_pipeline(&m_device, &m_swapchain)
         , m_commandcontext(&m_device)
         , m_syncobjects(&m_device, &m_swapchain)
         , m_Window(window)
+        , m_currentPolicy(window->GetPresentModePolicy())
     {
         ZERO_CORE_INFO("Initializing Vulkan Device...");
         init();
@@ -94,7 +95,6 @@ namespace Zero
 
     void VulkanDevice::SwapBuffers()
     {
-        if (m_frameAborted) return;
 
         vk::PresentInfoKHR presentInfo{};
         presentInfo.waitSemaphoreCount = 1;
@@ -113,8 +113,23 @@ namespace Zero
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
-    void VulkanDevice::BeginFrame()
+    bool VulkanDevice::BeginFrame()
     {
+        PresentModePolicy requestedPolicy = m_Window->GetPresentModePolicy();
+        if (m_currentPolicy != requestedPolicy)
+        {
+            m_currentPolicy = requestedPolicy;
+            m_SwapChainDirty = true;
+        }
+
+        if (m_SwapChainDirty)
+        {
+            m_SwapChainDirty = false;
+            m_device.Get().waitIdle(); // Stall GPU
+            recreateSwapChain();
+            return false;
+        }
+
         // Wait for the previus frame to complete
         auto fenceResult = m_device.Get().waitForFences(*m_syncobjects.GetInFlightFences()[currentFrame], vk::True, UINT64_MAX);
 
@@ -127,29 +142,25 @@ namespace Zero
         // The last paramater specifies a variable to output the index of the swap chain image that has become avaible
         auto [result, imageIndex] = m_swapchain.Get().acquireNextImage(UINT64_MAX, *m_syncobjects.GetImageAvailableSemaphores()[currentFrame], nullptr);
 
-        if (result == vk::Result::eErrorOutOfDateKHR || m_SwapChainDirty)
+        if (result == vk::Result::eErrorOutOfDateKHR)
         {
-            m_SwapChainDirty = false;
-            recreateSwapChain();
-            m_frameAborted = true;
-            return;
+            m_SwapChainDirty = true;
+            return false;
         }
 
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
         {
             ZERO_CORE_WARN("Failed to acquire swap chain image");
             currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT; // avanza
-            m_frameAborted = true;
-            return;
+            return false;
         }
 
         m_currentImageIndex = imageIndex;
-        m_frameAborted = false;
 
+        return true;
     }
     void VulkanDevice::EndFrame()
     {
-        if (m_frameAborted) return;
 
         m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
         m_commandcontext.GetCommandBuffers()[currentFrame].reset();
@@ -181,7 +192,7 @@ namespace Zero
 
     void VulkanDevice::recreateSwapChain()
     {
-        m_swapchain.recreateSwapChain();
+        m_swapchain.recreateSwapChain(m_currentPolicy);
         m_syncobjects.recreateSyncObjects();
     }
 

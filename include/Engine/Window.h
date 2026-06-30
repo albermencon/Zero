@@ -4,9 +4,16 @@
 #include <functional>
 #include "Engine/Application.h"
 #include "Event.h"
+#include <atomic>
 
 namespace Zero
 {
+    enum class PresentModePolicy
+    {
+        VSync = 0,    // FIFO (capped, no tearing, power efficient)
+        Immediate,    // Immediate (uncapped, tearing, lowest latency)
+        Mailbox       // Mailbox (uncapped, no tearing, triple-buffered)
+    };
 
     enum class BackendType
     {
@@ -63,8 +70,11 @@ namespace Zero
         Window& operator=(Window&& other) noexcept;
 
         // Core functionality
-        void SetVSync(bool enabled);
-        bool IsVSync() const;
+        void SetPresentModePolicy(PresentModePolicy policy);
+        PresentModePolicy GetPresentModePolicy() const;
+
+        void SetVSync(bool enabled) { SetPresentModePolicy(enabled ? PresentModePolicy::VSync : PresentModePolicy::Immediate); }
+        bool IsVSync() const { return GetPresentModePolicy() == PresentModePolicy::VSync; }
 
         // Window properties
         uint32_t GetWindowWidth() const;
@@ -101,5 +111,6 @@ namespace Zero
         void SetEventCallback(const EventCallbackFn& callback);
 
         std::unique_ptr<WindowImpl> m_Impl;
+        std::atomic<PresentModePolicy> m_PresentModePolicy{ PresentModePolicy::VSync };
     };
 }

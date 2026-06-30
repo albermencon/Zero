@@ -7,13 +7,27 @@ namespace Zero
     Window::Window(const WindowProps& props)
         : m_Impl(WindowImpl::Create(props))
     {
+        m_PresentModePolicy.store(props.VSync ? PresentModePolicy::VSync : PresentModePolicy::Immediate, std::memory_order_relaxed);
     }
 
     Window::~Window() = default;
 
-    Window::Window(Window&& other) noexcept = default;
-    Window& Window::operator=(Window&& other) noexcept = default;
+    Window::Window(Window&& other) noexcept
+        : m_Impl(std::move(other.m_Impl))
+    {
+        m_PresentModePolicy.store(other.m_PresentModePolicy.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    }
 
+    Window& Window::operator=(Window&& other) noexcept
+    {
+        if (this != &other)
+        {
+            m_Impl = std::move(other.m_Impl);
+            m_PresentModePolicy.store(other.m_PresentModePolicy.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        }
+        return *this;
+    }
+    
     void Window::PollEvents()
     {
         m_Impl->PollEvents();
@@ -24,14 +38,14 @@ namespace Zero
         m_Impl->SetEventCallback(callback);
     }
 
-    void Window::SetVSync(bool enabled)
+    void Window::SetPresentModePolicy(PresentModePolicy policy)
     {
-        m_Impl->SetVSync(enabled);
+        m_PresentModePolicy.store(policy, std::memory_order_relaxed);
     }
 
-    bool Window::IsVSync() const
+    PresentModePolicy Window::GetPresentModePolicy() const
     {
-        return m_Impl->IsVSync();
+        return m_PresentModePolicy.load(std::memory_order_relaxed);
     }
 
     uint32_t Window::GetWindowWidth() const

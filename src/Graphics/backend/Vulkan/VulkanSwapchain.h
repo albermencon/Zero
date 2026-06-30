@@ -7,6 +7,7 @@ import vulkan_hpp;
 
 namespace Zero
 {
+	enum class PresentModePolicy;
 	class Window;
 	class VulkanLogicalDevice;
 	class VulkanPhysicalDevice;
@@ -16,10 +17,10 @@ namespace Zero
 	{
 	public:
 		VulkanSwapchain(VulkanLogicalDevice* Device, VulkanPhysicalDevice* PhysicalDevice,
-			VulkanSurface* Surface, Window* window);
+			VulkanSurface* Surface, Window* window, PresentModePolicy policy);
 		~VulkanSwapchain() = default;
 
-		void recreateSwapChain();
+		void recreateSwapChain(PresentModePolicy policy);
 
 		// Getter
 		const vk::raii::SwapchainKHR& Get() const { return m_Swapchain; };
@@ -31,13 +32,13 @@ namespace Zero
 		vk::Extent2D GetExtent() const { return m_Extent; };
 
 	private:
-		void createSwapChain(vk::SwapchainKHR oldSwapchain = VK_NULL_HANDLE);
+		void createSwapChain(PresentModePolicy policy, vk::SwapchainKHR oldSwapchain = VK_NULL_HANDLE);
 
 		void createImageViews();
 		void cleanupSwapChain();
 	private:
 		vk::SurfaceFormatKHR chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& avaibleFormats);
-		vk::PresentModeKHR chooseSwapChainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+		vk::PresentModeKHR chooseSwapChainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes, PresentModePolicy policy);
 		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 	private:
 		vk::raii::SwapchainKHR m_Swapchain = nullptr;

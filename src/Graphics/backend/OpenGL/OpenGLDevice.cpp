@@ -92,10 +92,25 @@ namespace Zero
     void OpenGLDevice::SwapBuffers()
     {
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
+        PresentModePolicy requested = m_window->GetPresentModePolicy();
+        if (!m_policyInitialized || m_currentPolicy != requested)
+        {
+            switch (requested)
+            {
+                case PresentModePolicy::VSync:
+                    glfwSwapInterval(1);
+                    break;
+                default:
+                    glfwSwapInterval(0);
+                    break;
+            }
+            m_currentPolicy = requested;
+            m_policyInitialized = true;
+        }
         glfwSwapBuffers(glfwWindow);
     }
 
-    void OpenGLDevice::BeginFrame()
+    bool OpenGLDevice::BeginFrame()
     {
         if (!m_contextMadeCurrentOnRenderThread)
         {
@@ -106,6 +121,8 @@ namespace Zero
 
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
+        return true;
     }
 
     void OpenGLDevice::EndFrame()

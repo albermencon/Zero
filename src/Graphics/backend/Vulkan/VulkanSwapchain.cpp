@@ -11,14 +11,14 @@
 namespace Zero 
 {
 	VulkanSwapchain::VulkanSwapchain(VulkanLogicalDevice* device, VulkanPhysicalDevice* physicalDevice,
-        VulkanSurface* surface, Window* window)
+        VulkanSurface* surface, Window* window, PresentModePolicy policy)
         : m_Device(device), m_PhysicalDevice(physicalDevice), m_Surface(surface), m_window(window)
 	{
-		createSwapChain();
+		createSwapChain(policy);
         createImageViews();
 	}
 
-    void VulkanSwapchain::recreateSwapChain()
+    void VulkanSwapchain::recreateSwapChain(PresentModePolicy policy)
     {
         int width, height;
         while (true)
@@ -37,7 +37,7 @@ namespace Zero
         m_Swapchain = nullptr;
         m_ImageViews.clear();
 
-        createSwapChain(*oldSwapchain); // pass the old handle
+        createSwapChain(policy, *oldSwapchain); // pass the old handle
         createImageViews();
     }
 
@@ -47,7 +47,7 @@ namespace Zero
         m_Swapchain = nullptr;
     }
 
-    void VulkanSwapchain::createSwapChain(vk::SwapchainKHR oldSwapchain)
+    void VulkanSwapchain::createSwapChain(PresentModePolicy policy, vk::SwapchainKHR oldSwapchain)
 	{
         auto surfaceCapabilities = m_PhysicalDevice->Get().getSurfaceCapabilitiesKHR(*m_Surface->Get());
 
@@ -76,7 +76,7 @@ namespace Zero
             imageCount = surfaceCapabilities.maxImageCount;
         }
 
-        m_PresentMode = chooseSwapChainPresentMode(m_PhysicalDevice->Get().getSurfacePresentModesKHR(*m_Surface->Get()));
+        m_PresentMode = chooseSwapChainPresentMode(m_PhysicalDevice->Get().getSurfacePresentModesKHR(*m_Surface->Get()), policy);
 
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{};
         swapChainCreateInfo
@@ -165,39 +165,25 @@ namespace Zero
         return avaibleFormats[0];
     }
 
-    vk::PresentModeKHR VulkanSwapchain::chooseSwapChainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+    vk::PresentModeKHR VulkanSwapchain::chooseSwapChainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes, PresentModePolicy policy)
     {
-        // TODO: Make present mode configurable.
-        // Desktop: MAILBOX (low latency, no tearing)
-        // Mobile: FIFO (better power efficiency)
-        // Fallback: FIFO (always supported)
-        // Present mode affects latency, power consumption, and frame pacing.
-        for (const auto& presentMode : availablePresentModes)
-        {
-            if (presentMode == vk::PresentModeKHR::eMailbox)
+        auto isSupported = [&](vk::PresentModeKHR mode) {
+            for (const auto& available : availablePresentModes)
             {
-                return presentMode;
+                if (available == mode) return true;
             }
-        }
+            return false;
+        };
 
-        for (const auto& presentMode : availablePresentModes)
+        if (policy == PresentModePolicy::Mailbox)
         {
-            if (presentMode == vk::PresentModeKHR::eImmediate)
-            {
-                return presentMode;
-            }
+            if (isSupported(vk::PresentModeKHR::eMailbox)) return vk::PresentModeKHR::eMailbox;
+            if (isSupported(vk::PresentModeKHR::eImmediate)) return vk::PresentModeKHR::eImmediate;
         }
-
-        // vulkan inux sdk does not provide this
-        /*
-        for (const auto& presentMode : availablePresentModes)
+        else if (policy == PresentModePolicy::Immediate)
         {
-            if (presentMode == vk::PresentModeKHR::eFifoLatestReady)
-            {
-                return presentMode;
-            }
+            if (isSupported(vk::PresentModeKHR::eImmediate)) return vk::PresentModeKHR::eImmediate;
         }
-        */
 
         return vk::PresentModeKHR::eFifo; // fifo is the only guaranteed
     }

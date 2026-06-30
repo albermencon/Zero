@@ -5,6 +5,7 @@
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Log.h>
 #include <Engine/Thread/ScopedLock.h>
+#include <Engine/Profiler/Profiler.h>
 
 namespace Zero
 {
@@ -98,6 +99,8 @@ namespace Zero
 		m_renderThread.SetAffinity(1ull << 1); // temp pinned to core 1
 		ZERO_CORE_INFO("Initialized render thread");
 
+		ZERO_PROFILE_THREAD("RendererThread");
+		ZERO_PROFILE_FUNCTION();
 		size_t idleCount = 0;
 		while (m_running.load())
 		{
@@ -113,7 +116,12 @@ namespace Zero
 			}
 			idleCount = 0;
 
-			m_backend->BeginFrame();
+			if (!m_backend->BeginFrame())
+			{
+				m_queue.FrameConsumed();
+				Thread::Sleep(1); // Yield while the backend is unready
+				continue;
+			}
 
 			ProcessResourceRequests();
 
@@ -127,6 +135,7 @@ namespace Zero
 
 			Thread::Yield();
 			m_queue.FrameConsumed();
+			ZERO_PROFILE_FRAME_NAME("Render");
 		}
 	}
 

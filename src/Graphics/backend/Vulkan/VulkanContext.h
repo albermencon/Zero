@@ -20,7 +20,7 @@ import vulkan_hpp;
 
 namespace Zero
 {
-
+    enum class PresentModePolicy;
     class Window;
 
     class VulkanDevice : public GraphicsDevice
@@ -32,7 +32,7 @@ namespace Zero
         virtual void init() override;
         virtual void SwapBuffers() override;
 
-        virtual void BeginFrame() override;
+        virtual bool BeginFrame() override;
         virtual void EndFrame() override;
 
         virtual void OnFinished() override;
@@ -69,7 +69,7 @@ namespace Zero
     private:
         VkFormat m_cachedSwapchainFormat = VK_FORMAT_UNDEFINED;
         uint32_t m_currentImageIndex = 0;
-        bool m_frameAborted = false;
+        PresentModePolicy m_currentPolicy;
 
     private:
         uint32_t currentFrame = 0;

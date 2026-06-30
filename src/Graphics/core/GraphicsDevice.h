@@ -14,7 +14,7 @@ namespace Zero
         //virtual std::shared_ptr<Buffer> CreateBuffer(const BufferDesc& desc) = 0;
 
         // Frame lifecycle
-        virtual void BeginFrame() = 0;
+        virtual bool BeginFrame() = 0;
         virtual void EndFrame() = 0;
 
         virtual void init() = 0;

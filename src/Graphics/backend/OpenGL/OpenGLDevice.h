@@ -1,5 +1,6 @@
 #pragma once
 #include "Graphics/core/GraphicsDevice.h"
+#include "Engine/Window.h"
 
 namespace Zero
 {
@@ -14,7 +15,7 @@ namespace Zero
         virtual void init() override;
         virtual void SwapBuffers() override;
 
-        virtual void BeginFrame() override;
+        virtual bool BeginFrame() override;
         virtual void EndFrame() override;
 
         virtual void OnFinished() override;
@@ -31,5 +32,7 @@ namespace Zero
         unsigned int m_shaderProgram = 0;
         unsigned int m_vao = 0;
         bool m_contextMadeCurrentOnRenderThread = false;
+        PresentModePolicy m_currentPolicy = PresentModePolicy::VSync;
+        bool m_policyInitialized = false;
     };
 }
