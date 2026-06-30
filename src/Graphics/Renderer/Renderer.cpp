@@ -4,6 +4,7 @@
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Log.h>
+#include <Engine/Thread/ScopedLock.h>
 
 namespace Zero
 {
@@ -139,7 +140,7 @@ namespace Zero
 		static std::vector<ResourceDestroyRequest> localDestroys;
 
 		{
-			std::lock_guard<std::mutex> lock(impl.queueMutex);
+			Zero::ScopedLock lock(impl.queueMutex);
 			localBuffers.swap(impl.pendingBuffers);
 			localTextures.swap(impl.pendingTextures);
 			localPipelines.swap(impl.pendingPipelines);
