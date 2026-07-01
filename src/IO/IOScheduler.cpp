@@ -1,6 +1,7 @@
 #include "pch.h"
 #include <Engine/IO/IOScheduler.h>
-#include <cassert>
+#include <Engine/Core.h>
+#include <Engine/Log.h>
 #include <deque>
 #include <thread> // only for std::thread::hardware_concurrency
 #include <Engine/JobSystem/JobSystem.h>
@@ -465,7 +466,8 @@ namespace Zero::IO
         if (HasFlag(request.flags, IOFlags::Direct))
         {
             size_t address = reinterpret_cast<size_t>(request.destination.data());
-            assert((address & 4095) == 0 && (request.offset & 4095) == 0 && (request.destination.size() & 4095) == 0);
+            ZERO_CORE_ASSERT((address & 4095) == 0 && (request.offset & 4095) == 0 && (request.destination.size() & 4095) == 0, 
+                "Direct I/O requirements not met: address, offset, and size must be aligned to 4096 bytes");
         }
 
         uint32_t slot = m_impl->AllocateSlot();
@@ -495,7 +497,8 @@ namespace Zero::IO
         if (HasFlag(request.flags, IOFlags::Direct))
         {
             size_t address = reinterpret_cast<size_t>(request.source.data());
-            assert((address & 4095) == 0 && (request.offset & 4095) == 0 && (request.source.size() & 4095) == 0);
+            ZERO_CORE_ASSERT((address & 4095) == 0 && (request.offset & 4095) == 0 && (request.source.size() & 4095) == 0,
+                "Direct I/O requirements not met: address, offset, and size must be aligned to 4096 bytes");
         }
 
         uint32_t slot = m_impl->AllocateSlot();
@@ -529,7 +532,8 @@ namespace Zero::IO
             for (const auto& range : request.ranges)
             {
                 size_t address = reinterpret_cast<size_t>(range.destination.data());
-                assert((address & 4095) == 0 && (range.offset & 4095) == 0 && (range.destination.size() & 4095) == 0);
+                ZERO_CORE_ASSERT((address & 4095) == 0 && (range.offset & 4095) == 0 && (range.destination.size() & 4095) == 0,
+                    "Direct I/O requirements not met: address, offset, and size must be aligned to 4096 bytes");
             }
         }
 
@@ -566,7 +570,8 @@ namespace Zero::IO
         if (HasFlag(desc.flags, IOFlags::Direct))
         {
             size_t address = reinterpret_cast<size_t>(desc.destination.data());
-            assert((address & 4095) == 0 && (desc.offset & 4095) == 0 && (desc.chunkSize & 4095) == 0 && (desc.totalSize & 4095) == 0);
+            ZERO_CORE_ASSERT((address & 4095) == 0 && (desc.offset & 4095) == 0 && (desc.chunkSize & 4095) == 0 && (desc.totalSize & 4095) == 0,
+                "Direct I/O requirements not met: address, offset, chunkSize, and totalSize must be aligned to 4096 bytes");
         }
 
         uint32_t slot = m_impl->AllocateStreamSlot();
