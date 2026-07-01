@@ -1,14 +1,14 @@
 #include "pch.h"
 #include <Engine/IO/IOScheduler.h>
-#include <atomic>
-#include <vector>
 #include <cassert>
-#include <mutex>
-#include <condition_variable>
 #include <deque>
-#include <thread>
+#include <thread> // only for std::thread::hardware_concurrency
 #include <Engine/JobSystem/JobSystem.h>
 #include <Engine/IO/Platform/IOPlatform.h>
+#include <Engine/Thread/Thread.h>
+#include <Engine/Thread/Mutex.h>
+#include <Engine/Thread/ScopedLock.h>
+#include <Engine/Thread/Semaphore.h>
 
 #if defined(_MSC_VER)
     #define ZERO_FORCEINLINE __forceinline
@@ -94,15 +94,14 @@ namespace Zero::IO
 
         struct PriorityLane 
         {
-            std::mutex mutex;
+            Zero::Mutex mutex;
             std::deque<uint32_t> queue;
         };
 
         PriorityLane lanes[5]; // Critical, High, Normal, Low, Background
         
-        std::vector<std::thread> workers;
-        std::mutex cvMutex;
-        std::condition_variable cv;
+        std::vector<Zero::Thread> workers;
+        Zero::Semaphore wakeupSemaphore;
         std::atomic<bool> shuttingDown{ false };
 
         Impl(const SchedulerConfig& cfg) : config(cfg) {}
@@ -135,24 +134,33 @@ namespace Zero::IO
             streamNextFree[config.maxConcurrentStreams].store(0, std::memory_order_relaxed);
             streamFreeHead.store((uint64_t(1) << 32) | 1, std::memory_order_relaxed);
 
-            uint32_t workerCount = (config.workerMode == WorkerMode::Automatic) ? std::thread::hardware_concurrency() : config.workerCount;
+            uint32_t workerCount = config.workerCount;
+            if (config.workerMode == WorkerMode::Automatic) 
+            {
+                // Do not create as many threads as logical cores. Divide by 4, min 1, max 4.
+                workerCount = std::min<uint32_t>(4, std::max<uint32_t>(1, std::thread::hardware_concurrency() / 4));
+            }
             if (workerCount == 0) workerCount = 1;
 
             shuttingDown.store(false, std::memory_order_relaxed);
             for (uint32_t i = 0; i < workerCount; ++i) 
             {
-                workers.emplace_back(&Impl::WorkerLoop, this);
+                // 64 KB stack size limit
+                workers.emplace_back(64 * 1024, [this]() { this->WorkerLoop(); });
             }
         }
 
         void Shutdown()
         {
             shuttingDown.store(true, std::memory_order_release);
-            cv.notify_all();
+            for (size_t i = 0; i < workers.size(); ++i) 
+            {
+                wakeupSemaphore.Signal();
+            }
 
             for (auto& worker : workers) 
             {
-                if (worker.joinable()) worker.join();
+                if (worker.Joinable()) worker.Join();
             }
             workers.clear();
         }
@@ -237,10 +245,10 @@ namespace Zero::IO
             if (laneIndex < 0 || laneIndex > 4) laneIndex = 2; // Default Normal
 
             {
-                std::lock_guard<std::mutex> lock(lanes[laneIndex].mutex);
+                Zero::ScopedLock lock(lanes[laneIndex].mutex);
                 lanes[laneIndex].queue.push_back(slotIndex);
             }
-            cv.notify_one();
+            wakeupSemaphore.Signal();
         }
 
         void WorkerLoop() 
@@ -252,7 +260,7 @@ namespace Zero::IO
                 // Pop highest priority (4 = Critical, 0 = Background)
                 for (int i = 4; i >= 0; --i) 
                 {
-                    std::lock_guard<std::mutex> lock(lanes[i].mutex);
+                    Zero::ScopedLock lock(lanes[i].mutex);
                     if (!lanes[i].queue.empty()) 
                     {
                         handleIndex = lanes[i].queue.front();
@@ -267,17 +275,7 @@ namespace Zero::IO
                 } 
                 else 
                 {
-                    std::unique_lock<std::mutex> lock(cvMutex);
-                    cv.wait(lock, [this]() 
-                    {
-                        if (shuttingDown.load(std::memory_order_acquire)) return true;
-                        for (int i = 0; i < 5; ++i) 
-                        {
-                            std::lock_guard<std::mutex> qlock(lanes[i].mutex);
-                            if (!lanes[i].queue.empty()) return true;
-                        }
-                        return false;
-                    });
+                    wakeupSemaphore.Wait();
                 }
             }
         }
