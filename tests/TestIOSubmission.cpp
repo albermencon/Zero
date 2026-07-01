@@ -21,6 +21,8 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         out << testData;
     }
 
+    Zero::InitJobSystem(1);
+
     SchedulerConfig config;
     config.maxConcurrentRequests = 100;
     config.workerCount = 2;
@@ -151,7 +153,73 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         CHECK(str2 == "Engine");
     }
 
+    SUBCASE("Stream Scheduler")
+    {
+        std::vector<std::byte> readBuffer(testData.size());
+        
+        static std::atomic<uint32_t> chunksCompleted{ 0 };
+        static std::atomic<bool> streamFinished{ false };
+        
+        chunksCompleted.store(0);
+        streamFinished.store(false);
+
+        Job chunkJob;
+        chunkJob.mode = Job::Mode::Inline;
+        chunkJob.fn = [](void* ctx) 
+        {
+            StreamChunkResult* chunkResult = static_cast<StreamChunkResult*>(ctx);
+            // Just tracking completions for the test
+            chunksCompleted.fetch_add(1);
+        };
+
+        Job streamJob;
+        streamJob.mode = Job::Mode::Inline;
+        streamJob.fn = [](void* ctx)
+        {
+            streamFinished.store(true);
+        };
+
+        StreamReadDescriptor streamDesc;
+        streamDesc.file = handle;
+        streamDesc.destination = { readBuffer.data(), readBuffer.size() };
+        streamDesc.offset = 0;
+        streamDesc.totalSize = readBuffer.size();
+        streamDesc.chunkSize = 10; // very small chunk to force sliding window
+        streamDesc.slidingWindowSize = 2; // 2 concurrent chunks
+        streamDesc.chunkCompletionJob = chunkJob;
+        streamDesc.streamCompletionJob = streamJob;
+
+        StreamHandle streamHandle = scheduler.SubmitStream(streamDesc);
+        REQUIRE(streamHandle.IsValid());
+
+        // Wait for it to finish natively through internal progress tracker
+        auto startTime = std::chrono::steady_clock::now();
+        while (true)
+        {
+            IOProgress progress = scheduler.GetStreamProgress(streamHandle);
+            if (progress.status == Status::Completed || progress.status == Status::Failed)
+            {
+                break;
+            }
+            if (std::chrono::steady_clock::now() - startTime > std::chrono::seconds(5))
+            {
+                FAIL("Stream timeout");
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        CHECK(scheduler.GetStreamProgress(streamHandle).status == Status::Completed);
+        
+        uint32_t totalExpectedChunks = static_cast<uint32_t>((readBuffer.size() + streamDesc.chunkSize - 1) / streamDesc.chunkSize);
+        CHECK(chunksCompleted.load() == totalExpectedChunks);
+
+        std::string readStr(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
+        CHECK(readStr == testData);
+    }
+
     PlatformCloseFile(handle);
     scheduler.Shutdown();
+    Zero::ShutdownJobSystem();
     std::filesystem::remove(tempFilePath);
 }

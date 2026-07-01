@@ -30,6 +30,16 @@ namespace Zero
         return BlockingThreadPool::Get().make_counter();
     }
 
+    void InitJobSystem(uint32_t threadCount)
+    {
+        BlockingThreadPool::Get().Init(threadCount);
+    }
+
+    void ShutdownJobSystem()
+    {
+        BlockingThreadPool::Get().Shutdown();
+    }
+
     void WaitIdle()
     {
         BlockingThreadPool::Get().wait_idle();

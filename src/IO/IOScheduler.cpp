@@ -35,8 +35,8 @@ namespace Zero::IO
 
         struct alignas(4) IOSlot 
         {
-            IORequestState state;
-            uint16_t generation;
+            IORequestState state{ IORequestState::Free };
+            uint16_t generation{ 1 };
         };
         static_assert(sizeof(IOSlot) == 4, "IOSlot must be 4 bytes");
         static_assert(std::is_trivially_copyable_v<IOSlot>, "IOSlot must be trivially copyable");
@@ -46,11 +46,13 @@ namespace Zero::IO
             Read,
             Write,
             Append,
-            ReadScatter
+            ReadScatter,
+            StreamChunk
         };
 
         struct IORequestPayload 
         {
+            IORequestPayload() noexcept : single{nullptr, 0} {}
             FileHandle file;
             union 
             {
@@ -64,6 +66,13 @@ namespace Zero::IO
                     const ScatterRange* ranges;
                     size_t rangeCount;
                 } scatter;
+                struct 
+                {
+                    StreamHandle streamHandle;
+                    size_t chunkIndex;
+                    void* buffer;
+                    size_t offset;
+                } stream;
             };
             IOOperation operation{ IOOperation::Read };
             JobCounter* fenceCounter{ nullptr };
@@ -78,13 +87,24 @@ namespace Zero::IO
 
         struct alignas(64) IOStreamState 
         {
+            std::atomic<uint32_t> nextChunkToSubmit{ 0 };
             std::atomic<uint32_t> activeChunks{ 0 };
             std::atomic<uint32_t> completedChunks{ 0 };
             std::atomic<uint32_t> totalChunks{ 0 };
-            std::atomic<uint32_t> bytesRead{ 0 };
+            std::atomic<bool> cancelled{ false };
             std::atomic<bool> failed{ false };
+            
             uint16_t generation{ 1 };
-            Job streamFinishedJob;
+            
+            FileHandle file;
+            size_t streamOffset{ 0 };
+            size_t streamTotalSize{ 0 };
+            size_t chunkSize{ 0 };
+            std::byte* destination{ nullptr };
+            
+            Priority priority;
+            Job chunkCompletionJob;
+            Job streamCompletionJob;
         };
     }
 
@@ -99,8 +119,8 @@ namespace Zero::IO
         std::unique_ptr<std::atomic<uint32_t>[]> slotNextFree;
         alignas(64) std::atomic<uint64_t> slotFreeHead{ 0 };
 
-        std::unique_ptr<Internal::IOStreamState[]> streams;
-        std::unique_ptr<std::atomic<uint32_t>[]> streamNextFree;
+        std::unique_ptr<Internal::IOStreamState[]> streamSlots;
+        std::unique_ptr<std::atomic<uint64_t>[]> streamNextFree;
         alignas(64) std::atomic<uint64_t> streamFreeHead{ 0 };
 
         struct PriorityLane 
@@ -126,20 +146,15 @@ namespace Zero::IO
 
             for (uint32_t i = 1; i < config.maxConcurrentRequests; ++i) 
             {
-                slots[i].state = Internal::IORequestState::Free;
-                slots[i].generation = 1;
                 slotNextFree[i].store(i + 1, std::memory_order_relaxed);
             }
             slotNextFree[config.maxConcurrentRequests].store(0, std::memory_order_relaxed);
             slotFreeHead.store((1ULL << 32) | 1, std::memory_order_relaxed); // gen 1, index 1
 
-            uint32_t streamCount = config.maxConcurrentStreams + 1;
-            streams = std::make_unique<Internal::IOStreamState[]>(streamCount);
-            streamNextFree = std::make_unique<std::atomic<uint32_t>[]>(streamCount);
-            
+            streamSlots = std::make_unique<Internal::IOStreamState[]>(config.maxConcurrentStreams + 1);
+            streamNextFree = std::make_unique<std::atomic<uint64_t>[]>(config.maxConcurrentStreams + 1);
             for (uint32_t i = 1; i < config.maxConcurrentStreams; ++i) 
             {
-                streams[i].generation = 1;
                 streamNextFree[i].store(i + 1, std::memory_order_relaxed);
             }
             streamNextFree[config.maxConcurrentStreams].store(0, std::memory_order_relaxed);
@@ -213,37 +228,33 @@ namespace Zero::IO
             }
         }
 
-        uint32_t AllocateStream() 
+        uint32_t AllocateStreamSlot() 
         {
-            uint64_t headVal = streamFreeHead.load(std::memory_order_acquire);
+            uint64_t head = streamFreeHead.load(std::memory_order_acquire);
             while (true) 
             {
-                uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
-                if (headIndex == 0) return 0;
+                uint32_t index = static_cast<uint32_t>(head & 0xFFFFFFFF);
+                if (index == 0 || index > config.maxConcurrentStreams) return 0;
 
-                uint32_t nextIndex = streamNextFree[headIndex].load(std::memory_order_relaxed);
-                uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
-                uint64_t newVal = (static_cast<uint64_t>(newGen) << 32) | nextIndex;
+                uint64_t next = streamNextFree[index].load(std::memory_order_relaxed);
+                uint64_t newHead = ((head >> 32) + 1) << 32 | (next & 0xFFFFFFFF);
 
-                if (streamFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_acquire))
+                if (streamFreeHead.compare_exchange_weak(head, newHead, std::memory_order_release, std::memory_order_acquire)) 
                 {
-                    return headIndex;
+                    return index;
                 }
             }
         }
 
-        void FreeStream(uint32_t index) 
+        void FreeStreamSlot(uint32_t index) 
         {
-            uint64_t headVal = streamFreeHead.load(std::memory_order_relaxed);
+            streamSlots[index].generation++;
+            uint64_t head = streamFreeHead.load(std::memory_order_acquire);
             while (true) 
             {
-                uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
-                streamNextFree[index].store(headIndex, std::memory_order_relaxed);
-
-                uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
-                uint64_t newVal = (static_cast<uint64_t>(newGen) << 32) | index;
-
-                if (streamFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_relaxed)) 
+                streamNextFree[index].store(head & 0xFFFFFFFF, std::memory_order_relaxed);
+                uint64_t newHead = ((head >> 32) + 1) << 32 | index;
+                if (streamFreeHead.compare_exchange_weak(head, newHead, std::memory_order_release, std::memory_order_acquire)) 
                 {
                     break;
                 }
@@ -262,13 +273,44 @@ namespace Zero::IO
             wakeupSemaphore.Signal();
         }
 
+        void SubmitStreamChunk(uint32_t streamIndex, size_t chunkIndex)
+        {
+            auto& stream = streamSlots[streamIndex];
+            if (stream.cancelled.load(std::memory_order_acquire) || stream.failed.load(std::memory_order_acquire)) return;
+
+            uint32_t slot = AllocateSlot();
+            if (slot == 0) return;
+
+            size_t offset = stream.streamOffset + (chunkIndex * stream.chunkSize);
+            size_t size = stream.chunkSize;
+            if (offset + size > stream.streamOffset + stream.streamTotalSize)
+            {
+                size = (stream.streamOffset + stream.streamTotalSize) - offset;
+            }
+
+            auto& payload = payloads[slot];
+            payload.operation = Internal::IOOperation::StreamChunk;
+            payload.file = stream.file;
+            payload.stream.streamHandle = StreamHandle{ (static_cast<uint32_t>(stream.generation) << 16) | streamIndex };
+            payload.stream.chunkIndex = chunkIndex;
+            payload.stream.buffer = stream.destination + (chunkIndex * stream.chunkSize);
+            payload.stream.offset = offset;
+            payload.requestedBytes = static_cast<uint32_t>(size);
+            payload.fenceCounter = nullptr;
+            payload.completionJob.fn = nullptr;
+
+            std::atomic_ref<Internal::IORequestState> stateRef(slots[slot].state);
+            stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
+
+            SubmitToLane(stream.priority, slot);
+        }
+
         void WorkerLoop() 
         {
             while (!shuttingDown.load(std::memory_order_acquire)) 
             {
                 uint32_t handleIndex = 0;
                 
-                // Pop highest priority (4 = Critical, 0 = Background)
                 for (int i = 4; i >= 0; --i) 
                 {
                     Zero::ScopedLock lock(lanes[i].mutex);
@@ -327,26 +369,74 @@ namespace Zero::IO
                     result = totalRead; 
                 }
             }
-
-            if (result) 
+            else if (payload.operation == Internal::IOOperation::StreamChunk)
             {
-                payload.bytesTransferred = static_cast<uint32_t>(result.value());
-                stateRef.store(Internal::IORequestState::Completed, std::memory_order_release);
-            } 
-            else 
-            {
-                payload.errorCode = result.error();
-                stateRef.store(Internal::IORequestState::Failed, std::memory_order_release);
+                result = PlatformRead(payload.file, payload.stream.buffer, payload.requestedBytes, payload.stream.offset);
             }
+
+            payload.bytesTransferred = result ? static_cast<uint32_t>(result.value()) : 0;
+            if (!result) payload.errorCode = result.error();
+
+            if (payload.operation == Internal::IOOperation::StreamChunk)
+            {
+                uint32_t streamIndex = payload.stream.streamHandle.GetIndex();
+                auto& stream = streamSlots[streamIndex];
+                
+                if (stream.generation == payload.stream.streamHandle.GetGeneration())
+                {
+                    if (!result) stream.failed.store(true, std::memory_order_release);
+
+                    if (!stream.cancelled.load(std::memory_order_acquire))
+                    {
+                        if (stream.chunkCompletionJob.fn != nullptr)
+                        {
+                            Job chunkJob = stream.chunkCompletionJob;
+                            StreamChunkResult chunkResult;
+                            chunkResult.chunkIndex = payload.stream.chunkIndex;
+                            chunkResult.fileOffset = payload.stream.offset;
+                            chunkResult.bytesRead = payload.bytesTransferred;
+                            chunkResult.memory = std::span<std::byte>{ static_cast<std::byte*>(payload.stream.buffer), payload.bytesTransferred };
+                            
+                            memcpy(chunkJob.payload, &chunkResult, sizeof(StreamChunkResult));
+                            Zero::Enqueue(chunkJob);
+                        }
+                    }
+
+                    uint32_t completed = stream.completedChunks.fetch_add(1, std::memory_order_acq_rel) + 1;
+                    stream.activeChunks.fetch_sub(1, std::memory_order_acq_rel);
+
+                    uint32_t total = stream.totalChunks.load(std::memory_order_acquire);
+                    if (completed == total)
+                    {
+                        if (stream.streamCompletionJob.fn != nullptr)
+                        {
+                            Zero::Enqueue(stream.streamCompletionJob);
+                        }
+                    }
+                    else
+                    {
+                        uint32_t nextChunk = stream.nextChunkToSubmit.fetch_add(1, std::memory_order_acq_rel);
+                        if (nextChunk < total && !stream.cancelled.load(std::memory_order_acquire) && !stream.failed.load(std::memory_order_acquire))
+                        {
+                            stream.activeChunks.fetch_add(1, std::memory_order_acq_rel);
+                            SubmitStreamChunk(streamIndex, nextChunk);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (payload.completionJob.fn != nullptr) 
+                {
+                    Zero::Enqueue(payload.completionJob);
+                }
+            }
+
+            stateRef.store(result ? Internal::IORequestState::Completed : Internal::IORequestState::Failed, std::memory_order_release);
 
             if (payload.fenceCounter) 
             {
                 payload.fenceCounter->Decrement();
-            }
-
-            if (payload.completionJob.fn) 
-            {
-                Zero::Enqueue(payload.completionJob);
             }
         }
     };
@@ -370,7 +460,6 @@ namespace Zero::IO
         m_impl->Shutdown();
     }
 
-    // STUBS FOR PHASE 2 - Implementation follows in subsequent phases
     IOHandle Scheduler::Submit(const ReadRequest& request) noexcept
     {
         uint32_t slot = m_impl->AllocateSlot();
@@ -451,7 +540,43 @@ namespace Zero::IO
         return handle;
     }
 
-    StreamHandle Scheduler::SubmitStream(const StreamReadDescriptor&) noexcept { return StreamHandle{}; }
+    StreamHandle Scheduler::SubmitStream(const StreamReadDescriptor& desc) noexcept 
+    {
+        uint32_t slot = m_impl->AllocateStreamSlot();
+        if (slot == 0) return StreamHandle{ 0 };
+
+        auto& stream = m_impl->streamSlots[slot];
+        stream.file = desc.file;
+        stream.streamOffset = desc.offset;
+        stream.streamTotalSize = desc.totalSize;
+        stream.chunkSize = desc.chunkSize > 0 ? desc.chunkSize : m_impl->config.defaultChunkSize;
+        stream.destination = desc.destination.data();
+        stream.priority = desc.priority;
+        stream.chunkCompletionJob = desc.chunkCompletionJob;
+        stream.streamCompletionJob = desc.streamCompletionJob;
+
+        uint32_t totalChunks = static_cast<uint32_t>((desc.totalSize + stream.chunkSize - 1) / stream.chunkSize);
+        stream.totalChunks.store(totalChunks, std::memory_order_relaxed);
+        stream.completedChunks.store(0, std::memory_order_relaxed);
+        stream.cancelled.store(false, std::memory_order_relaxed);
+        stream.failed.store(false, std::memory_order_relaxed);
+
+        uint32_t initialWindow = std::min(desc.slidingWindowSize, totalChunks);
+        if (initialWindow == 0) initialWindow = 1;
+
+        stream.nextChunkToSubmit.store(initialWindow, std::memory_order_release);
+        stream.activeChunks.store(initialWindow, std::memory_order_release);
+
+        uint16_t gen = stream.generation;
+        StreamHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
+
+        for (uint32_t i = 0; i < initialWindow; ++i)
+        {
+            m_impl->SubmitStreamChunk(slot, i);
+        }
+
+        return handle;
+    }
 
     void Scheduler::SubmitBatch(std::span<const ReadRequest> reads, std::span<IOHandle> outHandles) noexcept 
     {
@@ -496,48 +621,86 @@ namespace Zero::IO
         return CancelResult::NotCancelable;
     }
 
-    CancelResult Scheduler::CancelStream(StreamHandle) noexcept { return CancelResult::InvalidHandle; }
+    CancelResult Scheduler::CancelStream(StreamHandle handle) noexcept 
+    {
+        uint32_t index = handle.GetIndex();
+        if (index == 0 || index > m_impl->config.maxConcurrentStreams) return CancelResult::InvalidHandle;
+
+        auto& stream = m_impl->streamSlots[index];
+        if (stream.generation != handle.GetGeneration()) return CancelResult::AlreadyCompleted;
+
+        bool expected = false;
+        if (stream.cancelled.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        {
+            if (stream.completedChunks.load(std::memory_order_acquire) == stream.totalChunks.load(std::memory_order_acquire))
+            {
+                return CancelResult::AlreadyCompleted;
+            }
+            return CancelResult::Cancelled;
+        }
+
+        return CancelResult::AlreadyCancelled;
+    }
 
     IOProgress Scheduler::GetProgress(IOHandle handle) noexcept 
     {
         IOProgress progress;
+        progress.status = Status::Pending;
         if (!handle.IsValid()) return progress;
 
         uint32_t index = handle.GetIndex();
-        if (index >= m_impl->config.maxConcurrentRequests) return progress;
+        if (index == 0 || index > m_impl->config.maxConcurrentRequests) return {};
 
-        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[index].state);
-        auto state = stateRef.load(std::memory_order_acquire);
-        auto gen = m_impl->slots[index].generation;
+        auto& slot = m_impl->slots[index];
+        if (slot.generation != handle.GetGeneration()) return {};
 
-        if (gen != handle.GetGeneration()) 
-        {
-            progress.status = Status::Completed; 
-            return progress;
-        }
-
-        switch (state) 
-        {
-            case Internal::IORequestState::Free: progress.status = Status::Completed; break;
-            case Internal::IORequestState::Queued: progress.status = Status::Pending; break;
-            case Internal::IORequestState::Executing: progress.status = Status::Executing; break;
-            case Internal::IORequestState::Completed: progress.status = Status::Completed; break;
-            case Internal::IORequestState::Failed: progress.status = Status::Failed; break;
-            case Internal::IORequestState::Cancelled: progress.status = Status::Cancelled; break;
-        }
-
+        std::atomic_ref<Internal::IORequestState> stateRef(slot.state);
+        Internal::IORequestState state = stateRef.load(std::memory_order_acquire);
+        
         progress.bytesTransferred = m_impl->payloads[index].bytesTransferred;
         progress.totalBytes = m_impl->payloads[index].requestedBytes;
 
+        switch (state) 
+        {
+            case Internal::IORequestState::Completed: progress.status = Status::Completed; break;
+            case Internal::IORequestState::Failed:    progress.status = Status::Failed; break;
+            case Internal::IORequestState::Cancelled: progress.status = Status::Cancelled; break;
+            default:                                  progress.status = Status::Executing; break;
+        }
+
         return progress;
     }
-    IOProgress Scheduler::GetStreamProgress(StreamHandle) noexcept { return IOProgress{}; }
+
+    IOProgress Scheduler::GetStreamProgress(StreamHandle handle) noexcept 
+    {
+        uint32_t index = handle.GetIndex();
+        if (index == 0 || index > m_impl->config.maxConcurrentStreams) return {};
+
+        auto& stream = m_impl->streamSlots[index];
+        if (stream.generation != handle.GetGeneration()) return {}; 
+
+        IOProgress progress;
+        progress.bytesTransferred = stream.completedChunks.load(std::memory_order_acquire) * stream.chunkSize;
+        if (progress.bytesTransferred > stream.streamTotalSize) progress.bytesTransferred = stream.streamTotalSize;
+        progress.totalBytes = stream.streamTotalSize;
+
+        if (stream.failed.load(std::memory_order_acquire))
+            progress.status = Status::Failed;
+        else if (stream.cancelled.load(std::memory_order_acquire))
+            progress.status = Status::Cancelled;
+        else if (stream.completedChunks.load(std::memory_order_acquire) == stream.totalChunks.load(std::memory_order_acquire))
+            progress.status = Status::Completed;
+        else
+            progress.status = Status::Executing;
+
+        return progress;
+    }
     std::expected<size_t, std::error_code> Scheduler::GetResult(IOHandle) noexcept { return 0; }
     void Scheduler::RegisterCoroutineSuspension(IOHandle, void*) noexcept {}
 
     uint32_t Scheduler::TestAllocateSlot() noexcept { return m_impl->AllocateSlot(); }
     void Scheduler::TestFreeSlot(uint32_t index) noexcept { m_impl->FreeSlot(index); }
-    uint32_t Scheduler::TestAllocateStream() noexcept { return m_impl->AllocateStream(); }
-    void Scheduler::TestFreeStream(uint32_t index) noexcept { m_impl->FreeStream(index); }
+    uint32_t Scheduler::TestAllocateStream() noexcept { return m_impl->AllocateStreamSlot(); }
+    void Scheduler::TestFreeStream(uint32_t index) noexcept { m_impl->FreeStreamSlot(index); }
 
 }

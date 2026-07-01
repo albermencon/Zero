@@ -48,6 +48,8 @@ namespace Zero
     // Allocate from pool — always pair with counter.Release() after Wait()
     [[nodiscard]] ZERO_API JobCounter& MakeCounter();
 
+    void ZERO_API InitJobSystem(uint32_t threadCount = 0);
+    void ZERO_API ShutdownJobSystem();
     void ZERO_API WaitIdle();
 }
 
