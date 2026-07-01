@@ -5,10 +5,14 @@
 #include <system_error>
 #include <expected>
 
-namespace Zero::IO {
+namespace Zero::IO 
+{
     // Note: To support async I/O efficiently on all platforms, PlatformOpenFile must 
     // open the handle with the necessary flags (e.g., FILE_FLAG_OVERLAPPED on Windows).
     std::expected<FileHandle, std::error_code> PlatformOpenFile(const std::filesystem::path& path, FileAccess access, FileShare share, IOFlags flags = IOFlags::None) noexcept;
     
     void PlatformCloseFile(FileHandle& handle) noexcept;
+
+    std::expected<size_t, std::error_code> PlatformRead(FileHandle handle, void* buffer, size_t size, size_t offset) noexcept;
+    std::expected<size_t, std::error_code> PlatformWrite(FileHandle handle, const void* buffer, size_t size, size_t offset) noexcept;
 }

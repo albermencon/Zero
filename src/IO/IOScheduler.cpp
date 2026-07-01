@@ -3,6 +3,12 @@
 #include <atomic>
 #include <vector>
 #include <cassert>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <thread>
+#include <Engine/JobSystem/JobSystem.h>
+#include <Engine/IO/Platform/IOPlatform.h>
 
 #if defined(_MSC_VER)
     #define ZERO_FORCEINLINE __forceinline
@@ -12,9 +18,11 @@
     #define ZERO_FORCEINLINE inline
 #endif
 
-namespace Zero::IO {
+namespace Zero::IO 
+{
 
-    namespace Internal {
+    namespace Internal 
+    {
         enum class IORequestState : uint8_t 
         {
             Free = 0,
@@ -33,8 +41,22 @@ namespace Zero::IO {
         static_assert(sizeof(IOSlot) == 4, "IOSlot must be 4 bytes");
         static_assert(std::is_trivially_copyable_v<IOSlot>, "IOSlot must be trivially copyable");
 
+        enum class IOOperation : uint8_t 
+        {
+            Read,
+            Write,
+            Append,
+            ReadScatter
+        };
+
         struct IORequestPayload 
         {
+            FileHandle file;
+            void* buffer{ nullptr };
+            size_t offset{ 0 };
+            IOOperation operation{ IOOperation::Read };
+            JobCounter* fenceCounter{ nullptr };
+
             Job completionJob;
             std::error_code errorCode;
             uint32_t bytesTransferred{ 0 };
@@ -70,6 +92,19 @@ namespace Zero::IO {
         std::unique_ptr<std::atomic<uint32_t>[]> streamNextFree;
         alignas(64) std::atomic<uint64_t> streamFreeHead{ 0 };
 
+        struct PriorityLane 
+        {
+            std::mutex mutex;
+            std::deque<uint32_t> queue;
+        };
+
+        PriorityLane lanes[5]; // Critical, High, Normal, Low, Background
+        
+        std::vector<std::thread> workers;
+        std::mutex cvMutex;
+        std::condition_variable cv;
+        std::atomic<bool> shuttingDown{ false };
+
         Impl(const SchedulerConfig& cfg) : config(cfg) {}
 
         void Init() 
@@ -79,7 +114,8 @@ namespace Zero::IO {
             payloads = std::make_unique<Internal::IORequestPayload[]>(reqCount);
             slotNextFree = std::make_unique<std::atomic<uint32_t>[]>(reqCount);
 
-            for (uint32_t i = 1; i < config.maxConcurrentRequests; ++i) {
+            for (uint32_t i = 1; i < config.maxConcurrentRequests; ++i) 
+            {
                 slots[i].state = Internal::IORequestState::Free;
                 slots[i].generation = 1;
                 slotNextFree[i].store(i + 1, std::memory_order_relaxed);
@@ -97,12 +133,35 @@ namespace Zero::IO {
                 streamNextFree[i].store(i + 1, std::memory_order_relaxed);
             }
             streamNextFree[config.maxConcurrentStreams].store(0, std::memory_order_relaxed);
-            streamFreeHead.store((1ULL << 32) | 1, std::memory_order_relaxed);
+            streamFreeHead.store((uint64_t(1) << 32) | 1, std::memory_order_relaxed);
+
+            uint32_t workerCount = (config.workerMode == WorkerMode::Automatic) ? std::thread::hardware_concurrency() : config.workerCount;
+            if (workerCount == 0) workerCount = 1;
+
+            shuttingDown.store(false, std::memory_order_relaxed);
+            for (uint32_t i = 0; i < workerCount; ++i) 
+            {
+                workers.emplace_back(&Impl::WorkerLoop, this);
+            }
         }
 
-        uint32_t AllocateSlot() {
+        void Shutdown()
+        {
+            shuttingDown.store(true, std::memory_order_release);
+            cv.notify_all();
+
+            for (auto& worker : workers) 
+            {
+                if (worker.joinable()) worker.join();
+            }
+            workers.clear();
+        }
+
+        uint32_t AllocateSlot()
+        {
             uint64_t headVal = slotFreeHead.load(std::memory_order_acquire);
-            while (true) {
+            while (true) 
+            {
                 uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
                 if (headIndex == 0) return 0; // Out of slots
 
@@ -110,30 +169,36 @@ namespace Zero::IO {
                 uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
                 uint64_t newVal = (static_cast<uint64_t>(newGen) << 32) | nextIndex;
 
-                if (slotFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_acquire)) {
+                if (slotFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_acquire)) 
+                {
                     return headIndex;
                 }
             }
         }
 
-        void FreeSlot(uint32_t index) {
+        void FreeSlot(uint32_t index) 
+        {
             uint64_t headVal = slotFreeHead.load(std::memory_order_relaxed);
-            while (true) {
+            while (true) 
+            {
                 uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
                 slotNextFree[index].store(headIndex, std::memory_order_relaxed);
 
                 uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
                 uint64_t newVal = (static_cast<uint64_t>(newGen) << 32) | index;
 
-                if (slotFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_relaxed)) {
+                if (slotFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_relaxed)) 
+                {
                     break;
                 }
             }
         }
 
-        uint32_t AllocateStream() {
+        uint32_t AllocateStream() 
+        {
             uint64_t headVal = streamFreeHead.load(std::memory_order_acquire);
-            while (true) {
+            while (true) 
+            {
                 uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
                 if (headIndex == 0) return 0;
 
@@ -141,48 +206,191 @@ namespace Zero::IO {
                 uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
                 uint64_t newVal = (static_cast<uint64_t>(newGen) << 32) | nextIndex;
 
-                if (streamFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_acquire)) {
+                if (streamFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_acquire))
+                {
                     return headIndex;
                 }
             }
         }
 
-        void FreeStream(uint32_t index) {
+        void FreeStream(uint32_t index) 
+        {
             uint64_t headVal = streamFreeHead.load(std::memory_order_relaxed);
-            while (true) {
+            while (true) 
+            {
                 uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
                 streamNextFree[index].store(headIndex, std::memory_order_relaxed);
 
                 uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
                 uint64_t newVal = (static_cast<uint64_t>(newGen) << 32) | index;
 
-                if (streamFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_relaxed)) {
+                if (streamFreeHead.compare_exchange_weak(headVal, newVal, std::memory_order_release, std::memory_order_relaxed)) 
+                {
                     break;
                 }
+            }
+        }
+
+        void SubmitToLane(Priority priority, uint32_t slotIndex) 
+        {
+            int laneIndex = static_cast<int>(priority);
+            if (laneIndex < 0 || laneIndex > 4) laneIndex = 2; // Default Normal
+
+            {
+                std::lock_guard<std::mutex> lock(lanes[laneIndex].mutex);
+                lanes[laneIndex].queue.push_back(slotIndex);
+            }
+            cv.notify_one();
+        }
+
+        void WorkerLoop() 
+        {
+            while (!shuttingDown.load(std::memory_order_acquire)) 
+            {
+                uint32_t handleIndex = 0;
+                
+                // Pop highest priority (4 = Critical, 0 = Background)
+                for (int i = 4; i >= 0; --i) 
+                {
+                    std::lock_guard<std::mutex> lock(lanes[i].mutex);
+                    if (!lanes[i].queue.empty()) 
+                    {
+                        handleIndex = lanes[i].queue.front();
+                        lanes[i].queue.pop_front();
+                        break;
+                    }
+                }
+
+                if (handleIndex != 0) 
+                {
+                    ExecuteRequest(handleIndex);
+                } 
+                else 
+                {
+                    std::unique_lock<std::mutex> lock(cvMutex);
+                    cv.wait(lock, [this]() 
+                    {
+                        if (shuttingDown.load(std::memory_order_acquire)) return true;
+                        for (int i = 0; i < 5; ++i) 
+                        {
+                            std::lock_guard<std::mutex> qlock(lanes[i].mutex);
+                            if (!lanes[i].queue.empty()) return true;
+                        }
+                        return false;
+                    });
+                }
+            }
+        }
+
+        void ExecuteRequest(uint32_t index) 
+        {
+            std::atomic_ref<Internal::IORequestState> stateRef(slots[index].state);
+            stateRef.store(Internal::IORequestState::Executing, std::memory_order_release);
+
+            auto& payload = payloads[index];
+
+            std::expected<size_t, std::error_code> result = std::unexpected(std::error_code());
+
+            if (payload.operation == Internal::IOOperation::Read) 
+            {
+                result = PlatformRead(payload.file, payload.buffer, payload.requestedBytes, payload.offset);
+            }
+            else if (payload.operation == Internal::IOOperation::Write) 
+            {
+                result = PlatformWrite(payload.file, payload.buffer, payload.requestedBytes, payload.offset);
+            }
+
+            if (result) 
+            {
+                payload.bytesTransferred = static_cast<uint32_t>(result.value());
+                stateRef.store(Internal::IORequestState::Completed, std::memory_order_release);
+            } 
+            else 
+            {
+                payload.errorCode = result.error();
+                stateRef.store(Internal::IORequestState::Failed, std::memory_order_release);
+            }
+
+            if (payload.fenceCounter) 
+            {
+                payload.fenceCounter->Decrement();
+            }
+
+            if (payload.completionJob.fn) 
+            {
+                Zero::Enqueue(payload.completionJob);
             }
         }
     };
 
     Scheduler::Scheduler(const SchedulerConfig& config) noexcept
-        : m_impl(new Impl(config)) {
-    }
+        : m_impl(new Impl(config)) {}
 
-    Scheduler::~Scheduler() noexcept {
+    Scheduler::~Scheduler() noexcept 
+    {
         Shutdown();
         delete m_impl;
     }
 
-    void Scheduler::Init() {
+    void Scheduler::Init() 
+    {
         m_impl->Init();
     }
 
-    void Scheduler::Shutdown() {
-        // Shutdown logic (Phase 3 workers)
+    void Scheduler::Shutdown() 
+    {
+        m_impl->Shutdown();
     }
 
     // STUBS FOR PHASE 2 - Implementation follows in subsequent phases
-    IOHandle Scheduler::Submit(const ReadRequest&) noexcept { return IOHandle{}; }
-    IOHandle Scheduler::Submit(const WriteRequest&) noexcept { return IOHandle{}; }
+    IOHandle Scheduler::Submit(const ReadRequest& request) noexcept
+    {
+        uint32_t slot = m_impl->AllocateSlot();
+        if (slot == 0) return IOHandle{ 0 };
+
+        auto& payload = m_impl->payloads[slot];
+        payload.operation = Internal::IOOperation::Read;
+        payload.file = request.file;
+        payload.buffer = request.destination.data();
+        payload.requestedBytes = static_cast<uint32_t>(request.destination.size());
+        payload.offset = request.offset;
+        payload.completionJob = request.completionJob;
+        payload.fenceCounter = request.fence.counter;
+
+        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[slot].state);
+        stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
+
+        uint16_t gen = m_impl->slots[slot].generation;
+        IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
+
+        m_impl->SubmitToLane(request.priority, slot);
+        return handle;
+    }
+
+    IOHandle Scheduler::Submit(const WriteRequest& request) noexcept
+    {
+        uint32_t slot = m_impl->AllocateSlot();
+        if (slot == 0) return IOHandle{ 0 };
+
+        auto& payload = m_impl->payloads[slot];
+        payload.operation = Internal::IOOperation::Write;
+        payload.file = request.file;
+        payload.buffer = const_cast<void*>(static_cast<const void*>(request.source.data()));
+        payload.requestedBytes = static_cast<uint32_t>(request.source.size());
+        payload.offset = request.offset;
+        payload.completionJob = request.completionJob;
+        payload.fenceCounter = request.fence.counter;
+
+        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[slot].state);
+        stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
+
+        uint16_t gen = m_impl->slots[slot].generation;
+        IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
+
+        m_impl->SubmitToLane(request.priority, slot);
+        return handle;
+    }
+
     IOHandle Scheduler::Submit(const AppendRequest&) noexcept { return IOHandle{}; }
     IOHandle Scheduler::SubmitScatter(const ReadScatterRequest&) noexcept { return IOHandle{}; }
     StreamHandle Scheduler::SubmitStream(const StreamReadDescriptor&) noexcept { return StreamHandle{}; }
@@ -190,10 +398,64 @@ namespace Zero::IO {
     void Scheduler::SubmitBatch(std::span<const ReadRequest>, std::span<IOHandle>) noexcept {}
     void Scheduler::SubmitBatch(std::span<const WriteRequest>, std::span<IOHandle>) noexcept {}
 
-    CancelResult Scheduler::Cancel(IOHandle) noexcept { return CancelResult::InvalidHandle; }
+    CancelResult Scheduler::Cancel(IOHandle handle) noexcept 
+    {
+        if (!handle.IsValid()) return CancelResult::InvalidHandle;
+
+        uint32_t index = handle.GetIndex();
+        if (index >= m_impl->config.maxConcurrentRequests) return CancelResult::InvalidHandle;
+
+        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[index].state);
+
+        auto expectedState = Internal::IORequestState::Queued;
+        if (stateRef.compare_exchange_strong(expectedState, Internal::IORequestState::Cancelled, std::memory_order_release, std::memory_order_relaxed)) 
+        {
+            if (m_impl->slots[index].generation != handle.GetGeneration()) return CancelResult::AlreadyCompleted;
+            return CancelResult::Cancelled;
+        }
+
+        auto state = stateRef.load(std::memory_order_acquire);
+        if (state == Internal::IORequestState::Completed) return CancelResult::AlreadyCompleted;
+        if (state == Internal::IORequestState::Cancelled) return CancelResult::AlreadyCancelled;
+        
+        return CancelResult::NotCancelable;
+    }
+
     CancelResult Scheduler::CancelStream(StreamHandle) noexcept { return CancelResult::InvalidHandle; }
 
-    IOProgress Scheduler::GetProgress(IOHandle) noexcept { return IOProgress{}; }
+    IOProgress Scheduler::GetProgress(IOHandle handle) noexcept 
+    {
+        IOProgress progress;
+        if (!handle.IsValid()) return progress;
+
+        uint32_t index = handle.GetIndex();
+        if (index >= m_impl->config.maxConcurrentRequests) return progress;
+
+        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[index].state);
+        auto state = stateRef.load(std::memory_order_acquire);
+        auto gen = m_impl->slots[index].generation;
+
+        if (gen != handle.GetGeneration()) 
+        {
+            progress.status = Status::Completed; 
+            return progress;
+        }
+
+        switch (state) 
+        {
+            case Internal::IORequestState::Free: progress.status = Status::Completed; break;
+            case Internal::IORequestState::Queued: progress.status = Status::Pending; break;
+            case Internal::IORequestState::Executing: progress.status = Status::Executing; break;
+            case Internal::IORequestState::Completed: progress.status = Status::Completed; break;
+            case Internal::IORequestState::Failed: progress.status = Status::Failed; break;
+            case Internal::IORequestState::Cancelled: progress.status = Status::Cancelled; break;
+        }
+
+        progress.bytesTransferred = m_impl->payloads[index].bytesTransferred;
+        progress.totalBytes = m_impl->payloads[index].requestedBytes;
+
+        return progress;
+    }
     IOProgress Scheduler::GetStreamProgress(StreamHandle) noexcept { return IOProgress{}; }
     std::expected<size_t, std::error_code> Scheduler::GetResult(IOHandle) noexcept { return 0; }
     void Scheduler::RegisterCoroutineSuspension(IOHandle, void*) noexcept {}
