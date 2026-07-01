@@ -52,8 +52,19 @@ namespace Zero::IO
         struct IORequestPayload 
         {
             FileHandle file;
-            void* buffer{ nullptr };
-            size_t offset{ 0 };
+            union 
+            {
+                struct 
+                {
+                    void* buffer;
+                    size_t offset;
+                } single;
+                struct 
+                {
+                    const ScatterRange* ranges;
+                    size_t rangeCount;
+                } scatter;
+            };
             IOOperation operation{ IOOperation::Read };
             JobCounter* fenceCounter{ nullptr };
 
@@ -291,11 +302,30 @@ namespace Zero::IO
 
             if (payload.operation == Internal::IOOperation::Read) 
             {
-                result = PlatformRead(payload.file, payload.buffer, payload.requestedBytes, payload.offset);
+                result = PlatformRead(payload.file, payload.single.buffer, payload.requestedBytes, payload.single.offset);
             }
             else if (payload.operation == Internal::IOOperation::Write) 
             {
-                result = PlatformWrite(payload.file, payload.buffer, payload.requestedBytes, payload.offset);
+                result = PlatformWrite(payload.file, payload.single.buffer, payload.requestedBytes, payload.single.offset);
+            }
+            else if (payload.operation == Internal::IOOperation::ReadScatter)
+            {
+                size_t totalRead = 0;
+                for (size_t i = 0; i < payload.scatter.rangeCount; ++i) 
+                {
+                    const auto& range = payload.scatter.ranges[i];
+                    auto res = PlatformRead(payload.file, range.destination.data(), range.destination.size(), range.offset);
+                    if (!res) 
+                    {
+                        result = std::unexpected(res.error());
+                        break;
+                    }
+                    totalRead += res.value();
+                }
+                if (result.has_value() || totalRead > 0) 
+                {
+                    result = totalRead; 
+                }
             }
 
             if (result) 
@@ -349,9 +379,9 @@ namespace Zero::IO
         auto& payload = m_impl->payloads[slot];
         payload.operation = Internal::IOOperation::Read;
         payload.file = request.file;
-        payload.buffer = request.destination.data();
+        payload.single.buffer = request.destination.data();
+        payload.single.offset = request.offset;
         payload.requestedBytes = static_cast<uint32_t>(request.destination.size());
-        payload.offset = request.offset;
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
 
@@ -373,9 +403,9 @@ namespace Zero::IO
         auto& payload = m_impl->payloads[slot];
         payload.operation = Internal::IOOperation::Write;
         payload.file = request.file;
-        payload.buffer = const_cast<void*>(static_cast<const void*>(request.source.data()));
+        payload.single.buffer = const_cast<void*>(static_cast<const void*>(request.source.data()));
+        payload.single.offset = request.offset;
         payload.requestedBytes = static_cast<uint32_t>(request.source.size());
-        payload.offset = request.offset;
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
 
@@ -390,11 +420,58 @@ namespace Zero::IO
     }
 
     IOHandle Scheduler::Submit(const AppendRequest&) noexcept { return IOHandle{}; }
-    IOHandle Scheduler::SubmitScatter(const ReadScatterRequest&) noexcept { return IOHandle{}; }
+
+    IOHandle Scheduler::SubmitScatter(const ReadScatterRequest& request) noexcept 
+    {
+        uint32_t slot = m_impl->AllocateSlot();
+        if (slot == 0) return IOHandle{ 0 };
+
+        auto& payload = m_impl->payloads[slot];
+        payload.operation = Internal::IOOperation::ReadScatter;
+        payload.file = request.file;
+        payload.scatter.ranges = request.ranges.data();
+        payload.scatter.rangeCount = request.ranges.size();
+        
+        size_t totalBytes = 0;
+        for (const auto& range : request.ranges) {
+            totalBytes += range.destination.size();
+        }
+        payload.requestedBytes = static_cast<uint32_t>(totalBytes);
+        
+        payload.completionJob = request.completionJob;
+        payload.fenceCounter = request.fence.counter;
+
+        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[slot].state);
+        stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
+
+        uint16_t gen = m_impl->slots[slot].generation;
+        IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
+
+        m_impl->SubmitToLane(request.priority, slot);
+        return handle;
+    }
+
     StreamHandle Scheduler::SubmitStream(const StreamReadDescriptor&) noexcept { return StreamHandle{}; }
 
-    void Scheduler::SubmitBatch(std::span<const ReadRequest>, std::span<IOHandle>) noexcept {}
-    void Scheduler::SubmitBatch(std::span<const WriteRequest>, std::span<IOHandle>) noexcept {}
+    void Scheduler::SubmitBatch(std::span<const ReadRequest> reads, std::span<IOHandle> outHandles) noexcept 
+    {
+        if (reads.size() > outHandles.size()) return;
+        
+        for (size_t i = 0; i < reads.size(); ++i) 
+        {
+            outHandles[i] = Submit(reads[i]);
+        }
+    }
+
+    void Scheduler::SubmitBatch(std::span<const WriteRequest> writes, std::span<IOHandle> outHandles) noexcept 
+    {
+        if (writes.size() > outHandles.size()) return;
+        
+        for (size_t i = 0; i < writes.size(); ++i) 
+        {
+            outHandles[i] = Submit(writes[i]);
+        }
+    }
 
     CancelResult Scheduler::Cancel(IOHandle handle) noexcept 
     {
