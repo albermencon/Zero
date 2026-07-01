@@ -218,6 +218,58 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         CHECK(readStr == testData);
     }
 
+    SUBCASE("Direct I/O Alignment Validation")
+    {
+        // Must align to physical sector sizes for O_DIRECT / FILE_FLAG_NO_BUFFERING
+        alignas(4096) std::byte alignedBuffer[4096];
+        
+        std::string directFilePath = (std::filesystem::temp_directory_path() / "zero_io_direct_test.bin").string();
+
+        // Ensure our temp file is exactly 4096 bytes for this test
+        std::string directTestData(4096, 'D');
+        {
+            std::ofstream out(directFilePath, std::ios::binary);
+            out.write(directTestData.data(), directTestData.size());
+        }
+
+        auto directHandleRes = PlatformOpenFile(directFilePath, FileAccess::Read, FileShare::Read, IOFlags::Direct);
+        if (!directHandleRes)
+        {
+            MESSAGE("Direct IO Open Failed: ", directHandleRes.error().value(), " message: ", directHandleRes.error().message());
+        }
+        REQUIRE(directHandleRes.has_value());
+        FileHandle directHandle = directHandleRes.value();
+
+        JobCounter& counter = Zero::MakeCounter();
+        counter.pending.store(1, std::memory_order_release);
+
+        Job finishJob;
+        finishJob.mode = Job::Mode::Inline;
+        finishJob.fn = [](void*) {};
+
+        ReadRequest directReq;
+        directReq.file = directHandle;
+        directReq.destination = { alignedBuffer, sizeof(alignedBuffer) };
+        directReq.offset = 0;
+        directReq.completionJob = finishJob;
+        directReq.fence.counter = &counter;
+        directReq.flags = IOFlags::Direct;
+
+        IOHandle handle = scheduler.Submit(directReq);
+        REQUIRE(handle.IsValid());
+
+        counter.Wait();
+        counter.Release();
+
+        CHECK(scheduler.GetProgress(handle).status == Status::Completed);
+
+        std::string readStr(reinterpret_cast<const char*>(alignedBuffer), sizeof(alignedBuffer));
+        CHECK(readStr == directTestData);
+
+        PlatformCloseFile(directHandle);
+        std::filesystem::remove(directFilePath);
+    }
+
     PlatformCloseFile(handle);
     scheduler.Shutdown();
     Zero::ShutdownJobSystem();

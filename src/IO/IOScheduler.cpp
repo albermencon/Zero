@@ -462,6 +462,12 @@ namespace Zero::IO
 
     IOHandle Scheduler::Submit(const ReadRequest& request) noexcept
     {
+        if (HasFlag(request.flags, IOFlags::Direct))
+        {
+            size_t address = reinterpret_cast<size_t>(request.destination.data());
+            assert((address & 4095) == 0 && (request.offset & 4095) == 0 && (request.destination.size() & 4095) == 0);
+        }
+
         uint32_t slot = m_impl->AllocateSlot();
         if (slot == 0) return IOHandle{ 0 };
 
@@ -486,6 +492,12 @@ namespace Zero::IO
 
     IOHandle Scheduler::Submit(const WriteRequest& request) noexcept
     {
+        if (HasFlag(request.flags, IOFlags::Direct))
+        {
+            size_t address = reinterpret_cast<size_t>(request.source.data());
+            assert((address & 4095) == 0 && (request.offset & 4095) == 0 && (request.source.size() & 4095) == 0);
+        }
+
         uint32_t slot = m_impl->AllocateSlot();
         if (slot == 0) return IOHandle{ 0 };
 
@@ -512,6 +524,15 @@ namespace Zero::IO
 
     IOHandle Scheduler::SubmitScatter(const ReadScatterRequest& request) noexcept 
     {
+        if (HasFlag(request.flags, IOFlags::Direct))
+        {
+            for (const auto& range : request.ranges)
+            {
+                size_t address = reinterpret_cast<size_t>(range.destination.data());
+                assert((address & 4095) == 0 && (range.offset & 4095) == 0 && (range.destination.size() & 4095) == 0);
+            }
+        }
+
         uint32_t slot = m_impl->AllocateSlot();
         if (slot == 0) return IOHandle{ 0 };
 
@@ -542,6 +563,12 @@ namespace Zero::IO
 
     StreamHandle Scheduler::SubmitStream(const StreamReadDescriptor& desc) noexcept 
     {
+        if (HasFlag(desc.flags, IOFlags::Direct))
+        {
+            size_t address = reinterpret_cast<size_t>(desc.destination.data());
+            assert((address & 4095) == 0 && (desc.offset & 4095) == 0 && (desc.chunkSize & 4095) == 0 && (desc.totalSize & 4095) == 0);
+        }
+
         uint32_t slot = m_impl->AllocateStreamSlot();
         if (slot == 0) return StreamHandle{ 0 };
 
