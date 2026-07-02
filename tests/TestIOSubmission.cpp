@@ -340,6 +340,100 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         scheduler.Release(hSucceed);
     }
 
+    SUBCASE("GetResult Returns Correct Value")
+    {
+        std::vector<std::byte> readBuffer(testData.size());
+
+        ReadRequest readReq;
+        readReq.file = handle;
+        readReq.destination = { readBuffer.data(), readBuffer.size() };
+        readReq.offset = 0;
+        readReq.completionJob.fn = nullptr;
+
+        IOHandle ioHandle = scheduler.Submit(readReq);
+        REQUIRE(ioHandle.IsValid());
+
+        while (true)
+        {
+            IOProgress progress = scheduler.GetProgress(ioHandle);
+            if (progress.status == Status::Completed || progress.status == Status::Failed)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        auto result = scheduler.GetResult(ioHandle);
+        REQUIRE(result.has_value());
+        CHECK(result.value() == testData.size());
+
+        scheduler.Release(ioHandle);
+
+        auto staleResult = scheduler.GetResult(ioHandle);
+        CHECK(!staleResult.has_value());
+    }
+
+    SUBCASE("GetResult Returns Error on Invalid Handle")
+    {
+        IOHandle invalid{ 0 };
+        auto result = scheduler.GetResult(invalid);
+        CHECK(!result.has_value());
+        CHECK(result.error() == std::errc::invalid_argument);
+    }
+
+    SUBCASE("Append Request")
+    {
+        std::string appendData = " -- APPENDED";
+        std::string expected = testData + appendData;
+
+        AppendRequest appendReq;
+        appendReq.file = handle;
+        appendReq.source = std::span<const std::byte>(
+            reinterpret_cast<const std::byte*>(appendData.data()), appendData.size());
+        appendReq.completionJob.fn = nullptr;
+
+        IOHandle appendHandle = scheduler.Submit(appendReq);
+        REQUIRE(appendHandle.IsValid());
+
+        while (true)
+        {
+            IOProgress progress = scheduler.GetProgress(appendHandle);
+            if (progress.status == Status::Completed || progress.status == Status::Failed)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        auto appendResult = scheduler.GetResult(appendHandle);
+        REQUIRE(appendResult.has_value());
+        CHECK(appendResult.value() == appendData.size());
+        scheduler.Release(appendHandle);
+
+        std::vector<std::byte> readBack(expected.size());
+        ReadRequest readReq;
+        readReq.file = handle;
+        readReq.destination = { readBack.data(), readBack.size() };
+        readReq.offset = 0;
+        readReq.completionJob.fn = nullptr;
+
+        IOHandle readHandle = scheduler.Submit(readReq);
+        REQUIRE(readHandle.IsValid());
+
+        while (true)
+        {
+            IOProgress progress = scheduler.GetProgress(readHandle);
+            if (progress.status == Status::Completed || progress.status == Status::Failed)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        auto readResult = scheduler.GetResult(readHandle);
+        REQUIRE(readResult.has_value());
+        CHECK(readResult.value() == expected.size());
+
+        std::string readStr(reinterpret_cast<const char*>(readBack.data()), readBack.size());
+        CHECK(readStr == expected);
+
+        scheduler.Release(readHandle);
+    }
+
     PlatformCloseFile(handle);
     scheduler.Shutdown();
     Zero::ShutdownJobSystem();

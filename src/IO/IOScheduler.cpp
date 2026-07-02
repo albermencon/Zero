@@ -34,11 +34,6 @@ namespace Zero::IO
             Cancelled
         };
 
-        // §4.1 — Unified atomic slot: packs state (8-bit) and generation (16-bit)
-        // into a single atomic<uint32_t>. Eliminates std::atomic_ref, fixes the
-        // generation-read-after-publish race (§1.1), the cancel TOCTOU (§1.4),
-        // and the subobject aliasing UB (§1.7).
-        //
         // Bit layout: [state:8][generation:16][reserved:8]
         struct IOSlot 
         {
@@ -89,7 +84,7 @@ namespace Zero::IO
             StreamChunk
         };
 
-        // §4.3 — Scatter ranges are copied inline to eliminate lifetime hazards.
+        // Scatter ranges are copied inline to eliminate lifetime hazards.
         static constexpr size_t kMaxScatterRanges = 8;
 
         struct alignas(64) IORequestPayload 
@@ -124,7 +119,7 @@ namespace Zero::IO
             uint32_t bytesTransferred{ 0 };
             uint32_t requestedBytes{ 0 };
             void* platformContext{ nullptr }; 
-            void* suspendedCoroutineAddress{ nullptr }; 
+            std::atomic<void*> suspendedCoroutineAddress{ nullptr }; 
         };
 
         struct alignas(64) IOStreamState 
@@ -149,8 +144,6 @@ namespace Zero::IO
             Job streamCompletionJob;
         };
 
-        // §2.2 — Pre-allocated fixed-capacity ring buffer replacing std::deque.
-        // Eliminates heap allocations on the submission hot path.
         struct RingBuffer 
         {
             std::unique_ptr<uint32_t[]> buffer;
@@ -201,7 +194,7 @@ namespace Zero::IO
         std::unique_ptr<std::atomic<uint64_t>[]> streamNextFree;
         alignas(64) std::atomic<uint64_t> streamFreeHead{ 0 };
 
-        // §2.1 — Each lane is cache-line aligned to eliminate false sharing
+        // Each lane is cache-line aligned to eliminate false sharing
         // between producer (game threads) and consumer (worker threads) on
         // adjacent priority levels.
         struct alignas(64) PriorityLane 
@@ -441,7 +434,7 @@ namespace Zero::IO
             {
                 result = PlatformRead(payload.file, payload.single.buffer, payload.requestedBytes, payload.single.offset);
             }
-            else if (payload.operation == Internal::IOOperation::Write) 
+            else if (payload.operation == Internal::IOOperation::Write || payload.operation == Internal::IOOperation::Append) 
             {
                 result = PlatformWrite(payload.file, payload.single.buffer, payload.requestedBytes, payload.single.offset);
             }
@@ -489,12 +482,12 @@ namespace Zero::IO
                     Zero::Enqueue(payload.completionJob);
                 }
 
-                // Step 4: Resume coroutine
-                if (payload.suspendedCoroutineAddress) 
+                // Step 4: Resume coroutine (atomic exchange prevents double-resume
+                // if RegisterCoroutineSuspension races with this completion path)
+                void* coro = payload.suspendedCoroutineAddress.exchange(nullptr, std::memory_order_acq_rel);
+                if (coro) 
                 {
-                    auto h = std::coroutine_handle<>::from_address(payload.suspendedCoroutineAddress);
-                    payload.suspendedCoroutineAddress = nullptr;
-                    h.resume();
+                    std::coroutine_handle<>::from_address(coro).resume();
                 }
 
                 // Step 5: Decrement fence (LAST observable side-effect)
@@ -604,7 +597,7 @@ namespace Zero::IO
         payload.requestedBytes = static_cast<uint32_t>(request.destination.size());
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
-        payload.suspendedCoroutineAddress = nullptr;
+        payload.suspendedCoroutineAddress.store(nullptr, std::memory_order_relaxed);
         payload.errorCode = {};
         payload.bytesTransferred = 0;
 
@@ -637,7 +630,7 @@ namespace Zero::IO
         payload.requestedBytes = static_cast<uint32_t>(request.source.size());
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
-        payload.suspendedCoroutineAddress = nullptr;
+        payload.suspendedCoroutineAddress.store(nullptr, std::memory_order_relaxed);
         payload.errorCode = {};
         payload.bytesTransferred = 0;
 
@@ -649,7 +642,38 @@ namespace Zero::IO
         return handle;
     }
 
-    IOHandle Scheduler::Submit(const AppendRequest&) noexcept { return IOHandle{}; }
+    IOHandle Scheduler::Submit(const AppendRequest& request) noexcept
+    {
+        if (HasFlag(request.flags, IOFlags::Direct))
+        {
+            size_t address = reinterpret_cast<size_t>(request.source.data());
+            size_t appendOffset = request.file.size;
+            ZERO_CORE_ASSERT((address & 4095) == 0 && (appendOffset & 4095) == 0 && (request.source.size() & 4095) == 0,
+                "Direct I/O requirements not met: address, offset, and size must be aligned to 4096 bytes");
+        }
+
+        uint32_t slot = m_impl->AllocateSlot();
+        if (slot == 0) return IOHandle{ 0 };
+
+        auto& payload = m_impl->payloads[slot];
+        payload.operation = Internal::IOOperation::Append;
+        payload.file = request.file;
+        payload.single.buffer = const_cast<void*>(static_cast<const void*>(request.source.data()));
+        payload.single.offset = request.file.size;
+        payload.requestedBytes = static_cast<uint32_t>(request.source.size());
+        payload.completionJob = request.completionJob;
+        payload.fenceCounter = request.fence.counter;
+        payload.suspendedCoroutineAddress.store(nullptr, std::memory_order_relaxed);
+        payload.errorCode = {};
+        payload.bytesTransferred = 0;
+
+        uint16_t gen = m_impl->slots[slot].GetGeneration(std::memory_order_relaxed);
+        m_impl->slots[slot].SetState(Internal::IORequestState::Queued, gen);
+        IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
+
+        m_impl->SubmitToLane(request.priority, slot);
+        return handle;
+    }
 
     IOHandle Scheduler::SubmitScatter(const ReadScatterRequest& request) noexcept 
     {
@@ -689,7 +713,7 @@ namespace Zero::IO
         
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
-        payload.suspendedCoroutineAddress = nullptr;
+        payload.suspendedCoroutineAddress.store(nullptr, std::memory_order_relaxed);
         payload.errorCode = {};
         payload.bytesTransferred = 0;
 
@@ -863,7 +887,29 @@ namespace Zero::IO
 
         return progress;
     }
-    std::expected<size_t, std::error_code> Scheduler::GetResult(IOHandle) noexcept { return 0; }
+    std::expected<size_t, std::error_code> Scheduler::GetResult(IOHandle handle) noexcept 
+    {
+        if (!handle.IsValid())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+        uint32_t index = handle.GetIndex();
+        if (index == 0 || index > m_impl->config.maxConcurrentRequests)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+        auto& slot = m_impl->slots[index];
+        if (slot.GetGeneration() != handle.GetGeneration())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+        auto state = slot.GetState();
+        if (state == Internal::IORequestState::Completed)
+            return static_cast<size_t>(m_impl->payloads[index].bytesTransferred);
+        if (state == Internal::IORequestState::Failed)
+            return std::unexpected(m_impl->payloads[index].errorCode);
+        if (state == Internal::IORequestState::Cancelled)
+            return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+
+        return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+    }
 
     void Scheduler::Release(IOHandle handle) noexcept
     {
@@ -883,7 +929,35 @@ namespace Zero::IO
         m_impl->FreeSlot(index);
     }
 
-    void Scheduler::RegisterCoroutineSuspension(IOHandle, void*) noexcept {}
+    void Scheduler::RegisterCoroutineSuspension(IOHandle handle, void* coroutineAddress) noexcept 
+    {
+        if (!handle.IsValid() || !coroutineAddress) return;
+
+        uint32_t index = handle.GetIndex();
+        if (index == 0 || index > m_impl->config.maxConcurrentRequests) return;
+
+        auto& slot = m_impl->slots[index];
+        if (slot.GetGeneration() != handle.GetGeneration()) return;
+
+        // Publish the coroutine address (release) so the worker thread sees it
+        m_impl->payloads[index].suspendedCoroutineAddress.store(coroutineAddress, std::memory_order_release);
+
+        // Acquire-read the slot state. If the worker already set a terminal state
+        // (release on packed), our acquire here synchronizes-with that release,
+        // meaning the worker has already passed its coroutine-resume step.
+        // We must resume ourselves — atomic exchange prevents double-resume.
+        auto state = slot.GetState();
+        if (state == Internal::IORequestState::Completed ||
+            state == Internal::IORequestState::Failed ||
+            state == Internal::IORequestState::Cancelled)
+        {
+            void* addr = m_impl->payloads[index].suspendedCoroutineAddress.exchange(nullptr, std::memory_order_acq_rel);
+            if (addr)
+            {
+                std::coroutine_handle<>::from_address(addr).resume();
+            }
+        }
+    }
 
     void Scheduler::ReleaseStream(StreamHandle handle) noexcept
     {
