@@ -69,6 +69,8 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
 
         std::string readStr(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
         CHECK(readStr == testData);
+
+        scheduler.Release(ioHandle);
     }
 
     SUBCASE("Batch Submit")
@@ -114,6 +116,9 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
 
         CHECK(str1 == "Zero");
         CHECK(str2 == "Engine");
+
+        scheduler.Release(handles[0]);
+        scheduler.Release(handles[1]);
     }
 
     SUBCASE("Scatter Read")
@@ -151,6 +156,8 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
 
         CHECK(str1 == "Zero");
         CHECK(str2 == "Engine");
+
+        scheduler.Release(h);
     }
 
     SUBCASE("Stream Scheduler")
@@ -216,6 +223,8 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
 
         std::string readStr(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
         CHECK(readStr == testData);
+
+        scheduler.ReleaseStream(streamHandle);
     }
 
     SUBCASE("Direct I/O Alignment Validation")
@@ -266,8 +275,69 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         std::string readStr(reinterpret_cast<const char*>(alignedBuffer), sizeof(alignedBuffer));
         CHECK(readStr == directTestData);
 
+        scheduler.Release(handle);
+
         PlatformCloseFile(directHandle);
         std::filesystem::remove(directFilePath);
+    }
+
+    SUBCASE("Slot Exhaustion and Explicit Release")
+    {
+        std::vector<std::byte> readBuffer(testData.size());
+        std::vector<IOHandle> handles;
+        handles.reserve(100);
+
+        ReadRequest req;
+        req.file = handle;
+        req.destination = { readBuffer.data(), readBuffer.size() };
+        req.offset = 0;
+        req.completionJob.fn = nullptr;
+
+        // Submit 100 requests to saturate the scheduler
+        for (int i = 0; i < 100; ++i)
+        {
+            IOHandle h = scheduler.Submit(req);
+            REQUIRE(h.IsValid());
+            handles.push_back(h);
+        }
+
+        // 101st request should fail to allocate a slot
+        IOHandle hFail = scheduler.Submit(req);
+        CHECK(!hFail.IsValid());
+
+        // Wait for at least one to complete so it can be released
+        while (true)
+        {
+            if (scheduler.GetProgress(handles[0]).status == Status::Completed)
+            {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        // Release the first slot
+        scheduler.Release(handles[0]);
+
+        // 101st request should now succeed
+        IOHandle hSucceed = scheduler.Submit(req);
+        CHECK(hSucceed.IsValid());
+
+        // Cleanup remaining handles (handles[0] was already released)
+        for (size_t i = 1; i < handles.size(); ++i)
+        {
+            while (scheduler.GetProgress(handles[i]).status == Status::Pending || 
+                   scheduler.GetProgress(handles[i]).status == Status::Executing)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            scheduler.Release(handles[i]);
+        }
+        while (scheduler.GetProgress(hSucceed).status == Status::Pending || 
+               scheduler.GetProgress(hSucceed).status == Status::Executing)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        scheduler.Release(hSucceed);
     }
 
     PlatformCloseFile(handle);

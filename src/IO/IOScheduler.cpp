@@ -2,14 +2,14 @@
 #include <Engine/IO/IOScheduler.h>
 #include <Engine/Core.h>
 #include <Engine/Log.h>
-#include <deque>
-#include <thread> // only for std::thread::hardware_concurrency
+#include <thread>
 #include <Engine/JobSystem/JobSystem.h>
 #include <Engine/IO/Platform/IOPlatform.h>
 #include <Engine/Thread/Thread.h>
 #include <Engine/Thread/Mutex.h>
 #include <Engine/Thread/ScopedLock.h>
 #include <Engine/Thread/Semaphore.h>
+#include <coroutine>
 
 #if defined(_MSC_VER)
     #define ZERO_FORCEINLINE __forceinline
@@ -34,13 +34,51 @@ namespace Zero::IO
             Cancelled
         };
 
-        struct alignas(4) IOSlot 
+        // §4.1 — Unified atomic slot: packs state (8-bit) and generation (16-bit)
+        // into a single atomic<uint32_t>. Eliminates std::atomic_ref, fixes the
+        // generation-read-after-publish race (§1.1), the cancel TOCTOU (§1.4),
+        // and the subobject aliasing UB (§1.7).
+        //
+        // Bit layout: [state:8][generation:16][reserved:8]
+        struct IOSlot 
         {
-            IORequestState state{ IORequestState::Free };
-            uint16_t generation{ 1 };
+            static constexpr uint32_t Pack(IORequestState s, uint16_t gen) noexcept 
+            {
+                return static_cast<uint32_t>(s) | (static_cast<uint32_t>(gen) << 8);
+            }
+
+            std::atomic<uint32_t> packed{ Pack(IORequestState::Free, 1) };
+
+            ZERO_FORCEINLINE IORequestState GetState(std::memory_order order = std::memory_order_acquire) const noexcept 
+            {
+                return static_cast<IORequestState>(packed.load(order) & 0xFF);
+            }
+
+            ZERO_FORCEINLINE uint16_t GetGeneration(std::memory_order order = std::memory_order_acquire) const noexcept 
+            {
+                return static_cast<uint16_t>((packed.load(order) >> 8) & 0xFFFF);
+            }
+
+            bool TransitionState(IORequestState expected, IORequestState desired, uint16_t expectedGen) noexcept 
+            {
+                uint32_t exp = Pack(expected, expectedGen);
+                uint32_t des = Pack(desired, expectedGen);
+                return packed.compare_exchange_strong(exp, des, std::memory_order_acq_rel, std::memory_order_acquire);
+            }
+
+            void SetState(IORequestState s, uint16_t gen, std::memory_order order = std::memory_order_release) noexcept 
+            {
+                packed.store(Pack(s, gen), order);
+            }
+
+            void IncrementGeneration() noexcept 
+            {
+                uint32_t old = packed.load(std::memory_order_relaxed);
+                uint16_t gen = static_cast<uint16_t>((old >> 8) & 0xFFFF);
+                packed.store(Pack(IORequestState::Free, static_cast<uint16_t>(gen + 1)), std::memory_order_release);
+            }
         };
         static_assert(sizeof(IOSlot) == 4, "IOSlot must be 4 bytes");
-        static_assert(std::is_trivially_copyable_v<IOSlot>, "IOSlot must be trivially copyable");
 
         enum class IOOperation : uint8_t 
         {
@@ -51,7 +89,10 @@ namespace Zero::IO
             StreamChunk
         };
 
-        struct IORequestPayload 
+        // §4.3 — Scatter ranges are copied inline to eliminate lifetime hazards.
+        static constexpr size_t kMaxScatterRanges = 8;
+
+        struct alignas(64) IORequestPayload 
         {
             IORequestPayload() noexcept : single{nullptr, 0} {}
             FileHandle file;
@@ -64,8 +105,8 @@ namespace Zero::IO
                 } single;
                 struct 
                 {
-                    const ScatterRange* ranges;
-                    size_t rangeCount;
+                    ScatterRange ranges[kMaxScatterRanges];
+                    uint32_t rangeCount;
                 } scatter;
                 struct 
                 {
@@ -107,6 +148,43 @@ namespace Zero::IO
             Job chunkCompletionJob;
             Job streamCompletionJob;
         };
+
+        // §2.2 — Pre-allocated fixed-capacity ring buffer replacing std::deque.
+        // Eliminates heap allocations on the submission hot path.
+        struct RingBuffer 
+        {
+            std::unique_ptr<uint32_t[]> buffer;
+            uint32_t head{ 0 };
+            uint32_t tail{ 0 };
+            uint32_t capacity{ 0 };
+
+            void Init(uint32_t cap) 
+            {
+                capacity = cap;
+                buffer = std::make_unique<uint32_t[]>(cap);
+                head = 0;
+                tail = 0;
+            }
+
+            bool Push(uint32_t val) noexcept 
+            {
+                uint32_t next = (tail + 1) % capacity;
+                if (next == head) return false;
+                buffer[tail] = val;
+                tail = next;
+                return true;
+            }
+
+            bool Pop(uint32_t& val) noexcept 
+            {
+                if (head == tail) return false;
+                val = buffer[head];
+                head = (head + 1) % capacity;
+                return true;
+            }
+
+            bool Empty() const noexcept { return head == tail; }
+        };
     }
 
     struct Scheduler::Impl 
@@ -116,7 +194,6 @@ namespace Zero::IO
         std::unique_ptr<Internal::IOSlot[]> slots;
         std::unique_ptr<Internal::IORequestPayload[]> payloads;
         
-        // Lock-free free list for slots (ABA-free with generation counter in high 32 bits)
         std::unique_ptr<std::atomic<uint32_t>[]> slotNextFree;
         alignas(64) std::atomic<uint64_t> slotFreeHead{ 0 };
 
@@ -124,13 +201,16 @@ namespace Zero::IO
         std::unique_ptr<std::atomic<uint64_t>[]> streamNextFree;
         alignas(64) std::atomic<uint64_t> streamFreeHead{ 0 };
 
-        struct PriorityLane 
+        // §2.1 — Each lane is cache-line aligned to eliminate false sharing
+        // between producer (game threads) and consumer (worker threads) on
+        // adjacent priority levels.
+        struct alignas(64) PriorityLane 
         {
             Zero::Mutex mutex;
-            std::deque<uint32_t> queue;
+            Internal::RingBuffer queue;
         };
 
-        PriorityLane lanes[5]; // Critical, High, Normal, Low, Background
+        PriorityLane lanes[5]; // Background(0), Low(1), Normal(2), High(3), Critical(4)
         
         std::vector<Zero::Thread> workers;
         Zero::Semaphore wakeupSemaphore;
@@ -150,7 +230,7 @@ namespace Zero::IO
                 slotNextFree[i].store(i + 1, std::memory_order_relaxed);
             }
             slotNextFree[config.maxConcurrentRequests].store(0, std::memory_order_relaxed);
-            slotFreeHead.store((1ULL << 32) | 1, std::memory_order_relaxed); // gen 1, index 1
+            slotFreeHead.store((1ULL << 32) | 1, std::memory_order_relaxed);
 
             streamSlots = std::make_unique<Internal::IOStreamState[]>(config.maxConcurrentStreams + 1);
             streamNextFree = std::make_unique<std::atomic<uint64_t>[]>(config.maxConcurrentStreams + 1);
@@ -161,10 +241,16 @@ namespace Zero::IO
             streamNextFree[config.maxConcurrentStreams].store(0, std::memory_order_relaxed);
             streamFreeHead.store((uint64_t(1) << 32) | 1, std::memory_order_relaxed);
 
+            uint32_t perLaneCapacity = config.queueCapacity;
+            if (perLaneCapacity == 0) perLaneCapacity = 4096;
+            for (auto& lane : lanes) 
+            {
+                lane.queue.Init(perLaneCapacity);
+            }
+
             uint32_t workerCount = config.workerCount;
             if (config.workerMode == WorkerMode::Automatic) 
             {
-                // Do not create as many threads as logical cores. Divide by 4, min 1, max 4.
                 workerCount = std::min<uint32_t>(4, std::max<uint32_t>(1, std::thread::hardware_concurrency() / 4));
             }
             if (workerCount == 0) workerCount = 1;
@@ -172,7 +258,6 @@ namespace Zero::IO
             shuttingDown.store(false, std::memory_order_relaxed);
             for (uint32_t i = 0; i < workerCount; ++i) 
             {
-                // 64 KB stack size limit
                 workers.emplace_back(64 * 1024, [this]() { this->WorkerLoop(); });
             }
         }
@@ -198,7 +283,7 @@ namespace Zero::IO
             while (true) 
             {
                 uint32_t headIndex = static_cast<uint32_t>(headVal & 0xFFFFFFFF);
-                if (headIndex == 0) return 0; // Out of slots
+                if (headIndex == 0) return 0;
 
                 uint32_t nextIndex = slotNextFree[headIndex].load(std::memory_order_relaxed);
                 uint32_t newGen = static_cast<uint32_t>((headVal >> 32) + 1);
@@ -265,11 +350,11 @@ namespace Zero::IO
         void SubmitToLane(Priority priority, uint32_t slotIndex) 
         {
             int laneIndex = static_cast<int>(priority);
-            if (laneIndex < 0 || laneIndex > 4) laneIndex = 2; // Default Normal
+            if (laneIndex < 0 || laneIndex > 4) laneIndex = 2;
 
             {
                 Zero::ScopedLock lock(lanes[laneIndex].mutex);
-                lanes[laneIndex].queue.push_back(slotIndex);
+                lanes[laneIndex].queue.Push(slotIndex);
             }
             wakeupSemaphore.Signal();
         }
@@ -300,12 +385,14 @@ namespace Zero::IO
             payload.fenceCounter = nullptr;
             payload.completionJob.fn = nullptr;
 
-            std::atomic_ref<Internal::IORequestState> stateRef(slots[slot].state);
-            stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
+            uint16_t gen = slots[slot].GetGeneration(std::memory_order_relaxed);
+            slots[slot].SetState(Internal::IORequestState::Queued, gen);
 
             SubmitToLane(stream.priority, slot);
         }
 
+        // Workers use TryLock to avoid lock convoy across all 5 lanes.
+        // Only one mutex is held at a time, and only if it's uncontended.
         void WorkerLoop() 
         {
             while (!shuttingDown.load(std::memory_order_acquire)) 
@@ -314,12 +401,12 @@ namespace Zero::IO
                 
                 for (int i = 4; i >= 0; --i) 
                 {
-                    Zero::ScopedLock lock(lanes[i].mutex);
-                    if (!lanes[i].queue.empty()) 
+                    if (lanes[i].mutex.TryLock()) 
                     {
-                        handleIndex = lanes[i].queue.front();
-                        lanes[i].queue.pop_front();
-                        break;
+                        bool found = lanes[i].queue.Pop(handleIndex);
+                        lanes[i].mutex.Unlock();
+                        if (found) break;
+                        handleIndex = 0;
                     }
                 }
 
@@ -334,10 +421,17 @@ namespace Zero::IO
             }
         }
 
+        //   1. Write results into payload
+        //   2. Set terminal state (pollers/awaiters see Completed/Failed)
+        //   3. Enqueue completion job
+        //   4. Resume suspended coroutine
+        //   5. Decrement fence counter (LAST — waker sees fully consistent state)
+        //   Slot recycling is deferred to explicit Release(handle) by the caller.
         void ExecuteRequest(uint32_t index) 
         {
-            std::atomic_ref<Internal::IORequestState> stateRef(slots[index].state);
-            stateRef.store(Internal::IORequestState::Executing, std::memory_order_release);
+            auto& slot = slots[index];
+            uint16_t gen = slot.GetGeneration(std::memory_order_relaxed);
+            slot.SetState(Internal::IORequestState::Executing, gen);
 
             auto& payload = payloads[index];
 
@@ -354,18 +448,20 @@ namespace Zero::IO
             else if (payload.operation == Internal::IOOperation::ReadScatter)
             {
                 size_t totalRead = 0;
-                for (size_t i = 0; i < payload.scatter.rangeCount; ++i) 
+                bool hadError = false;
+                for (uint32_t i = 0; i < payload.scatter.rangeCount; ++i) 
                 {
                     const auto& range = payload.scatter.ranges[i];
                     auto res = PlatformRead(payload.file, range.destination.data(), range.destination.size(), range.offset);
                     if (!res) 
                     {
                         result = std::unexpected(res.error());
+                        hadError = true;
                         break;
                     }
                     totalRead += res.value();
                 }
-                if (result.has_value() || totalRead > 0) 
+                if (!hadError)
                 {
                     result = totalRead; 
                 }
@@ -380,65 +476,92 @@ namespace Zero::IO
 
             if (payload.operation == Internal::IOOperation::StreamChunk)
             {
-                uint32_t streamIndex = payload.stream.streamHandle.GetIndex();
-                auto& stream = streamSlots[streamIndex];
-                
-                if (stream.generation == payload.stream.streamHandle.GetGeneration())
-                {
-                    if (!result) stream.failed.store(true, std::memory_order_release);
-
-                    if (!stream.cancelled.load(std::memory_order_acquire))
-                    {
-                        if (stream.chunkCompletionJob.fn != nullptr)
-                        {
-                            Job chunkJob = stream.chunkCompletionJob;
-                            StreamChunkResult chunkResult;
-                            chunkResult.chunkIndex = payload.stream.chunkIndex;
-                            chunkResult.fileOffset = payload.stream.offset;
-                            chunkResult.bytesRead = payload.bytesTransferred;
-                            chunkResult.memory = std::span<std::byte>{ static_cast<std::byte*>(payload.stream.buffer), payload.bytesTransferred };
-                            
-                            memcpy(chunkJob.payload, &chunkResult, sizeof(StreamChunkResult));
-                            Zero::Enqueue(chunkJob);
-                        }
-                    }
-
-                    uint32_t completed = stream.completedChunks.fetch_add(1, std::memory_order_acq_rel) + 1;
-                    stream.activeChunks.fetch_sub(1, std::memory_order_acq_rel);
-
-                    uint32_t total = stream.totalChunks.load(std::memory_order_acquire);
-                    if (completed == total)
-                    {
-                        if (stream.streamCompletionJob.fn != nullptr)
-                        {
-                            Zero::Enqueue(stream.streamCompletionJob);
-                        }
-                    }
-                    else
-                    {
-                        uint32_t nextChunk = stream.nextChunkToSubmit.fetch_add(1, std::memory_order_acq_rel);
-                        if (nextChunk < total && !stream.cancelled.load(std::memory_order_acquire) && !stream.failed.load(std::memory_order_acquire))
-                        {
-                            stream.activeChunks.fetch_add(1, std::memory_order_acq_rel);
-                            SubmitStreamChunk(streamIndex, nextChunk);
-                        }
-                    }
-                }
+                HandleStreamChunkCompletion(index, result.has_value());
             }
             else
             {
+                // Step 2: Terminal state visible to pollers
+                slot.SetState(result ? Internal::IORequestState::Completed : Internal::IORequestState::Failed, gen);
+
+                // Step 3: Enqueue completion job
                 if (payload.completionJob.fn != nullptr) 
                 {
                     Zero::Enqueue(payload.completionJob);
                 }
+
+                // Step 4: Resume coroutine
+                if (payload.suspendedCoroutineAddress) 
+                {
+                    auto h = std::coroutine_handle<>::from_address(payload.suspendedCoroutineAddress);
+                    payload.suspendedCoroutineAddress = nullptr;
+                    h.resume();
+                }
+
+                // Step 5: Decrement fence (LAST observable side-effect)
+                if (payload.fenceCounter) 
+                {
+                    payload.fenceCounter->Decrement();
+                }
+
+                // Slot recycling deferred to Release(handle)
             }
+        }
 
-            stateRef.store(result ? Internal::IORequestState::Completed : Internal::IORequestState::Failed, std::memory_order_release);
+        // §Stream chunk completion with stream slot recycling.
+        void HandleStreamChunkCompletion(uint32_t slotIndex, bool success)
+        {
+            auto& payload = payloads[slotIndex];
+            uint32_t streamIndex = payload.stream.streamHandle.GetIndex();
+            auto& stream = streamSlots[streamIndex];
 
-            if (payload.fenceCounter) 
+            bool validStream = (stream.generation == payload.stream.streamHandle.GetGeneration());
+            
+            if (validStream)
             {
-                payload.fenceCounter->Decrement();
+                if (!success) stream.failed.store(true, std::memory_order_release);
+
+                if (!stream.cancelled.load(std::memory_order_acquire))
+                {
+                    if (stream.chunkCompletionJob.fn != nullptr)
+                    {
+                        Job chunkJob = stream.chunkCompletionJob;
+                        StreamChunkResult chunkResult;
+                        chunkResult.chunkIndex = payload.stream.chunkIndex;
+                        chunkResult.fileOffset = payload.stream.offset;
+                        chunkResult.bytesRead = payload.bytesTransferred;
+                        chunkResult.memory = std::span<std::byte>{ static_cast<std::byte*>(payload.stream.buffer), payload.bytesTransferred };
+                        
+                        memcpy(chunkJob.payload, &chunkResult, sizeof(StreamChunkResult));
+                        Zero::Enqueue(chunkJob);
+                    }
+                }
+
+                uint32_t completed = stream.completedChunks.fetch_add(1, std::memory_order_acq_rel) + 1;
+                stream.activeChunks.fetch_sub(1, std::memory_order_acq_rel);
+
+                uint32_t total = stream.totalChunks.load(std::memory_order_acquire);
+                if (completed == total)
+                {
+                    if (stream.streamCompletionJob.fn != nullptr)
+                    {
+                        Zero::Enqueue(stream.streamCompletionJob);
+                    }
+                    // Stream slot recycling deferred to ReleaseStream(handle)
+                }
+                else
+                {
+                    uint32_t nextChunk = stream.nextChunkToSubmit.fetch_add(1, std::memory_order_acq_rel);
+                    if (nextChunk < total && !stream.cancelled.load(std::memory_order_acquire) && !stream.failed.load(std::memory_order_acquire))
+                    {
+                        stream.activeChunks.fetch_add(1, std::memory_order_acq_rel);
+                        SubmitStreamChunk(streamIndex, nextChunk);
+                    }
+                }
             }
+
+            // Recycle the per-chunk IO slot regardless of stream validity
+            slots[slotIndex].IncrementGeneration();
+            FreeSlot(slotIndex);
         }
     };
 
@@ -481,11 +604,13 @@ namespace Zero::IO
         payload.requestedBytes = static_cast<uint32_t>(request.destination.size());
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
+        payload.suspendedCoroutineAddress = nullptr;
+        payload.errorCode = {};
+        payload.bytesTransferred = 0;
 
-        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[slot].state);
-        stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
-
-        uint16_t gen = m_impl->slots[slot].generation;
+        // Read generation BEFORE making slot visible to workers
+        uint16_t gen = m_impl->slots[slot].GetGeneration(std::memory_order_relaxed);
+        m_impl->slots[slot].SetState(Internal::IORequestState::Queued, gen);
         IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
 
         m_impl->SubmitToLane(request.priority, slot);
@@ -512,11 +637,12 @@ namespace Zero::IO
         payload.requestedBytes = static_cast<uint32_t>(request.source.size());
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
+        payload.suspendedCoroutineAddress = nullptr;
+        payload.errorCode = {};
+        payload.bytesTransferred = 0;
 
-        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[slot].state);
-        stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
-
-        uint16_t gen = m_impl->slots[slot].generation;
+        uint16_t gen = m_impl->slots[slot].GetGeneration(std::memory_order_relaxed);
+        m_impl->slots[slot].SetState(Internal::IORequestState::Queued, gen);
         IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
 
         m_impl->SubmitToLane(request.priority, slot);
@@ -527,6 +653,9 @@ namespace Zero::IO
 
     IOHandle Scheduler::SubmitScatter(const ReadScatterRequest& request) noexcept 
     {
+        ZERO_CORE_ASSERT(request.ranges.size() <= Internal::kMaxScatterRanges,
+            "Scatter read exceeds maximum inline range count");
+
         if (HasFlag(request.flags, IOFlags::Direct))
         {
             for (const auto& range : request.ranges)
@@ -543,22 +672,29 @@ namespace Zero::IO
         auto& payload = m_impl->payloads[slot];
         payload.operation = Internal::IOOperation::ReadScatter;
         payload.file = request.file;
-        payload.scatter.ranges = request.ranges.data();
-        payload.scatter.rangeCount = request.ranges.size();
+
+        // Copy scatter ranges inline to decouple from caller lifetime
+        payload.scatter.rangeCount = static_cast<uint32_t>(request.ranges.size());
+        for (size_t i = 0; i < request.ranges.size(); ++i) 
+        {
+            payload.scatter.ranges[i] = request.ranges[i];
+        }
         
         size_t totalBytes = 0;
-        for (const auto& range : request.ranges) {
+        for (const auto& range : request.ranges) 
+        {
             totalBytes += range.destination.size();
         }
         payload.requestedBytes = static_cast<uint32_t>(totalBytes);
         
         payload.completionJob = request.completionJob;
         payload.fenceCounter = request.fence.counter;
+        payload.suspendedCoroutineAddress = nullptr;
+        payload.errorCode = {};
+        payload.bytesTransferred = 0;
 
-        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[slot].state);
-        stateRef.store(Internal::IORequestState::Queued, std::memory_order_release);
-
-        uint16_t gen = m_impl->slots[slot].generation;
+        uint16_t gen = m_impl->slots[slot].GetGeneration(std::memory_order_relaxed);
+        m_impl->slots[slot].SetState(Internal::IORequestState::Queued, gen);
         IOHandle handle{ (static_cast<uint32_t>(gen) << 16) | slot };
 
         m_impl->SubmitToLane(request.priority, slot);
@@ -630,6 +766,8 @@ namespace Zero::IO
         }
     }
 
+    // Generation is validated atomically with state transition via
+    // TransitionState()
     CancelResult Scheduler::Cancel(IOHandle handle) noexcept 
     {
         if (!handle.IsValid()) return CancelResult::InvalidHandle;
@@ -637,16 +775,15 @@ namespace Zero::IO
         uint32_t index = handle.GetIndex();
         if (index >= m_impl->config.maxConcurrentRequests) return CancelResult::InvalidHandle;
 
-        std::atomic_ref<Internal::IORequestState> stateRef(m_impl->slots[index].state);
-
-        auto expectedState = Internal::IORequestState::Queued;
-        if (stateRef.compare_exchange_strong(expectedState, Internal::IORequestState::Cancelled, std::memory_order_release, std::memory_order_relaxed)) 
+        if (m_impl->slots[index].TransitionState(
+                Internal::IORequestState::Queued, 
+                Internal::IORequestState::Cancelled,
+                handle.GetGeneration())) 
         {
-            if (m_impl->slots[index].generation != handle.GetGeneration()) return CancelResult::AlreadyCompleted;
             return CancelResult::Cancelled;
         }
 
-        auto state = stateRef.load(std::memory_order_acquire);
+        auto state = m_impl->slots[index].GetState();
         if (state == Internal::IORequestState::Completed) return CancelResult::AlreadyCompleted;
         if (state == Internal::IORequestState::Cancelled) return CancelResult::AlreadyCancelled;
         
@@ -684,10 +821,9 @@ namespace Zero::IO
         if (index == 0 || index > m_impl->config.maxConcurrentRequests) return {};
 
         auto& slot = m_impl->slots[index];
-        if (slot.generation != handle.GetGeneration()) return {};
+        if (slot.GetGeneration() != handle.GetGeneration()) return {};
 
-        std::atomic_ref<Internal::IORequestState> stateRef(slot.state);
-        Internal::IORequestState state = stateRef.load(std::memory_order_acquire);
+        Internal::IORequestState state = slot.GetState();
         
         progress.bytesTransferred = m_impl->payloads[index].bytesTransferred;
         progress.totalBytes = m_impl->payloads[index].requestedBytes;
@@ -728,7 +864,42 @@ namespace Zero::IO
         return progress;
     }
     std::expected<size_t, std::error_code> Scheduler::GetResult(IOHandle) noexcept { return 0; }
+
+    void Scheduler::Release(IOHandle handle) noexcept
+    {
+        if (!handle.IsValid()) return;
+        uint32_t index = handle.GetIndex();
+        if (index == 0 || index > m_impl->config.maxConcurrentRequests) return;
+
+        auto& slot = m_impl->slots[index];
+        if (slot.GetGeneration() != handle.GetGeneration()) return;
+
+        auto state = slot.GetState();
+        if (state != Internal::IORequestState::Completed && 
+            state != Internal::IORequestState::Failed &&
+            state != Internal::IORequestState::Cancelled) return;
+
+        slot.IncrementGeneration();
+        m_impl->FreeSlot(index);
+    }
+
     void Scheduler::RegisterCoroutineSuspension(IOHandle, void*) noexcept {}
+
+    void Scheduler::ReleaseStream(StreamHandle handle) noexcept
+    {
+        if (!handle.IsValid()) return;
+        uint32_t index = handle.GetIndex();
+        if (index == 0 || index > m_impl->config.maxConcurrentStreams) return;
+
+        auto& stream = m_impl->streamSlots[index];
+        if (stream.generation != handle.GetGeneration()) return;
+
+        uint32_t completed = stream.completedChunks.load(std::memory_order_acquire);
+        uint32_t total = stream.totalChunks.load(std::memory_order_acquire);
+        if (completed != total) return;
+
+        m_impl->FreeStreamSlot(index);
+    }
 
     uint32_t Scheduler::TestAllocateSlot() noexcept { return m_impl->AllocateSlot(); }
     void Scheduler::TestFreeSlot(uint32_t index) noexcept { m_impl->FreeSlot(index); }

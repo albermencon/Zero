@@ -3,13 +3,16 @@
 #include "IODescriptors.h"
 #include <expected>
 
-namespace Zero::IO {
-    enum class WorkerMode : uint8_t {
+namespace Zero::IO 
+{
+    enum class WorkerMode : uint8_t 
+    {
         Automatic,
         Manual
     };
 
-    struct SchedulerConfig {
+    struct SchedulerConfig 
+    {
         uint32_t maxConcurrentRequests = 2048;
         uint32_t maxConcurrentStreams = 128;
         uint32_t queueCapacity = 4096;
@@ -18,7 +21,8 @@ namespace Zero::IO {
         size_t defaultChunkSize = 1024 * 1024;
     };
 
-    class Scheduler {
+    class Scheduler 
+    {
     public:
         explicit Scheduler(const SchedulerConfig& config) noexcept;
         ~Scheduler() noexcept;
@@ -45,6 +49,9 @@ namespace Zero::IO {
         IOProgress GetProgress(IOHandle handle) noexcept;
         IOProgress GetStreamProgress(StreamHandle handle) noexcept;
         std::expected<size_t, std::error_code> GetResult(IOHandle handle) noexcept;
+
+        void Release(IOHandle handle) noexcept;
+        void ReleaseStream(StreamHandle handle) noexcept;
 
         // Bind raw coroutine pointer cleanly to the pre-allocated payload map slot
         void RegisterCoroutineSuspension(IOHandle handle, void* coroutineAddress) noexcept;

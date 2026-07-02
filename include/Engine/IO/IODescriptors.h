@@ -3,13 +3,16 @@
 #include <Engine/JobSystem/Job.h>
 #include <span>
 
-namespace Zero::IO {
-    struct ScatterRange {
+namespace Zero::IO 
+{
+    struct ScatterRange 
+    {
         size_t offset;
         std::span<std::byte> destination;
     };
 
-    struct [[nodiscard]] ReadRequest {
+    struct [[nodiscard]] ReadRequest 
+    {
         FileHandle file;
         std::span<std::byte> destination;
         size_t offset = 0;
@@ -21,7 +24,8 @@ namespace Zero::IO {
         IOFlags flags = IOFlags::None;
     };
 
-    struct [[nodiscard]] WriteRequest {
+    struct [[nodiscard]] WriteRequest 
+    {
         FileHandle file;
         std::span<const std::byte> source;
         size_t offset = 0;
@@ -33,7 +37,8 @@ namespace Zero::IO {
         IOFlags flags = IOFlags::None;
     };
 
-    struct [[nodiscard]] AppendRequest {
+    struct [[nodiscard]] AppendRequest 
+    {
         FileHandle file;
         std::span<const std::byte> source;
         const char* debugName = nullptr;
@@ -43,7 +48,8 @@ namespace Zero::IO {
         IOFlags flags = IOFlags::None;
     };
 
-    struct [[nodiscard]] ReadScatterRequest {
+    struct [[nodiscard]] ReadScatterRequest 
+    {
         FileHandle file;
         std::span<const ScatterRange> ranges;
         const char* debugName = nullptr;
@@ -54,7 +60,8 @@ namespace Zero::IO {
         IOFlags flags = IOFlags::None;
     };
 
-    struct [[nodiscard]] StreamReadDescriptor {
+    struct [[nodiscard]] StreamReadDescriptor 
+    {
         FileHandle file;
         std::span<std::byte> destination;
         size_t offset = 0;
@@ -68,7 +75,8 @@ namespace Zero::IO {
         const char* debugName = nullptr;
     };
 
-    struct [[nodiscard]] StreamChunkResult {
+    struct [[nodiscard]] StreamChunkResult 
+    {
         size_t chunkIndex;
         size_t fileOffset;
         size_t bytesRead;

@@ -1,5 +1,7 @@
 #include "pch.h"
 #ifdef PLATFORM_WINDOWS
+#include <Engine/Core.h>
+#include <Engine/Log.h>
 #include <Engine/IO/Platform/IOPlatform.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -90,6 +92,7 @@ namespace Zero::IO
 
     std::expected<size_t, std::error_code> PlatformRead(FileHandle handle, void* buffer, size_t size, size_t offset) noexcept 
     {
+        ZERO_CORE_ASSERT(size <= UINT32_MAX, "Single ReadFile call limited to 4 GB");
         OVERLAPPED ov = {};
         ov.Offset = static_cast<DWORD>(offset & 0xFFFFFFFF);
         ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
@@ -116,6 +119,7 @@ namespace Zero::IO
 
     std::expected<size_t, std::error_code> PlatformWrite(FileHandle handle, const void* buffer, size_t size, size_t offset) noexcept 
     {
+        ZERO_CORE_ASSERT(size <= UINT32_MAX, "Single WriteFile call limited to 4 GB");
         OVERLAPPED ov = {};
         ov.Offset = static_cast<DWORD>(offset & 0xFFFFFFFF);
         ov.OffsetHigh = static_cast<DWORD>(offset >> 32);

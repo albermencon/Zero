@@ -1,6 +1,7 @@
 #include "pch.h"
 #ifdef PLATFORM_MACOS
 #include <Engine/IO/Platform/IOPlatform.h>
+#include <Engine/Log.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -37,10 +38,13 @@ namespace Zero::IO
             return std::unexpected(std::error_code(errno, std::generic_category()));
         }
 
+        // Check F_NOCACHE return value and log on failure
         if (HasFlag(flags, IOFlags::Direct) || HasFlag(flags, IOFlags::NoCache)) 
         {
-            // macOS uses fcntl F_NOCACHE instead of O_DIRECT
-            fcntl(fd, F_NOCACHE, 1);
+            if (fcntl(fd, F_NOCACHE, 1) == -1) 
+            {
+                ZERO_CORE_WARN("IO: fcntl F_NOCACHE failed on fd {}: {}", fd, strerror(errno));
+            }
         }
 
         size_t size = 0;
@@ -50,43 +54,64 @@ namespace Zero::IO
             size = static_cast<size_t>(st.st_size);
         }
 
-        return FileHandle{ reinterpret_cast<void*>(static_cast<intptr_t>(fd)), size };
+        // Store fd+1 so fd 0 doesn't map to nullptr
+        return FileHandle{ reinterpret_cast<void*>(static_cast<intptr_t>(fd + 1)), size };
     }
 
     void PlatformCloseFile(FileHandle& file) noexcept 
     {
-        if (file.handle && reinterpret_cast<intptr_t>(file.handle) >= 0) 
+        intptr_t stored = reinterpret_cast<intptr_t>(file.handle);
+        if (stored > 0) 
         {
-            ::close(static_cast<int>(reinterpret_cast<intptr_t>(file.handle)));
+            ::close(static_cast<int>(stored - 1));
             file.handle = nullptr;
             file.size = 0;
         }
     }
 
+    // Retry loop handles short reads and EINTR transparently
     std::expected<size_t, std::error_code> PlatformRead(FileHandle handle, void* buffer, size_t size, size_t offset) noexcept 
     {
-        int fd = static_cast<int>(reinterpret_cast<intptr_t>(handle.handle));
-        ssize_t bytesRead = ::pread(fd, buffer, size, static_cast<off_t>(offset));
+        int fd = static_cast<int>(reinterpret_cast<intptr_t>(handle.handle) - 1);
+        auto* p = static_cast<uint8_t*>(buffer);
+        size_t remaining = size;
         
-        if (bytesRead < 0) 
+        while (remaining > 0) 
         {
-            return std::unexpected(std::error_code(errno, std::generic_category()));
+            ssize_t n = ::pread(fd, p, remaining, static_cast<off_t>(offset));
+            if (n < 0) 
+            {
+                if (errno == EINTR) continue;
+                return std::unexpected(std::error_code(errno, std::generic_category()));
+            }
+            if (n == 0) break;
+            p += n;
+            offset += static_cast<size_t>(n);
+            remaining -= static_cast<size_t>(n);
         }
-        
-        return static_cast<size_t>(bytesRead);
+        return size - remaining;
     }
 
     std::expected<size_t, std::error_code> PlatformWrite(FileHandle handle, const void* buffer, size_t size, size_t offset) noexcept 
     {
-        int fd = static_cast<int>(reinterpret_cast<intptr_t>(handle.handle));
-        ssize_t bytesWritten = ::pwrite(fd, buffer, size, static_cast<off_t>(offset));
+        int fd = static_cast<int>(reinterpret_cast<intptr_t>(handle.handle) - 1);
+        auto* p = static_cast<const uint8_t*>(buffer);
+        size_t remaining = size;
         
-        if (bytesWritten < 0) 
+        while (remaining > 0) 
         {
-            return std::unexpected(std::error_code(errno, std::generic_category()));
+            ssize_t n = ::pwrite(fd, p, remaining, static_cast<off_t>(offset));
+            if (n < 0) 
+            {
+                if (errno == EINTR) continue;
+                return std::unexpected(std::error_code(errno, std::generic_category()));
+            }
+            if (n == 0) break;
+            p += n;
+            offset += static_cast<size_t>(n);
+            remaining -= static_cast<size_t>(n);
         }
-        
-        return static_cast<size_t>(bytesWritten);
+        return size - remaining;
     }
 }
 #endif
