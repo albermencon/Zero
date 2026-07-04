@@ -232,7 +232,7 @@ target_link_libraries(imgui
         Vulkan::Vulkan
 )
 
-if (ENGINE_ENABLE_PROFILING)
+if (ZERO_ENABLE_PROFILING)
 
     # Prevent Tracy from installing itself
     set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
