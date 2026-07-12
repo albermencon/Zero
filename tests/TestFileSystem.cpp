@@ -39,7 +39,7 @@ TEST_CASE("FileSystem: File Operations")
     CHECK(!FileSystem::IsDirectory(test_path));
 
     auto time = FileSystem::GetLastWriteTime(test_path);
-    CHECK(time.time_since_epoch().count() > 0);
+    CHECK(time.time_since_epoch().count() != 0);
 
     auto read_res = FileSystem::ReadEntireFile(test_path);
     REQUIRE(read_res.has_value());

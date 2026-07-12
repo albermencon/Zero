@@ -116,7 +116,7 @@ namespace Zero::IO
         int prot = PROT_READ;
         if (writeAccess) prot |= PROT_WRITE;
 
-        int fd = static_cast<int>(reinterpret_cast<intptr_t>(file.handle));
+        int fd = static_cast<int>(reinterpret_cast<intptr_t>(file.handle) - 1);
         void* mappedPtr = ::mmap(nullptr, mapSize, prot, MAP_SHARED, fd, static_cast<off_t>(alignedOffset));
         
         if (mappedPtr == MAP_FAILED) 

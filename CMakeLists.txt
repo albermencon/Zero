@@ -37,6 +37,11 @@ else()
     add_library(Zero STATIC ${ZERO_SOURCES})
 endif()
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND UNIX)
+    target_compile_definitions(Zero PUBLIC __cpp_concepts=202002L)
+    target_compile_options(Zero PUBLIC -Wno-builtin-macro-redefined)
+endif()
+
 target_include_directories(Zero
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
