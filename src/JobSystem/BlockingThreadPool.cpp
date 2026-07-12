@@ -15,7 +15,6 @@ namespace Zero
 	{
 		BlockingThreadPool* pool;
 		uint32_t id;
-		Thread* thread;
 	};
 
 	BlockingThreadPool::BlockingThreadPool()
@@ -41,20 +40,26 @@ namespace Zero
 		m_threads = new Thread[threadCount];
 		m_count = threadCount;
 		m_running.store(true, std::memory_order_release);
+
 		for (uint32_t i = 0; i < threadCount; ++i)
 		{
-			WorkerDesc* desc = new WorkerDesc{ this, i, &m_threads[i] };
+			WorkerDesc* desc = new WorkerDesc{ this, i };
+
 			// 256KB of stack size
 			m_threads[i] = Thread(256 * 1024, [desc]() 
 			{
 				char name[32];
 				snprintf(name, sizeof(name), "Worker {%u}", desc->id);
 				ZERO_PROFILE_THREAD(name);
-				desc->thread->SetName(name);
 
 				desc->pool->worker_loop(desc->id);
-				delete desc;
+				delete desc; // Safe cleanup
 			});
+			
+			char name[32];
+			snprintf(name, sizeof(name), "Worker {%u}", i);
+			m_threads[i].SetName(name);
+			m_threads[i].SetAffinity(1ULL << i);
 		}
 	}
 
