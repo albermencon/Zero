@@ -13,6 +13,7 @@
 #include <sched.h>
 #include <time.h>
 #include <cstring>
+#include <unistd.h>
 #include <algorithm>
 #include <string>
 
@@ -106,19 +107,36 @@ namespace Zero
     {
         pthread_attr_t attr;
         pthread_attr_init(&attr);
+        bool setStack = false;
         if (stackSize > 0)
         {
             size_t minStack = 16384;
 #ifdef PTHREAD_STACK_MIN
             minStack = PTHREAD_STACK_MIN;
 #endif
+            long sysMin = sysconf(_SC_THREAD_STACK_MIN);
+            if (sysMin > 0 && static_cast<size_t>(sysMin) > minStack)
+                minStack = static_cast<size_t>(sysMin);
+
             if (stackSize < minStack) stackSize = minStack;
 
-            pthread_attr_setstacksize(&attr, stackSize);
+            long pageSize = sysconf(_SC_PAGESIZE);
+            if (pageSize > 0)
+                stackSize = (stackSize + pageSize - 1) & ~(pageSize - 1);
+
+            if (pthread_attr_setstacksize(&attr, stackSize) == 0)
+                setStack = true;
         }
 
         pthread_t thread;
         int result = pthread_create(&thread, &attr, threadFunc, param);
+        
+        if (result == EINVAL && setStack)
+        {
+            pthread_attr_destroy(&attr);
+            pthread_attr_init(&attr);
+            result = pthread_create(&thread, &attr, threadFunc, param);
+        }
         pthread_attr_destroy(&attr);
 
         if (result == 0)
