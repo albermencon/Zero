@@ -44,7 +44,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         completionJob.ptr = nullptr;
         completionJob.mode = Job::Mode::External;
 
-        ReadRequest readReq;
+        ReadRequest readReq{};
         readReq.file = handle;
         readReq.destination = { readBuffer.data(), readBuffer.size() };
         readReq.offset = 0;
@@ -78,12 +78,12 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         std::vector<std::byte> buf1(4);
         std::vector<std::byte> buf2(6);
 
-        ReadRequest r1;
+        ReadRequest r1{};
         r1.file = handle;
         r1.destination = { buf1.data(), buf1.size() };
         r1.offset = 0;
         
-        ReadRequest r2;
+        ReadRequest r2{};
         r2.file = handle;
         r2.destination = { buf2.data(), buf2.size() };
         r2.offset = 5; // "Zero E" skips " ", starts at 5: "Engine"
@@ -131,7 +131,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
             { 5, { buf2.data(), buf2.size() } }
         };
 
-        ReadScatterRequest req;
+        ReadScatterRequest req{};
         req.file = handle;
         req.ranges = ranges;
         
@@ -186,7 +186,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
             streamFinished.store(true);
         };
 
-        StreamReadDescriptor streamDesc;
+        StreamReadDescriptor streamDesc{};
         streamDesc.file = handle;
         streamDesc.destination = { readBuffer.data(), readBuffer.size() };
         streamDesc.offset = 0;
@@ -256,7 +256,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         finishJob.mode = Job::Mode::Inline;
         finishJob.fn = [](void*) {};
 
-        ReadRequest directReq;
+        ReadRequest directReq{};
         directReq.file = directHandle;
         directReq.destination = { alignedBuffer, sizeof(alignedBuffer) };
         directReq.offset = 0;
@@ -287,7 +287,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         std::vector<IOHandle> handles;
         handles.reserve(100);
 
-        ReadRequest req;
+        ReadRequest req{};
         req.file = handle;
         req.destination = { readBuffer.data(), readBuffer.size() };
         req.offset = 0;
@@ -344,7 +344,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
     {
         std::vector<std::byte> readBuffer(testData.size());
 
-        ReadRequest readReq;
+        ReadRequest readReq{};
         readReq.file = handle;
         readReq.destination = { readBuffer.data(), readBuffer.size() };
         readReq.offset = 0;
@@ -384,7 +384,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         std::string appendData = " -- APPENDED";
         std::string expected = testData + appendData;
 
-        AppendRequest appendReq;
+        AppendRequest appendReq{};
         appendReq.file = handle;
         appendReq.source = std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(appendData.data()), appendData.size());
@@ -407,7 +407,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         scheduler.Release(appendHandle);
 
         std::vector<std::byte> readBack(expected.size());
-        ReadRequest readReq;
+        ReadRequest readReq{};
         readReq.file = handle;
         readReq.destination = { readBack.data(), readBack.size() };
         readReq.offset = 0;

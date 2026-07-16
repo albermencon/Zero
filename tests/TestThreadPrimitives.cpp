@@ -263,6 +263,7 @@ TEST_CASE("ThreadPrimitives: Deadlock Prevention / Lock Ordering")
     CHECK(counter.load() == 10000);
 }
 
+#if defined(ZERO_ENABLE_PROFILING)
 #include <tracy/Tracy.hpp>
 #include <mutex>
 
@@ -278,3 +279,5 @@ TEST_CASE("ThreadPrimitives: TracyLockable integration")
         std::lock_guard<LockableBase(RecursiveMutex)> lock(tracyRecMtx);
     }
 }
+#endif
+
