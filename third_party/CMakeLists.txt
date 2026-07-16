@@ -221,7 +221,7 @@ add_library(imgui STATIC
     imgui/imgui_demo.cpp
     imgui/backends/imgui_impl_opengl3.cpp
     imgui/backends/imgui_impl_vulkan.cpp
-
+    imgui/backends/imgui_impl_glfw.cpp
 )
 
 target_include_directories(imgui
@@ -233,6 +233,8 @@ target_include_directories(imgui
 target_link_libraries(imgui
     PUBLIC
         Vulkan::Vulkan
+        glfw
+        glad::glad
 )
 
 if (ZERO_ENABLE_PROFILING)

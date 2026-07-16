@@ -4,6 +4,9 @@
 #include <Engine/Core.h>
 #include "Graphics/Renderer/core/Framequeue.h"
 #include <Engine/Thread/Thread.h>
+#include <Engine/Thread/Mutex.h>
+#include <functional>
+#include <vector>
 #include <Engine/Window.h>
 #include "Graphics/core/RHITypes.h"
 
@@ -25,6 +28,9 @@ namespace Zero
 		void Init(RHI::API api, Window* window);
 		void Shutdown();
 
+		void InitImGui();
+		void ShutdownImGui();
+
 		void OnRenderSurfaceResize();
 
 		// Called from main thread
@@ -32,11 +38,16 @@ namespace Zero
 
 		void SubmitFrame(FrameData* frame);
 
+		void SubmitRenderCommand(std::move_only_function<void()> cmd);
+
 	private:
 		void RenderLoop();
 		void ProcessResourceRequests();
+		void ExecuteRenderCommands();
 
 	private:
+		Zero::Mutex m_CommandMutex;
+		std::vector<std::move_only_function<void()>> m_RenderCommands;
 		std::unique_ptr<class GraphicsDevice> m_backend;
 		Window* m_window = nullptr;
 		RHI::API m_API = RHI::API::Vulkan;

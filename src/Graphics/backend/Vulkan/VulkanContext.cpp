@@ -10,6 +10,10 @@
 #include "Graphics/backend/Vulkan/ShaderProgram.h"
 #include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
 #include "Graphics/backend/Vulkan/Translator/VulkanTranslator.h"
+#include "Engine/Graphics/ImGuiFrame.h"
+#include "Graphics/core/FrameData.h"
+#include <imgui.h>
+#include <backends/imgui_impl_vulkan.h>
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
@@ -159,12 +163,66 @@ namespace Zero
 
         return true;
     }
-    void VulkanDevice::EndFrame()
-    {
 
+    void VulkanDevice::InitImGui()
+    {
+        vk::DescriptorPoolSize poolSizes[] = {
+            {vk::DescriptorType::eSampler, 1000},
+            {vk::DescriptorType::eCombinedImageSampler, 1000},
+            {vk::DescriptorType::eSampledImage, 1000},
+            {vk::DescriptorType::eStorageImage, 1000},
+            {vk::DescriptorType::eUniformTexelBuffer, 1000},
+            {vk::DescriptorType::eStorageTexelBuffer, 1000},
+            {vk::DescriptorType::eUniformBuffer, 1000},
+            {vk::DescriptorType::eStorageBuffer, 1000},
+            {vk::DescriptorType::eUniformBufferDynamic, 1000},
+            {vk::DescriptorType::eStorageBufferDynamic, 1000},
+            {vk::DescriptorType::eInputAttachment, 1000}
+        };
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.maxSets = 1000 * 11;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(std::size(poolSizes));
+        poolInfo.pPoolSizes = poolSizes;
+
+        m_ImGuiDescriptorPool = vk::raii::DescriptorPool(m_device.Get(), poolInfo);
+
+        ImGui_ImplVulkan_InitInfo initInfo = {};
+        initInfo.Instance = *m_instance.Get();
+        initInfo.PhysicalDevice = *m_physicaldevice.Get();
+        initInfo.Device = *m_device.Get();
+        initInfo.QueueFamily = m_device.GetFamilyGraphicsIndex();
+        initInfo.Queue = *m_device.GetGraphicsQueue();
+        initInfo.PipelineCache = nullptr;
+        initInfo.DescriptorPool = *m_ImGuiDescriptorPool;
+        initInfo.MinImageCount = MAX_FRAMES_IN_FLIGHT;
+        initInfo.ImageCount = MAX_FRAMES_IN_FLIGHT;
+        initInfo.Allocator = nullptr;
+        initInfo.CheckVkResultFn = nullptr;
+        initInfo.UseDynamicRendering = true;
+        
+        initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        static VkFormat colorFormat;
+        colorFormat = static_cast<VkFormat>(m_swapchain.GetFormat());
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR };
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colorFormat;
+
+        ImGui_ImplVulkan_Init(&initInfo);
+    }
+
+    void VulkanDevice::ShutdownImGui()
+    {
+        ImGui_ImplVulkan_Shutdown();
+        m_ImGuiDescriptorPool.clear();
+    }
+
+    void VulkanDevice::RenderFrame(FrameData* frame)
+    {
         m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
         m_commandcontext.GetCommandBuffers()[currentFrame].reset();
-        recordCommandBuffer(m_currentImageIndex);
+        recordCommandBuffer(m_currentImageIndex, frame);
 
         vk::PipelineStageFlags waitMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
         vk::SubmitInfo submitInfo{};
@@ -196,7 +254,7 @@ namespace Zero
         m_syncobjects.recreateSyncObjects();
     }
 
-    void VulkanDevice::recordCommandBuffer(uint32_t imageIndex)
+    void VulkanDevice::recordCommandBuffer(uint32_t imageIndex, FrameData* frame)
     {
         std::vector<vk::raii::CommandBuffer>& commandBuffers = m_commandcontext.GetCommandBuffers();
         vk::raii::CommandBuffer& commandBuffer = commandBuffers[currentFrame];
@@ -240,6 +298,12 @@ namespace Zero
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), m_swapchain.GetExtent()));
 
         commandBuffer.draw(3, 1, 0, 0);
+
+        ImDrawData* drawData = frame->imguiFrame.GetNativeDrawData();
+        if (drawData)
+        {
+            ImGui_ImplVulkan_RenderDrawData(drawData, *commandBuffer);
+        }
 
         commandBuffer.endRendering();
 

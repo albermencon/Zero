@@ -10,6 +10,7 @@
 #include <Engine/ConfigSystem.h>
 #include <Engine/File/FileWatcher.h>
 #include "Layers/LayerStack.h"
+#include "Engine/Layers/ImGuiLayer.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
 #include "Graphics/ShaderCompiler/ShaderCompiler.h"
@@ -89,6 +90,10 @@ namespace Zero
         SceneManager::Get().Init();
         BlockingThreadPool::Get().Init(NumWorkers);
         FileWatcher::Get().Init();
+
+        auto imGuiLayer = std::make_unique<ImGuiLayer>();
+        m_ImGuiLayer = imGuiLayer.get();
+        PushOverlay(std::move(imGuiLayer));
     }
 
     Application::~Application()
@@ -142,12 +147,21 @@ namespace Zero
                 layer->OnUpdate(dt);
             }
 
+            m_ImGuiLayer->Begin();
+
+            for (auto& layer : *m_LayerStack)
+            {
+                layer->OnImGuiRender();
+            }
+
             SceneManager::Get().FlushCommands();
 
             // Build frame
             Renderer::Get().RequestFrame(); // must add a timeout
 
             FrameData* frame = SceneManager::Get().BuildFrame(frameIndex, dt);
+
+            m_ImGuiLayer->End(frame);
 
             Renderer::Get().SubmitFrame(frame);
             frameIndex++;

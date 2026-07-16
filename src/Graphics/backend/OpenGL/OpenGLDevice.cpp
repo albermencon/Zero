@@ -7,6 +7,10 @@
 #include "Graphics/backend/OpenGL/Translator/OpenGLTranslator.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "Engine/Graphics/ImGuiFrame.h"
+#include "Graphics/core/FrameData.h"
+#include <imgui.h>
+#include <backends/imgui_impl_opengl3.h>
 
 namespace Zero
 {
@@ -125,7 +129,25 @@ namespace Zero
         return true;
     }
 
-    void OpenGLDevice::EndFrame()
+    void OpenGLDevice::InitImGui()
+    {
+        if (!m_contextMadeCurrentOnRenderThread)
+        {
+            GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
+            glfwMakeContextCurrent(glfwWindow);
+            m_contextMadeCurrentOnRenderThread = true;
+        }
+
+        ImGui_ImplOpenGL3_Init("#version 460 core");
+        ImGui_ImplOpenGL3_CreateDeviceObjects();
+    }
+
+    void OpenGLDevice::ShutdownImGui()
+    {
+        ImGui_ImplOpenGL3_Shutdown();
+    }
+
+    void OpenGLDevice::RenderFrame(FrameData* frame)
     {
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
         int w, h;
@@ -137,6 +159,12 @@ namespace Zero
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
         glUseProgram(0);
+
+        ImDrawData* drawData = frame->imguiFrame.GetNativeDrawData();
+        if (drawData)
+        {
+            ImGui_ImplOpenGL3_RenderDrawData(drawData);
+        }
     }
 
     void OpenGLDevice::OnFinished()

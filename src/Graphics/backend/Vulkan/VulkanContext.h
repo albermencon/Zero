@@ -33,7 +33,10 @@ namespace Zero
         virtual void SwapBuffers() override;
 
         virtual bool BeginFrame() override;
-        virtual void EndFrame() override;
+        virtual void RenderFrame(class FrameData* frame) override;
+
+        virtual void InitImGui() override;
+        virtual void ShutdownImGui() override;
 
         virtual void OnFinished() override;
 
@@ -45,7 +48,7 @@ namespace Zero
 
         void recreateSwapChain();
 
-        void recordCommandBuffer(uint32_t imageIndex);
+        void recordCommandBuffer(uint32_t imageIndex, class FrameData* frame);
         void transition_image_layout(
             uint32_t imageIndex,
             vk::ImageLayout oldLayout,
@@ -66,6 +69,7 @@ namespace Zero
         VulkanCommandContext m_commandcontext;
         VulkanSyncObjects m_syncobjects;
         VulkanMemory m_memoryAllocator;
+        vk::raii::DescriptorPool m_ImGuiDescriptorPool{nullptr};
     private:
         VkFormat m_cachedSwapchainFormat = VK_FORMAT_UNDEFINED;
         uint32_t m_currentImageIndex = 0;

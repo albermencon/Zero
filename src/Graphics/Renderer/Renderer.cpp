@@ -6,6 +6,7 @@
 #include <Engine/Log.h>
 #include <Engine/Thread/ScopedLock.h>
 #include <Engine/Profiler/Profiler.h>
+#include <semaphore>
 
 namespace Zero
 {
@@ -92,6 +93,45 @@ namespace Zero
 		(void)m_queue.Push(frame);
 	}
 
+	void Renderer::SubmitRenderCommand(std::move_only_function<void()> cmd)
+	{
+		Zero::ScopedLock lock(m_CommandMutex);
+		m_RenderCommands.push_back(std::move(cmd));
+	}
+
+	void Renderer::ExecuteRenderCommands()
+	{
+		std::vector<std::move_only_function<void()>> localCommands;
+		{
+			Zero::ScopedLock lock(m_CommandMutex);
+			localCommands.swap(m_RenderCommands);
+		}
+		for (auto& cmd : localCommands)
+		{
+			cmd();
+		}
+	}
+
+	void Renderer::InitImGui()
+	{
+		std::binary_semaphore sem(0);
+		SubmitRenderCommand([this, &sem]() {
+			m_backend->InitImGui();
+			sem.release();
+		});
+		sem.acquire();
+	}
+
+	void Renderer::ShutdownImGui()
+	{
+		std::binary_semaphore sem(0);
+		SubmitRenderCommand([this, &sem]() {
+			m_backend->ShutdownImGui();
+			sem.release();
+		});
+		sem.acquire();
+	}
+
 	void Renderer::RenderLoop()
 	{
 		m_renderThread.SetName("RendererThread");
@@ -104,6 +144,8 @@ namespace Zero
 		size_t idleCount = 0;
 		while (m_running.load())
 		{
+			ExecuteRenderCommands();
+
 			FrameData* frame = nullptr;
 			if (!m_queue.Pop(frame))
 			{
@@ -125,7 +167,7 @@ namespace Zero
 
 			ProcessResourceRequests();
 
-			m_backend->EndFrame();
+			m_backend->RenderFrame(frame);
 			m_backend->SwapBuffers();
 
 			// 1. Wait for frame

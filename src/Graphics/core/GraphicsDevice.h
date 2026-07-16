@@ -15,7 +15,10 @@ namespace Zero
 
         // Frame lifecycle
         virtual bool BeginFrame() = 0;
-        virtual void EndFrame() = 0;
+        virtual void RenderFrame(class FrameData* frame) = 0;
+
+        virtual void InitImGui() = 0;
+        virtual void ShutdownImGui() = 0;
 
         virtual void init() = 0;
         virtual void SwapBuffers() = 0;

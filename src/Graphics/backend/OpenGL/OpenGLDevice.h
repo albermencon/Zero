@@ -16,7 +16,10 @@ namespace Zero
         virtual void SwapBuffers() override;
 
         virtual bool BeginFrame() override;
-        virtual void EndFrame() override;
+        virtual void RenderFrame(class FrameData* frame) override;
+
+        virtual void InitImGui() override;
+        virtual void ShutdownImGui() override;
 
         virtual void OnFinished() override;
 

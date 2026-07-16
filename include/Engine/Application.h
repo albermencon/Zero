@@ -10,6 +10,7 @@ namespace Zero
     class Window;
     class WindowCloseEvent;
     class RenderSurfaceResize;
+    class ImGuiLayer;
 
     class ZERO_API Application
     {
@@ -34,6 +35,7 @@ namespace Zero
     private:
         std::unique_ptr<class Window> m_Window;
         std::unique_ptr<LayerStack> m_LayerStack;
+        ImGuiLayer* m_ImGuiLayer = nullptr;
         static Application* s_Instance;
         bool m_Running = true;
         bool m_Minimized = false;

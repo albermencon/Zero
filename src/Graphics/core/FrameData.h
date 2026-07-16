@@ -8,6 +8,7 @@
 #include <Engine/Scene/Scene.h>
 #include "RHITypes.h"
 #include "UploadRequest.h"
+#include "Engine/Graphics/ImGuiFrame.h"
 
 namespace Zero
 {
@@ -130,6 +131,7 @@ namespace Zero
         std::vector<DirectionalLightData> dirLights;
         std::vector<PointLightData> pointLights;
         std::vector<UploadRequest> pendingUploads;
+        ImGuiFrame imguiFrame;
 
         void Reserve(uint32_t cpuDrawCount, uint32_t cpuTransformCount,
             uint32_t gpuBatchCount = 0, uint32_t uploadCount = 0)
@@ -146,6 +148,7 @@ namespace Zero
             pointLights.clear();
             pendingUploads.clear();
             sceneCount = 0;
+            imguiFrame.Reset();
         }
 
         // no copy
