@@ -26,6 +26,15 @@ namespace Zero
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
         glfwMakeContextCurrent(glfwWindow);
 
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            if (m_frameFences[i] != nullptr)
+            {
+                glDeleteSync(m_frameFences[i]);
+                m_frameFences[i] = nullptr;
+            }
+        }
+
         if (m_shaderProgram != 0)
         {
             glDeleteProgram(m_shaderProgram);
@@ -108,6 +117,8 @@ namespace Zero
 
     void OpenGLDevice::SwapBuffers()
     {
+        m_frameFences[m_currentFrame] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
         PresentModePolicy requested = m_window->GetPresentModePolicy();
         if (!m_policyInitialized || m_currentPolicy != requested)
@@ -125,6 +136,8 @@ namespace Zero
             m_policyInitialized = true;
         }
         glfwSwapBuffers(glfwWindow);
+
+        m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     bool OpenGLDevice::BeginFrame()
@@ -134,6 +147,13 @@ namespace Zero
             GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
             glfwMakeContextCurrent(glfwWindow);
             m_contextMadeCurrentOnRenderThread = true;
+        }
+
+        if (m_frameFences[m_currentFrame] != nullptr)
+        {
+            glClientWaitSync(m_frameFences[m_currentFrame], 0, GL_TIMEOUT_IGNORED);
+            glDeleteSync(m_frameFences[m_currentFrame]);
+            m_frameFences[m_currentFrame] = nullptr;
         }
 
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);

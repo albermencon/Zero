@@ -1,6 +1,8 @@
 #pragma once
 #include "Graphics/core/GraphicsDevice.h"
+#include "Graphics/core/GraphicsCore.h"
 #include "Engine/Window.h"
+#include <glad/glad.h>
 
 namespace Zero
 {
@@ -40,5 +42,8 @@ namespace Zero
         bool m_contextMadeCurrentOnRenderThread = false;
         PresentModePolicy m_currentPolicy = PresentModePolicy::VSync;
         bool m_policyInitialized = false;
+
+        uint32_t m_currentFrame = 0;
+        GLsync m_frameFences[MAX_FRAMES_IN_FLIGHT]{ nullptr };
     };
 }
