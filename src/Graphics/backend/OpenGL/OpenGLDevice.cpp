@@ -1,14 +1,15 @@
 #include "pch.h"
+#include "OpenGLDevice.h"
+#include "Debug/OpenGLDebug.h"
+#include "Buffer/OpenGLBuffer.h"
+#include "Graphics/backend/OpenGL/Translator/OpenGLTranslator.h"
+#include "Graphics/core/FrameData.h"
 #include <Engine/Window.h>
 #include <Engine/Log.h>
 #include <Engine/Graphics/RenderResources.h>
-#include "OpenGLDevice.h"
-#include "OpenGLBuffer.h"
-#include "Graphics/backend/OpenGL/Translator/OpenGLTranslator.h"
+#include <Engine/Graphics/ImGuiFrame.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "Engine/Graphics/ImGuiFrame.h"
-#include "Graphics/core/FrameData.h"
 #include <imgui.h>
 #include <backends/imgui_impl_opengl3.h>
 
@@ -47,6 +48,18 @@ namespace Zero
             ZERO_CORE_CRITICAL("Failed to initialize Glad!");
             return;
         }
+
+#ifdef ZERO_DEBUG
+        int flags;
+        glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+        if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+        {
+            glEnable(GL_DEBUG_OUTPUT);
+            glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Forces callback to be synchronous (useful for breakpoints)
+            glDebugMessageCallback(OpenGLDebugCallback, nullptr);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+        }
+#endif
 
         const char* vertexShaderSource = R"(#version 460 core
         layout(location = 0) out vec3 fragColor;
@@ -194,7 +207,13 @@ namespace Zero
         {
             glBufferSubData(GL_COPY_WRITE_BUFFER, 0, desc.initialDataSize, desc.initialData);
         }
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+
+#ifdef ZERO_DEBUG
+        if (desc.debugName)
+        {
+            glObjectLabel(GL_BUFFER, id, -1, desc.debugName);
+        }
+#endif
 
         return new OpenGLBuffer(id, desc.size, desc.usage, desc.memory);
     }

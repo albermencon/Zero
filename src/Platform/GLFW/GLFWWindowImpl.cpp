@@ -65,6 +65,11 @@ namespace Zero
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
             glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+#ifdef ZERO_DEBUG
+            // Request an OpenGL debug context for KHR_debug callbacks
+            glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
+#endif
+
             // On macOS, forward-compatible flag is required for core profiles >= 3.2
 #if defined(PLATFORM_MACOS)
             glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
