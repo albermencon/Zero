@@ -1,6 +1,6 @@
 #include "pch.h"
 #include <Engine/Log.h>
-#include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
+#include "VulkanLogicalDevice.h"
 
 namespace Zero 
 {

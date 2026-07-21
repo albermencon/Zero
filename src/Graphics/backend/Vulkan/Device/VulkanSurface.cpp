@@ -1,8 +1,7 @@
 #include <pch.h>
 #include <Engine/Log.h>
-#include "Graphics/backend/Vulkan/VulkanSurface.h"
-#include <GLFW/glfw3.h>
 #include "VulkanSurface.h"
+#include <GLFW/glfw3.h>
 #include <Engine/Window.h>
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)

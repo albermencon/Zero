@@ -1,10 +1,10 @@
 #include "pch.h"
-#include "Graphics/backend/Vulkan/VulkanSwapchain.h"
+#include "VulkanSwapchain.h"
 #include <Engine/Window.h>
 #include <GLFW/glfw3.h> // temp
-#include "Graphics/backend/Vulkan/VulkanPhysicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanSurface.h"
+#include "Graphics/backend/Vulkan/Device/VulkanPhysicalDevice.h"
+#include "Graphics/backend/Vulkan/Device/VulkanLogicalDevice.h"
+#include "Graphics/backend/Vulkan/Device/VulkanSurface.h"
 #include <Engine/Log.h>
 #include <Engine/Thread/Thread.h>
 

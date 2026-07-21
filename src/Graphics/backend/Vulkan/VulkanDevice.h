@@ -6,17 +6,15 @@
 #else
 import vulkan_hpp;
 #endif
-#include <optional>
 
-#include "Graphics/backend/Vulkan/VulkanSurface.h"
-#include "Graphics/backend/Vulkan/VulkanInstance.h"
-#include "Graphics/backend/Vulkan/VulkanPhysicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanSwapchain.h"
+#include "Graphics/backend/Vulkan/Device/VulkanSurface.h"
+#include "Graphics/backend/Vulkan/Device/VulkanInstance.h"
+#include "Graphics/backend/Vulkan/Device/VulkanPhysicalDevice.h"
+#include "Graphics/backend/Vulkan/Device/VulkanLogicalDevice.h"
+#include "Graphics/backend/Vulkan/Swapchain/VulkanSwapchain.h"
 #include "Graphics/backend/Vulkan/Pipeline/VulkanPipeline.h"
-#include "Graphics/backend/Vulkan/VulkanCommandContext.h"
-#include "Graphics/backend/Vulkan/VulkanSyncObjects.h"
-
+#include "Graphics/backend/Vulkan/Command/VulkanCommandContext.h"
+#include "Graphics/backend/Vulkan/Sync/VulkanSyncObjects.h"
 #include "Graphics/backend/Vulkan/VMA/VulkanMemoryAllocator.h"
 
 namespace Zero

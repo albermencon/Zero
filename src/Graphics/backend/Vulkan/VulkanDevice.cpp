@@ -1,10 +1,10 @@
 #include "pch.h"
-#include "VulkanContext.h"
+#include "Graphics/backend/Vulkan/VulkanDevice.h"
 #include "Graphics/backend/Vulkan/Buffer/VulkanBuffer.h"
 #include "Engine/Graphics/MemoryDomain.h"
-#include "Graphics/backend/Vulkan/ShaderModule.h"
 #include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
-#include "Graphics/backend/Vulkan/ShaderProgram.h"
+#include "Graphics/backend/Vulkan/Shader/ShaderModule.h"
+#include "Graphics/backend/Vulkan/Shader/ShaderProgram.h"
 #include "Graphics/backend/Vulkan/Translator/VulkanTranslator.h"
 #include "Engine/Graphics/ImGuiFrame.h"
 #include "Graphics/core/FrameData.h"
@@ -476,6 +476,7 @@ namespace Zero
         );
         */
 
-        // After this VulkanDevice should either submit m_transferCmdBuffer to the queue,
+        // After this, VulkanDevice should either submit m_transferCmdBuffer to the queue,
+        // or if m_transferCmdBuffer IS the main frame command buffer, just continue recording graphics commands.
     }
 }

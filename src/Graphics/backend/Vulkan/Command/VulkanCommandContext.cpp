@@ -1,6 +1,6 @@
 #include "pch.h"
-#include "Graphics/backend/Vulkan/VulkanCommandContext.h"
-#include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
+#include "VulkanCommandContext.h"
+#include "Graphics/backend/Vulkan/Device/VulkanLogicalDevice.h"
 #include "Graphics/core/GraphicsCore.h"
 
 namespace Zero 
@@ -11,6 +11,7 @@ namespace Zero
 		createCommandPool();
 		createCommandBuffers();
 	}
+	
 	void VulkanCommandContext::createCommandPool()
 	{
 		vk::CommandPoolCreateInfo poolInfo{};

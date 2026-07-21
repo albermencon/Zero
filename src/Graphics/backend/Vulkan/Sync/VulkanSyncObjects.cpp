@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "VulkanSyncObjects.h"
 #include "Graphics/core/GraphicsCore.h"
-#include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanSwapchain.h"
+#include "Graphics/backend/Vulkan/Device/VulkanLogicalDevice.h"
+#include "Graphics/backend/Vulkan/Swapchain/VulkanSwapchain.h"
 
 namespace Zero 
 {

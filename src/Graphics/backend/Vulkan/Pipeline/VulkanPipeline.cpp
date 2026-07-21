@@ -1,10 +1,10 @@
 #include "pch.h"
 #include "Graphics/backend/Vulkan/Pipeline/VulkanPipeline.h"
-#include "Graphics/backend/Vulkan/ShaderModule.h"
-#include "Graphics/backend/Vulkan/ShaderProgram.h"
+#include "Graphics/backend/Vulkan/Shader/ShaderModule.h"
+#include "Graphics/backend/Vulkan/Shader/ShaderProgram.h"
 
-#include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
-#include "Graphics/backend/Vulkan/VulkanSwapchain.h"
+#include "Graphics/backend/Vulkan/Device/VulkanLogicalDevice.h"
+#include "Graphics/backend/Vulkan/Swapchain/VulkanSwapchain.h"
 
 #include <iostream>
 #include <stdexcept>

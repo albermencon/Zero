@@ -6,12 +6,12 @@
 #include <Engine/Core.h>
 
 #if defined(PLATFORM_WINDOWS)
-#include "Graphics/backend/Vulkan/VulkanContext.h"
+#include "Graphics/backend/Vulkan/VulkanDevice.h"
 #include "Graphics/backend/OpenGL/OpenGLDevice.h"
 #elif defined(PLATFORM_MACOS)
 #error Unsupported platform
 #elif defined(PLATFORM_LINUX)
-#include "Graphics/backend/Vulkan/VulkanContext.h"
+#include "Graphics/backend/Vulkan/VulkanDevice.h"
 #include "Graphics/backend/OpenGL/OpenGLDevice.h"
 #else
 #error Unsupported platform
