@@ -25,7 +25,9 @@ namespace Zero
 
         virtual Buffer* CreateBuffer(const BufferDesc& desc) override;
         virtual void DestroyBuffer(Buffer* buffer) override;
-        virtual void UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes) override;
+        virtual void CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes) override;
+
+        virtual void FlushTransfers() override;
 
         virtual void OnRenderSurfaceResize() override;
 

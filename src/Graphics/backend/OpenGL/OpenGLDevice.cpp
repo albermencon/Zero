@@ -201,11 +201,13 @@ namespace Zero
 
         GLbitfield flags = OpenGL::toGLBufferStorageFlags(desc.memory);
 
-        glBindBuffer(GL_COPY_WRITE_BUFFER, id);
-        glBufferStorage(GL_COPY_WRITE_BUFFER, desc.size, nullptr, flags);
+        // Allocate immutable storage without binding
+        glNamedBufferStorage(id, desc.size, nullptr, flags);
+
+        // Upload initial data without binding
         if (desc.initialData && desc.initialDataSize > 0)
         {
-            glBufferSubData(GL_COPY_WRITE_BUFFER, 0, desc.initialDataSize, desc.initialData);
+            glNamedBufferSubData(id, 0, desc.initialDataSize, desc.initialData);
         }
 
 #ifdef ZERO_DEBUG
@@ -226,12 +228,26 @@ namespace Zero
         }
     }
 
-    void OpenGLDevice::UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes)
+    void OpenGLDevice::CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes)
     {
-        if (!buffer || !data) return;
-        OpenGLBuffer* glb = static_cast<OpenGLBuffer*>(buffer);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, glb->GetHandle());
-        glBufferSubData(GL_COPY_WRITE_BUFFER, offsetBytes, sizeBytes, data);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+        if (!src || !dst) return;
+        
+        OpenGLBuffer* glSrc = static_cast<OpenGLBuffer*>(src);
+        OpenGLBuffer* glDst = static_cast<OpenGLBuffer*>(dst);
+
+        glCopyNamedBufferSubData(glSrc->GetHandle(), glDst->GetHandle(), srcOffset, dstOffset, sizeBytes);
+    }
+
+    void OpenGLDevice::FlushTransfers()
+    {
+        // Guarantee that all preceding buffer copies and mapped memory flushes 
+        // are complete and visible to the graphics/compute pipelines.
+        glMemoryBarrier(
+            GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
+            GL_ELEMENT_ARRAY_BARRIER_BIT |
+            GL_UNIFORM_BARRIER_BIT |
+            GL_SHADER_STORAGE_BARRIER_BIT |
+            GL_COMMAND_BARRIER_BIT
+        );
     }
 }

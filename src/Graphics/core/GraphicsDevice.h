@@ -25,7 +25,11 @@ namespace Zero
 
         virtual Buffer* CreateBuffer(const BufferDesc& desc) = 0;
         virtual void DestroyBuffer(Buffer* buffer) = 0;
-        virtual void UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes) = 0;
+
+        // Queues a copy operation. Does NOT block.
+        // If dst is CPU-visible, memcpy directly.
+        // If dst is GPU-only, memcpy to internal staging buffer and record copy command.
+        virtual void CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes) = 0;
 
         virtual void OnFinished() = 0;
 
