@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
 #else
@@ -9,7 +8,6 @@ import vulkan_hpp;
 
 namespace Zero
 {
-	const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 	class VulkanLogicalDevice;
 

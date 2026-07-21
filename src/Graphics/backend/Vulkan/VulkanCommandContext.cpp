@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Graphics/backend/Vulkan/VulkanCommandContext.h"
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
+#include "Graphics/core/GraphicsCore.h"
 
 namespace Zero 
 {

@@ -1,5 +1,6 @@
 #pragma once
 #include "Graphics/core/GraphicsDevice.h"
+#include "Graphics/core/GraphicsCore.h"
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
 #else
@@ -81,7 +82,6 @@ namespace Zero
 
     private:
         uint32_t currentFrame = 0;
-        const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
     private:
         Window* m_Window;
         bool m_SwapChainDirty = false;

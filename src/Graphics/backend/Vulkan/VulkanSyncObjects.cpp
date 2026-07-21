@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "VulkanSyncObjects.h"
+#include "Graphics/core/GraphicsCore.h"
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanSwapchain.h"
 
@@ -34,7 +35,6 @@ namespace Zero
         }
 
         // Per-frame resources
-        const auto MAX_FRAMES_IN_FLIGHT = 2;
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             m_presentCompletedSemaphores.emplace_back(m_device->Get(), vk::SemaphoreCreateInfo());

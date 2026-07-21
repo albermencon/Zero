@@ -1,6 +1,7 @@
 #include "Engine/Window.h"
 #include "pch.h"
 #include "Graphics/Renderer/Renderer.h"
+#include "Graphics/core/GraphicsCore.h"
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Log.h>
@@ -232,7 +233,7 @@ namespace Zero
 
 		for (const auto& req : localDestroys)
 		{
-			m_deferredDestroys.push_back({ req.handleValue, static_cast<uint32_t>(req.type), 2 }); // MAX_FRAMES_IN_FLIGHT = 2
+			m_deferredDestroys.push_back({ req.handleValue, static_cast<uint32_t>(req.type), MAX_FRAMES_IN_FLIGHT });
 		}
 
 		for (auto it = m_deferredDestroys.begin(); it != m_deferredDestroys.end(); )

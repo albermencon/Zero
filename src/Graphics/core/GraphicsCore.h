@@ -1,6 +1,8 @@
 #pragma once
+#include <cstdint>
 
 namespace Zero 
 {
-    static constexpr size_t MAX_FRAMES_IN_FLIGHT = 3;
+    inline constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 }
+

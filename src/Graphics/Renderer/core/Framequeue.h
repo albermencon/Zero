@@ -2,6 +2,7 @@
 #include <memory>
 #include <semaphore>
 #include <readerwritercircularbuffer.h>
+#include "Graphics/core/GraphicsCore.h"
 #include "Graphics/core/FrameData.h"
 
 namespace Zero
@@ -9,9 +10,8 @@ namespace Zero
     class FrameQueue
     {
     public:
-        static constexpr size_t MAX_FRAMES_IN_FLIGHT = 3;
 
-        FrameQueue(size_t frames_inflight = 3);
+        FrameQueue(size_t frames_inflight = MAX_FRAMES_IN_FLIGHT);
 
         void Push(FrameData* frame);
 
