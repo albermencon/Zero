@@ -190,6 +190,12 @@ namespace Zero
         m_SwapChainDirty = true;
     }
 
+    Pipeline* OpenGLDevice::CreatePipeline(const PipelineDesc& desc)
+    {
+        ZERO_CORE_ERROR("Pipeline creation not implemented");
+        return nullptr;
+    }
+
     Buffer* OpenGLDevice::CreateBuffer(const BufferDesc& desc)
     {
         GLuint id = 0;

@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "VulkanBuffer.h"
-#include "VulkanMemoryAllocator.h"
+#include "Graphics/backend/Vulkan/VMA/VulkanMemoryAllocator.h"
 #include <Engine/Log.h>
 
 namespace Zero 

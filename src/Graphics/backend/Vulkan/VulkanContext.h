@@ -12,11 +12,11 @@ import vulkan_hpp;
 #include "Graphics/backend/Vulkan/VulkanPhysicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanLogicalDevice.h"
 #include "Graphics/backend/Vulkan/VulkanSwapchain.h"
-#include "Graphics/backend/Vulkan/VulkanPipeline.h"
+#include "Graphics/backend/Vulkan/Pipeline/VulkanPipeline.h"
 #include "Graphics/backend/Vulkan/VulkanCommandContext.h"
 #include "Graphics/backend/Vulkan/VulkanSyncObjects.h"
 
-#include "Graphics/backend/Vulkan/VulkanMemoryAllocator.h"
+#include "Graphics/backend/Vulkan/VMA/VulkanMemoryAllocator.h"
 
 namespace Zero
 {
@@ -44,7 +44,11 @@ namespace Zero
 
         virtual Buffer* CreateBuffer(const BufferDesc& desc) override;
         virtual void DestroyBuffer(Buffer* buffer) override;
-        virtual void UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes) override;
+        virtual void CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes) override;
+
+        virtual Pipeline* CreatePipeline(const PipelineDesc& desc) override;
+
+        virtual void FlushTransfers() override;
 
         void recreateSwapChain();
 

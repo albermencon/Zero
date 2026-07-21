@@ -1,17 +1,18 @@
 #include "pch.h"
-#include <Engine/Core.h>
-#include <Engine/Window.h>
-#include <Engine/Log.h>
 #include "VulkanContext.h"
-#include <GLFW/glfw3.h>
-#include <Engine/Graphics/RenderResources.h>
-#include "Graphics/backend/Vulkan/VulkanBuffer.h"
+#include "Graphics/backend/Vulkan/Buffer/VulkanBuffer.h"
+#include "Engine/Graphics/MemoryDomain.h"
 #include "Graphics/backend/Vulkan/ShaderModule.h"
-#include "Graphics/backend/Vulkan/ShaderProgram.h"
 #include "Graphics/backend/Vulkan/Debug/VulkanDebug.h"
+#include "Graphics/backend/Vulkan/ShaderProgram.h"
 #include "Graphics/backend/Vulkan/Translator/VulkanTranslator.h"
 #include "Engine/Graphics/ImGuiFrame.h"
 #include "Graphics/core/FrameData.h"
+#include <Engine/Core.h>
+#include <Engine/Log.h>
+#include <Engine/Window.h>
+#include <Engine/Graphics/RenderResources.h>
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
 
@@ -52,39 +53,11 @@ namespace Zero
     void VulkanDevice::init() {
         m_memoryAllocator.Initialize(*m_instance.Get(), *m_physicaldevice.Get(), *m_device.Get());
 
-        auto alloc = m_memoryAllocator.GetAllocator();
-
-        VkDeviceSize size = 1024ull * 1024ull * 1024ull; // 1 GB
-
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        VmaAllocationCreateInfo allocInfo{};
-        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-        VkBuffer buffer = VK_NULL_HANDLE;
-        VmaAllocation allocation = VK_NULL_HANDLE;
-
-        /*
-        VkResult result = vmaCreateBuffer(
-            m_memoryAllocator.GetAllocator(),
-            &bufferInfo,
-            &allocInfo,
-            &buffer,
-            &allocation,
-            nullptr
-        );
-        */
-
         // ImGui
         vk::DescriptorPoolSize poolSize{
             vk::DescriptorType::eCombinedImageSampler, 1
         };
+        
         vk::DescriptorPoolCreateInfo poolInfo{
             vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
             1,          // maxSets
@@ -359,17 +332,28 @@ namespace Zero
         commandBuffer.pipelineBarrier2(dependencyInfo);
     }
 
+    Pipeline* VulkanDevice::CreatePipeline(const PipelineDesc& desc)
+    {
+        ZERO_CORE_ERROR("Pipeline creation not implemented");
+        return nullptr;
+    }
+
     Buffer* VulkanDevice::CreateBuffer(const BufferDesc& desc)
     {
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = desc.size;
-        
         bufferInfo.usage = Vulkan::toVkBufferUsage(desc.usage);
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         VmaAllocationCreateInfo allocInfo{};
         allocInfo.usage = Vulkan::toVmaMemoryUsage(desc.memory);
+
+        // Persistently map host-visible memory
+        if (desc.memory != MemoryDomain::GPU)
+        {
+            allocInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
 
         VkBuffer buffer = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
@@ -395,11 +379,18 @@ namespace Zero
         {
             if (vulkanBuffer->IsMappable())
             {
-                void* mapped = vulkanBuffer->Map();
-                if (mapped)
+                // VMA already mapped it due to VMA_ALLOCATION_CREATE_MAPPED_BIT
+                VmaAllocationInfo allocResult;
+                vmaGetAllocationInfo(m_memoryAllocator.GetAllocator(), allocation, &allocResult);
+            
+                if (allocResult.pMappedData)
                 {
-                    memcpy(mapped, desc.initialData, desc.initialDataSize);
-                    vulkanBuffer->Unmap();
+                    memcpy(allocResult.pMappedData, desc.initialData, desc.initialDataSize);
+                    
+                    if (desc.memory == MemoryDomain::CPUtoGPU)
+                    {
+                        vmaFlushAllocation(m_memoryAllocator.GetAllocator(), allocation, 0, desc.initialDataSize);
+                    }
                 }
             }
             else
@@ -407,6 +398,33 @@ namespace Zero
                 ZERO_CORE_WARN("initialData provided for GPU-only buffer without Staging Buffer support yet.");
             }
         }
+
+#ifdef ZERO_DEBUG
+        if (desc.debugName)
+        {
+            vmaSetAllocationName(m_memoryAllocator.GetAllocator(), allocation, desc.debugName);
+
+            // Extract the raw C handle from the RAII wrapper
+            VkDevice rawDevice = *m_device.Get();
+
+            if (rawDevice != VK_NULL_HANDLE) 
+            {
+                VkDebugUtilsObjectNameInfoEXT nameInfo{};
+                nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+                nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
+                nameInfo.objectHandle = reinterpret_cast<uint64_t>(buffer);
+                nameInfo.pObjectName = desc.debugName;
+
+                auto vkSetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+                    vkGetDeviceProcAddr(rawDevice, "vkSetDebugUtilsObjectNameEXT"));
+                
+                if (vkSetDebugUtilsObjectNameEXT)
+                {
+                    vkSetDebugUtilsObjectNameEXT(rawDevice, &nameInfo);
+                }
+            }
+        }
+#endif
 
         return vulkanBuffer;
     }
@@ -419,23 +437,45 @@ namespace Zero
         }
     }
 
-    void VulkanDevice::UpdateBufferData(Buffer* buffer, const void* data, size_t offsetBytes, size_t sizeBytes)
+    void VulkanDevice::CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes)
     {
-        if (!buffer || !data) return;
-        VulkanBuffer* vkb = static_cast<VulkanBuffer*>(buffer);
-        if (vkb->IsMappable())
-        {
-            void* mapped = vkb->Map();
-            if (mapped)
-            {
-                memcpy(static_cast<uint8_t*>(mapped) + offsetBytes, data, sizeBytes);
-                vkb->Unmap();
-            }
-        }
-        else
-        {
-            ZERO_CORE_WARN("UpdateBufferData on GPU-only buffer not supported yet without Staging.");
-        }
+        if (!src || !dst) return;
+        
+        VulkanBuffer* vkSrc = static_cast<VulkanBuffer*>(src);
+        VulkanBuffer* vkDst = static_cast<VulkanBuffer*>(dst);
+        
+        VkBufferCopy copyRegion{};
+        copyRegion.srcOffset = srcOffset;
+        copyRegion.dstOffset = dstOffset;
+        copyRegion.size = sizeBytes;
+
+        // m_transferCmdBuffer must be managed by VulkanDevice (vkBeginCommandBuffer called at BeginFrame)
+        //vkCmdCopyBuffer(m_transferCmdBuffer, vkSrc->GetHandle(), vkDst->GetHandle(), 1, &copyRegion);
     }
 
+    void VulkanDevice::FlushTransfers()
+    {
+        // Ensure all transfer writes are visible to subsequent reads in the pipeline
+        VkMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | 
+                            VK_ACCESS_INDEX_READ_BIT | 
+                            VK_ACCESS_UNIFORM_READ_BIT | 
+                            VK_ACCESS_SHADER_READ_BIT;
+        
+        /*
+        vkCmdPipelineBarrier(
+            m_transferCmdBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            1, &barrier,
+            0, nullptr,
+            0, nullptr
+        );
+        */
+
+        // After this VulkanDevice should either submit m_transferCmdBuffer to the queue,
+    }
 }

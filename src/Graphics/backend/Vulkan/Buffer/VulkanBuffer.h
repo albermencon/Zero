@@ -18,6 +18,7 @@ namespace Zero
         virtual size_t GetSize() const override { return m_size; }
         virtual BufferUsage GetUsage() const override { return m_usage; }
         virtual MemoryDomain GetMemoryDomain() const override { return m_domain; }
+        VmaAllocation GetAllocation() const { return m_allocation; }
 
         virtual bool IsMappable() const override;
 

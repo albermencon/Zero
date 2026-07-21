@@ -4,17 +4,34 @@
 namespace Zero
 {
     class Buffer;
+    class Texture;
+    class Pipeline; 
+
     class BufferDesc;
+    class PipelineDesc;
+    class TextureDesc;
 
     class GraphicsDevice
     {
     public:
         virtual ~GraphicsDevice() = default;
 
-        //virtual std::shared_ptr<Buffer> CreateBuffer(const BufferDesc& desc) = 0;
+        virtual Pipeline* CreatePipeline(const PipelineDesc& desc) = 0;
+        //virtual void DestroyPipeline(Pipeline* pipeline) = 0; // ?
+
+        //virtual Texture* CreateTexture(const TextureDesc& desc) = 0;
+        //virtual void DeleteTexture(Texture* texture) = 0; // ?
 
         // Frame lifecycle
         virtual bool BeginFrame() = 0;
+
+        // Executes all queued buffer updates via staging and issues memory barriers.
+        // Must be called before RenderFrame.
+        virtual void FlushTransfers() = 0;
+
+        // Flushes CPU caches for non-coherent memory domains (CPUtoGPU)
+        //virtual void FlushMappedMemory(Buffer* buffer, size_t offsetBytes, size_t sizeBytes) = 0;
+
         virtual void RenderFrame(class FrameData* frame) = 0;
 
         virtual void InitImGui() = 0;
