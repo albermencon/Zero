@@ -128,10 +128,10 @@ namespace Zero
         uint64_t frameIndex = 0;
         while (m_Running)
         {
-            Time::Update();
             m_Window->PollEvents(); // Poll OS events
             Input::UpdateInput();
             FileWatcher::Get().Poll();
+            Time::Update();
 
             if (m_Minimized)
             {
