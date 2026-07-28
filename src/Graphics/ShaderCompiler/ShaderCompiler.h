@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <vector>
 #include <memory>
 #include <cstdint>
@@ -10,7 +11,10 @@ namespace Zero
     {
         Vertex,
         Fragment,
-        Compute
+        Compute,
+        Hull,
+        Domain,
+        Geometry
     };
 
     enum class ShaderTarget
@@ -31,10 +35,7 @@ namespace Zero
     {
     public:
         static ShaderCompiler& Get();
-
-        void Init(ShaderTarget target);
-
-        CompiledShader Compile(const std::string& source, const char* entryPointName, ShaderStage stage, const std::vector<std::string>& searchPaths = {});
+        CompiledShader Compile(std::string_view source, ShaderTarget target, ShaderStage stage, std::string_view entryPoint = "main");
 
     private:
         ShaderCompiler();
