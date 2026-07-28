@@ -5,6 +5,7 @@
 #include <Engine/Thread/Thread.h>
 #include <Engine/JobSystem/Job.h>
 #include <Engine/JobSystem/JobCounter.h>
+#include <span>
 
 namespace Zero
 {
