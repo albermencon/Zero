@@ -11,13 +11,6 @@
 #include <Engine/Thread/Semaphore.h>
 #include <coroutine>
 
-#if defined(_MSC_VER)
-    #define ZERO_FORCEINLINE __forceinline
-#elif defined(__clang__) || defined(__GNUC__)
-    #define ZERO_FORCEINLINE inline __attribute__((always_inline))
-#else
-    #define ZERO_FORCEINLINE inline
-#endif
 
 namespace Zero::IO 
 {
@@ -44,12 +37,12 @@ namespace Zero::IO
 
             std::atomic<uint32_t> packed{ Pack(IORequestState::Free, 1) };
 
-            ZERO_FORCEINLINE IORequestState GetState(std::memory_order order = std::memory_order_acquire) const noexcept 
+            ZERO_FORCE_INLINE IORequestState GetState(std::memory_order order = std::memory_order_acquire) const noexcept 
             {
                 return static_cast<IORequestState>(packed.load(order) & 0xFF);
             }
 
-            ZERO_FORCEINLINE uint16_t GetGeneration(std::memory_order order = std::memory_order_acquire) const noexcept 
+            ZERO_FORCE_INLINE uint16_t GetGeneration(std::memory_order order = std::memory_order_acquire) const noexcept 
             {
                 return static_cast<uint16_t>((packed.load(order) >> 8) & 0xFFFF);
             }

@@ -2,6 +2,7 @@
 #include <Engine/Input/KeyCode.h>
 #include <Engine/Input/MouseButton.h>
 #include <cstdint>
+#include <Engine/Platform.h>
 
 namespace Zero
 {
@@ -12,12 +13,12 @@ namespace Zero
 
         void UpdateInput();
 
-        static inline void SetBit(uint8_t state[64], int idx)
+        static ZERO_FORCE_INLINE void SetBit(uint8_t state[64], int idx)
         {
             state[idx >> 3] |= (1u << (idx & 7));
         }
 
-        static inline void ClearBit(uint8_t state[64], int idx)
+        static ZERO_FORCE_INLINE void ClearBit(uint8_t state[64], int idx)
         {
             state[idx >> 3] &= ~(1u << (idx & 7));
         }

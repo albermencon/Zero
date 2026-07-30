@@ -22,7 +22,7 @@ namespace Zero
         void PushOverlay(std::unique_ptr<Layer> overlay);
 
         static Application& Get();
-        inline Window& GetWindow() { return *m_Window; }
+        ZERO_FORCE_INLINE Window& GetWindow() { return *m_Window; }
 
         void Run();
 

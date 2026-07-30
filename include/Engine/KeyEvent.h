@@ -9,7 +9,7 @@ namespace Zero
     class ZERO_API KeyEvent : public Event
     {
     public:
-        inline int GetKeyCode() const { return m_KeyCode; }
+        ZERO_FORCE_INLINE int GetKeyCode() const { return m_KeyCode; }
 
         EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryKeyboard)
     protected:
@@ -24,7 +24,7 @@ namespace Zero
         KeyPressedEvent(int keycode, int repeatCount)
             : KeyEvent(keycode), m_RepeatCount(repeatCount) {}
 
-        inline int GetRepeatCount() const { return m_RepeatCount; }
+        ZERO_FORCE_INLINE int GetRepeatCount() const { return m_RepeatCount; }
 
         std::string ToString() const override
         {

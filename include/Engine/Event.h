@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <Engine/Platform.h>
 #include <iosfwd> // Forward declaration for std::ostream
 
 namespace Zero
@@ -74,7 +75,7 @@ namespace Zero
         virtual int GetCategoryFlags() const = 0;
         virtual std::string ToString() const;
 
-        inline bool IsInCategory(EventCategory category)
+        ZERO_FORCE_INLINE bool IsInCategory(EventCategory category)
         {
             return GetCategoryFlags() & category;
         }

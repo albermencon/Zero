@@ -12,8 +12,8 @@ namespace Zero
         WindowResizeEvent(unsigned int width, unsigned int height)
             : m_Width(width), m_Height(height) {}
 
-        inline unsigned int GetWidth() const { return m_Width; }
-        inline unsigned int GetHeight() const { return m_Height; }
+        ZERO_FORCE_INLINE unsigned int GetWidth() const { return m_Width; }
+        ZERO_FORCE_INLINE unsigned int GetHeight() const { return m_Height; }
 
         std::string ToString() const override
         {
@@ -43,8 +43,8 @@ namespace Zero
         RenderSurfaceResize(unsigned int width, unsigned int height)
             : m_Width(width), m_Height(height) {}
 
-        inline unsigned int GetWidth() const { return m_Width; }
-        inline unsigned int GetHeight() const { return m_Height; }
+        ZERO_FORCE_INLINE unsigned int GetWidth() const { return m_Width; }
+        ZERO_FORCE_INLINE unsigned int GetHeight() const { return m_Height; }
 
         std::string ToString() const override
         {

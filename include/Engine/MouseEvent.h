@@ -12,8 +12,8 @@ namespace Zero
         MouseMovedEvent(float x, float y)
             : m_MouseX(x), m_MouseY(y) {}
 
-        inline float GetX() const { return m_MouseX; }
-        inline float GetY() const { return m_MouseY; }
+        ZERO_FORCE_INLINE float GetX() const { return m_MouseX; }
+        ZERO_FORCE_INLINE float GetY() const { return m_MouseY; }
 
         std::string ToString() const override
         {
@@ -34,8 +34,8 @@ namespace Zero
         MouseScrolledEvent(float xOffset, float yOffset)
             : m_XOffset(xOffset), m_YOffset(yOffset) {}
 
-        inline float GetXOffset() const { return m_XOffset; }
-        inline float GetYOffset() const { return m_YOffset; }
+        ZERO_FORCE_INLINE float GetXOffset() const { return m_XOffset; }
+        ZERO_FORCE_INLINE float GetYOffset() const { return m_YOffset; }
 
         std::string ToString() const override
         {
@@ -53,7 +53,7 @@ namespace Zero
     class ZERO_API MouseButtonEvent : public Event
     {
     public:
-        inline int GetMouseButton() const { return m_Button; }
+        ZERO_FORCE_INLINE int GetMouseButton() const { return m_Button; }
 
         EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryMouse)
     protected:

@@ -11,6 +11,7 @@ import vulkan_hpp;
 #include <Engine/Graphics/BufferUsage.h>
 #include <Engine/Graphics/MemoryDomain.h>
 #include <Engine/Graphics/PipelineDesc.h>
+#include <Engine/Platform.h>
 #include <vk_mem_alloc.h>
 
 namespace Zero::Vulkan
@@ -336,7 +337,7 @@ namespace Zero::Vulkan
 
 
 
-    [[nodiscard]] inline VkBufferUsageFlags toVkBufferUsage(BufferUsage usage)
+    [[nodiscard]] ZERO_FORCE_INLINE VkBufferUsageFlags toVkBufferUsage(BufferUsage usage)
     {
         VkBufferUsageFlags flags = 0;
         if (hasUsage(usage, BufferUsage::Vertex))      flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -349,7 +350,7 @@ namespace Zero::Vulkan
         return flags;
     }
 
-    [[nodiscard]] inline VmaMemoryUsage toVmaMemoryUsage(MemoryDomain domain)
+    [[nodiscard]] ZERO_FORCE_INLINE VmaMemoryUsage toVmaMemoryUsage(MemoryDomain domain)
     {
         switch (domain)
         {

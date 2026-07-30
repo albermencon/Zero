@@ -1,5 +1,5 @@
-#pragma once
 #include <Engine/Graphics/PipelineDesc.h>
+#include <Engine/Platform.h>
 
 namespace Zero::EmbeddedShaders
 {
@@ -37,7 +37,7 @@ float4 fragMain(VSOutput input) : SV_Target
 }
 )";
 
-    [[nodiscard]] inline PipelineDesc DefaultTrianglePipeline()
+    [[nodiscard]] ZERO_FORCE_INLINE PipelineDesc DefaultTrianglePipeline()
     {
         PipelineDesc d;
         d.debugName = "Default Embedded Triangle";

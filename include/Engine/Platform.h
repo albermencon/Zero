@@ -46,3 +46,14 @@
     #define ZR_ALIGNED_MALLOC(size, align) std::aligned_alloc((align), (size))
     #define ZR_ALIGNED_FREE(ptr)           std::free(ptr)
 #endif
+
+// Force inline
+#if defined(_DEBUG) || !defined(__OPTIMIZE__)
+    #define ZERO_FORCE_INLINE inline
+#elif defined(_MSC_VER)
+    #define ZERO_FORCE_INLINE inline __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+    #define ZERO_FORCE_INLINE inline __attribute__((always_inline))
+#else
+    #define ZERO_FORCE_INLINE inline
+#endif
