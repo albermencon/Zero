@@ -6,7 +6,7 @@
 
 namespace Zero
 {
-    struct ZERO_API JobCounter
+    struct ZERO_API alignas(8) JobCounter
     {
         std::atomic<uint32_t> pending{0};
         std::binary_semaphore semaphore{ 0 };
@@ -25,4 +25,6 @@ namespace Zero
         JobCounter* m_next{nullptr};
         friend class JobCounterPool;
     };
+
+    static_assert(alignof(JobCounter) >= 8, "JobCounter must be at least 8 bytes aligned");
 }

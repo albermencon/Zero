@@ -42,7 +42,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         Job completionJob;
         completionJob.fn = nullptr;
         completionJob.ptr = nullptr;
-        completionJob.mode = Job::Mode::External;
+        completionJob.SetMode(Job::Mode::External);
 
         ReadRequest readReq{};
         readReq.file = handle;
@@ -171,7 +171,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         streamFinished.store(false);
 
         Job chunkJob;
-        chunkJob.mode = Job::Mode::Inline;
+        chunkJob.SetMode(Job::Mode::Inline);
         chunkJob.fn = [](void* ctx) 
         {
             StreamChunkResult* chunkResult = static_cast<StreamChunkResult*>(ctx);
@@ -180,7 +180,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         };
 
         Job streamJob;
-        streamJob.mode = Job::Mode::Inline;
+        streamJob.SetMode(Job::Mode::Inline);
         streamJob.fn = [](void* ctx)
         {
             streamFinished.store(true);
@@ -253,7 +253,7 @@ TEST_CASE("IOScheduler: End-to-End Submission Fallback")
         counter.pending.store(1, std::memory_order_release);
 
         Job finishJob;
-        finishJob.mode = Job::Mode::Inline;
+        finishJob.SetMode(Job::Mode::Inline);
         finishJob.fn = [](void*) {};
 
         ReadRequest directReq{};

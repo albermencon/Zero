@@ -17,7 +17,7 @@ namespace Zero
 
         Job job;
         job.fn   = fn;
-        job.mode = Job::Mode::Inline;
+        job.SetMode(Job::Mode::Inline);
         std::memcpy(job.payload, &data, sizeof(TData));
         return job;
     }
@@ -28,7 +28,7 @@ namespace Zero
         Job job;
         job.fn   = fn;
         job.ptr  = ptr;
-        job.mode = Job::Mode::External;
+        job.SetMode(Job::Mode::External);
         return job;
     }
 

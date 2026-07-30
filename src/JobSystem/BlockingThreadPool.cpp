@@ -98,7 +98,7 @@ namespace Zero
     void BlockingThreadPool::enqueue(Job job, JobCounter &counter)
     {
         counter.pending.fetch_add(1, std::memory_order_relaxed);
-		job.counter = &counter;  // stamp before enqueue
+		job.SetCounter(&counter);  // stamp before enqueue
 		m_queue.enqueue(get_producer_token(), job);
     }
 
@@ -109,7 +109,7 @@ namespace Zero
 
 		std::vector<Job> stamped(jobs.begin(), jobs.end());
 		for (auto& j : stamped)
-			j.counter = &counter;
+			j.SetCounter(&counter);
 
     	m_queue.enqueue_bulk(get_producer_token(), stamped.data(), stamped.size());
     }
@@ -138,13 +138,13 @@ namespace Zero
 				ZERO_PROFILE_SCOPE("Job");
 				Job& job = buffer[i];
 
-				if (job.mode == Job::Mode::Inline)
+				if (job.IsInline())
 					job.fn(job.payload);
 				else
 					job.fn(job.ptr);
 
-				if (job.counter)
-            		job.counter->Decrement(); // wake waiter if this was the last job
+				if (JobCounter* c = job.GetCounter())
+            		c->Decrement(); // wake waiter if this was the last job
 			}
 		}
 	}

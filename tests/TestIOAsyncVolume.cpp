@@ -102,7 +102,7 @@ TEST_CASE("IOScheduler: Async Large Volume Non-Blocking")
     uint32_t slidingWindowSize = 4;
 
     Job chunkJob;
-    chunkJob.mode = Job::Mode::Inline;
+    chunkJob.SetMode(Job::Mode::Inline);
     chunkJob.fn = [](void* ctx) {
         auto* result = static_cast<StreamChunkResult*>(ctx);
         largeChunkCompletions.fetch_add(1, std::memory_order_relaxed);
