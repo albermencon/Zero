@@ -18,7 +18,7 @@ namespace Zero
         vk::ApplicationInfo appInfo{};
         appInfo.pApplicationName = "Vulkan";
         //appInfo.apiVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName = "Voxel Engine";
+        appInfo.pEngineName = "Zero";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion = vk::ApiVersion13;
 
