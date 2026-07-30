@@ -77,10 +77,14 @@ namespace Zero::IO
 
     struct [[nodiscard]] StreamChunkResult 
     {
-        size_t chunkIndex;
-        size_t fileOffset;
-        size_t bytesRead;
-        std::span<std::byte> memory;
+        uint32_t chunkIndex{ 0 };
+        uint32_t bytesRead{ 0 };
+        std::byte* buffer{ nullptr };
+
+        [[nodiscard]] std::span<std::byte> memory() const noexcept
+        {
+            return { buffer, bytesRead };
+        }
     };
-    static_assert(sizeof(StreamChunkResult) <= 40, "StreamChunkResult must fit inside Job payload");
+    static_assert(sizeof(StreamChunkResult) <= 16, "StreamChunkResult must fit inside 16-byte Job payload");
 }

@@ -512,12 +512,11 @@ namespace Zero::IO
                     {
                         Job chunkJob = stream.chunkCompletionJob;
                         StreamChunkResult chunkResult;
-                        chunkResult.chunkIndex = payload.stream.chunkIndex;
-                        chunkResult.fileOffset = payload.stream.offset;
-                        chunkResult.bytesRead = payload.bytesTransferred;
-                        chunkResult.memory = std::span<std::byte>{ static_cast<std::byte*>(payload.stream.buffer), payload.bytesTransferred };
+                        chunkResult.chunkIndex = static_cast<uint32_t>(payload.stream.chunkIndex);
+                        chunkResult.bytesRead = static_cast<uint32_t>(payload.bytesTransferred);
+                        chunkResult.buffer = static_cast<std::byte*>(payload.stream.buffer);
                         
-                        memcpy(chunkJob.payload, &chunkResult, sizeof(StreamChunkResult));
+                        std::memcpy(chunkJob.payload, &chunkResult, sizeof(StreamChunkResult));
                         Zero::Enqueue(chunkJob);
                     }
                 }
