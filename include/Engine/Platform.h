@@ -35,3 +35,14 @@
 #else
     #define DEBUGBREAK()
 #endif
+
+// Aligned heap allocation helpers
+#ifdef PLATFORM_WINDOWS
+    #include <malloc.h>
+    #define ZR_ALIGNED_MALLOC(size, align) _aligned_malloc((size), (align))
+    #define ZR_ALIGNED_FREE(ptr)           _aligned_free(ptr)
+#else
+    #include <cstdlib>
+    #define ZR_ALIGNED_MALLOC(size, align) std::aligned_alloc((align), (size))
+    #define ZR_ALIGNED_FREE(ptr)           std::free(ptr)
+#endif
