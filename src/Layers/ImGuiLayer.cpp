@@ -31,6 +31,14 @@ namespace Zero
         Application& app = Application::Get();
         GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
 
+        // Apply per-monitor DPI scaling to the UI. The GLFW backend only sets
+        // io.DisplaySize / io.DisplayFramebufferScale and does NOT scale fonts,
+        // so without this the UI is laid out in native pixels and appears tiny
+        // on high-DPI displays
+        const float contentScale = ImGui_ImplGlfw_GetContentScaleForWindow(window);
+        if (contentScale > 0.0f)
+            ImGui::GetStyle().FontScaleDpi = contentScale;
+
         uint32_t backend = ConfigSystem::Get().GetUInt("Window", "Backend", 0);
         if (backend == 0) // Vulkan
         {
@@ -53,7 +61,16 @@ namespace Zero
 
     void ImGuiLayer::Begin()
     {
+        // Keep the DPI scale in sync in case the window is moved to a monitor
+        // with a different scaling factor
+        Application& app = Application::Get();
+        GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
+        const float contentScale = ImGui_ImplGlfw_GetContentScaleForWindow(window);
+        if (contentScale > 0.0f)
+            ImGui::GetStyle().FontScaleDpi = contentScale;
+
         ImGui_ImplGlfw_NewFrame();
+
         ImGui::NewFrame();
     }
 
