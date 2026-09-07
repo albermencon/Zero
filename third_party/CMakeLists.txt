@@ -1,5 +1,3 @@
-include(FetchContent)
-
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Prevent vendor libraries from installing themselves
@@ -34,19 +32,11 @@ target_include_directories(vma
 
 if (WIN32)
 
-    FetchContent_Declare(
-        d3d12ma
-        GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git
-        GIT_TAG v3.1.0
-    )
-
-    FetchContent_MakeAvailable(d3d12ma)
-
     add_library(d3d12ma INTERFACE)
 
     target_include_directories(d3d12ma
         SYSTEM INTERFACE
-            ${d3d12ma_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/d3d12ma/include
     )
 
 endif()
