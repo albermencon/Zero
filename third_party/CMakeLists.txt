@@ -22,6 +22,15 @@ target_include_directories(moodycamel
         ${CMAKE_CURRENT_SOURCE_DIR}/moodycamel
 )
 
+# Doctest (header-only)
+add_library(doctest INTERFACE)
+
+target_include_directories(doctest
+    INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/doctest
+)
+
+
 # VMA (Vulkan Memory Allocator)
 add_library(vma INTERFACE)
 

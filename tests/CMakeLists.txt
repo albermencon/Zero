@@ -1,9 +1,5 @@
-# Add doctest as an interface library
-add_library(doctest INTERFACE)
-target_include_directories(doctest INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/doctest)
-
 # Find all test source files automatically
-file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 
 # Define the test executable
 add_executable(ZeroTests
@@ -12,6 +8,10 @@ add_executable(ZeroTests
 
 # Link against the engine (Zero) and doctest
 target_link_libraries(ZeroTests PRIVATE Zero doctest)
+target_include_directories(ZeroTests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/moodycamel
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
 
 # Add sanitizer options if requested via CMake options
 option(ZERO_ENABLE_ASAN "Enable AddressSanitizer for tests" OFF)
