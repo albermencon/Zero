@@ -117,3 +117,10 @@ if(ZERO_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# Micro-benchmarks
+option(ZERO_BUILD_BENCHMARKS "Build and include the micro-benchmarking suite" ON)
+if(ZERO_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
+
