@@ -4,6 +4,10 @@ project(Zero)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose build type" FORCE)
+endif()
+
 option(BUILD_SHARED "Build as shared library" OFF)
 option(ZERO_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
 
@@ -41,6 +45,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND UNIX)
     target_compile_definitions(Zero PUBLIC __cpp_concepts=202002L)
     target_compile_options(Zero PUBLIC -Wno-builtin-macro-redefined)
 endif()
+
+target_compile_definitions(Zero PUBLIC
+    $<$<CONFIG:Debug>:ZERO_DEBUG>
+)
 
 target_include_directories(Zero
     PUBLIC
