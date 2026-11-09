@@ -34,6 +34,7 @@ namespace Zero
         virtual void OnRenderSurfaceResize() override;
 
         virtual Pipeline* CreatePipeline(const PipelineDesc& desc) override;
+        virtual void DestroyPipeline(Pipeline* pipeline) override {}
     private:
         Window* m_window = nullptr;
         bool m_SwapChainDirty = false;

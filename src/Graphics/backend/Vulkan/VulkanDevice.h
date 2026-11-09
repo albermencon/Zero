@@ -46,6 +46,7 @@ namespace Zero
         virtual void CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes) override;
 
         virtual Pipeline* CreatePipeline(const PipelineDesc& desc) override;
+        virtual void DestroyPipeline(Pipeline* pipeline) override;
 
         virtual void FlushTransfers() override;
 

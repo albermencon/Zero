@@ -17,7 +17,7 @@ namespace Zero
         virtual ~GraphicsDevice() = default;
 
         virtual Pipeline* CreatePipeline(const PipelineDesc& desc) = 0;
-        //virtual void DestroyPipeline(Pipeline* pipeline) = 0; // ?
+        virtual void DestroyPipeline(Pipeline* pipeline) = 0;
 
         //virtual Texture* CreateTexture(const TextureDesc& desc) = 0;
         //virtual void DeleteTexture(Texture* texture) = 0; // ?

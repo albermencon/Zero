@@ -331,8 +331,20 @@ namespace Zero
 
     Pipeline* VulkanDevice::CreatePipeline(const PipelineDesc& desc)
     {
-        ZERO_CORE_ERROR("Pipeline creation not implemented");
-        return nullptr;
+        try
+        {
+            return new VulkanPipeline(&m_device, desc);
+        }
+        catch (const std::exception& e)
+        {
+            ZERO_CORE_ERROR("Failed to create Vulkan pipeline: {0}", e.what());
+            return nullptr;
+        }
+    }
+
+    void VulkanDevice::DestroyPipeline(Pipeline* pipeline)
+    {
+        delete pipeline;
     }
 
     Buffer* VulkanDevice::CreateBuffer(const BufferDesc& desc)

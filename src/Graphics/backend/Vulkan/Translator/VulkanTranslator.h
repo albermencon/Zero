@@ -362,5 +362,31 @@ namespace Zero::Vulkan
         return VMA_MEMORY_USAGE_GPU_ONLY;
     }
 
+    [[nodiscard]] constexpr vk::DescriptorType toVkDescriptorType(DescriptorType type)
+    {
+        switch (type)
+        {
+        case DescriptorType::UniformBuffer:         return vk::DescriptorType::eUniformBuffer;
+        case DescriptorType::StorageBuffer:         return vk::DescriptorType::eStorageBuffer;
+        case DescriptorType::CombinedImageSampler:  return vk::DescriptorType::eCombinedImageSampler;
+        case DescriptorType::StorageImage:          return vk::DescriptorType::eStorageImage;
+        case DescriptorType::UniformBufferDynamic:  return vk::DescriptorType::eUniformBufferDynamic;
+        case DescriptorType::StorageBufferDynamic:  return vk::DescriptorType::eStorageBufferDynamic;
+        }
+        return vk::DescriptorType::eStorageBuffer;
+    }
+
+    [[nodiscard]] constexpr vk::ShaderStageFlags toVkShaderStageFlags(ShaderStageFlag flags)
+    {
+        vk::ShaderStageFlags out{};
+        if (static_cast<uint8_t>(flags) & static_cast<uint8_t>(ShaderStageFlag::Vertex))
+            out |= vk::ShaderStageFlagBits::eVertex;
+        if (static_cast<uint8_t>(flags) & static_cast<uint8_t>(ShaderStageFlag::Fragment))
+            out |= vk::ShaderStageFlagBits::eFragment;
+        if (static_cast<uint8_t>(flags) & static_cast<uint8_t>(ShaderStageFlag::Compute))
+            out |= vk::ShaderStageFlagBits::eCompute;
+        return out;
+    }
+
 }
 

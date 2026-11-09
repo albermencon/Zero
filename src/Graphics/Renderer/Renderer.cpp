@@ -228,7 +228,16 @@ namespace Zero
 		// Process Pipeline Creations
 		for (const auto& req : localPipelines)
 		{
-			impl.pipelineRegistry.MarkReady(req.handle, nullptr);
+			Pipeline* pipeline = m_backend->CreatePipeline(req.desc);
+			if (pipeline)
+			{
+				impl.pipelineRegistry.MarkReady(req.handle, pipeline);
+			}
+			else
+			{
+				ZERO_CORE_ERROR("Failed to create pipeline for handle {0}", req.handle.GetId());
+				impl.pipelineRegistry.MarkFailed(req.handle);
+			}
 		}
 
 		for (const auto& req : localDestroys)
@@ -260,6 +269,8 @@ namespace Zero
 			else if (it->type == static_cast<uint32_t>(ResourceDestroyRequest::Type::Pipeline))
 			{
 				PipelineHandle handle{ it->handleValue };
+				Pipeline* pipeline = impl.pipelineRegistry.GetBackendResource(handle);
+				if (pipeline) m_backend->DestroyPipeline(pipeline);
 				impl.pipelineRegistry.ReclaimSlot(handle);
 			}
 

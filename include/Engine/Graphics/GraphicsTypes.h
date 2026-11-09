@@ -237,4 +237,36 @@ namespace Zero
         return static_cast<ColorWriteMask>(
             static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
     }
+
+    // Shader Stage Flags
+    enum class ZERO_API ShaderStageFlag : uint8_t
+    {
+        None     = 0,
+        Vertex   = 1 << 0,
+        Fragment = 1 << 1,
+        Compute  = 1 << 2,
+        AllGraphics = Vertex | Fragment,
+        All      = Vertex | Fragment | Compute
+    };
+
+    inline constexpr ShaderStageFlag operator|(ShaderStageFlag a, ShaderStageFlag b)
+    {
+        return static_cast<ShaderStageFlag>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+    }
+
+    inline constexpr ShaderStageFlag operator&(ShaderStageFlag a, ShaderStageFlag b)
+    {
+        return static_cast<ShaderStageFlag>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+    }
+
+    // Descriptor Types
+    enum class ZERO_API DescriptorType : uint8_t
+    {
+        UniformBuffer,
+        StorageBuffer,
+        CombinedImageSampler,
+        StorageImage,
+        UniformBufferDynamic,
+        StorageBufferDynamic
+    };
 }

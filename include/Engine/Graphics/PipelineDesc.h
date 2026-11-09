@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <vector>
 #include <cstdint>
 #include <Engine/Core.h>
 #include "GraphicsTypes.h"
@@ -24,15 +25,32 @@ namespace Zero
         ShaderDesc fragment;
 
         // Optional stages
+        ShaderDesc compute;              // compute shader (CS)
         ShaderDesc hull;                 // tessellation control  (DX12: HS, Vulkan: TCS)
         ShaderDesc domain;               // tessellation eval     (DX12: DS, Vulkan: TES)
         ShaderDesc geometry;             // geometry shader
 
         [[nodiscard]] constexpr bool hasVertex()   const { return vertex.path != nullptr; }
-        [[nodiscard]] constexpr bool hasFragment()  const { return fragment.path != nullptr; }
+        [[nodiscard]] constexpr bool hasFragment() const { return fragment.path != nullptr; }
+        [[nodiscard]] constexpr bool hasCompute()  const { return compute.path != nullptr; }
         [[nodiscard]] constexpr bool hasHull()      const { return hull.path != nullptr; }
         [[nodiscard]] constexpr bool hasDomain()    const { return domain.path != nullptr; }
         [[nodiscard]] constexpr bool hasGeometry()  const { return geometry.path != nullptr; }
+    };
+
+    struct PushConstantDesc
+    {
+        ShaderStageFlag stages = ShaderStageFlag::Vertex;
+        uint32_t offset = 0;
+        uint32_t size = 0;
+    };
+
+    struct DescriptorBindingDesc
+    {
+        uint32_t binding = 0;
+        DescriptorType type = DescriptorType::StorageBuffer;
+        ShaderStageFlag stages = ShaderStageFlag::All;
+        uint32_t count = 1;
     };
 
     struct RasterizerState
@@ -310,6 +328,12 @@ namespace Zero
         // Must match the actual attachments used at draw time.
         RenderTargetLayout renderTargetLayout;
 
+        // Pipeline Layout (Descriptors & Push Constants)
+        std::vector<PushConstantDesc>      pushConstants;
+        std::vector<DescriptorBindingDesc> bindings;
+
+        [[nodiscard]] constexpr bool isCompute() const { return shaders.hasCompute(); }
+
         // Convenience factories — common pipeline archetypes
 
         /// Standard opaque forward-rendering pass
@@ -368,6 +392,14 @@ namespace Zero
             d.depthStencilState = DepthStencilState::Disabled();
             d.rasterizerState = RasterizerState::NoCull();
             d.blendState = BlendState::Opaque();
+            return d;
+        }
+
+        /// Compute pipeline
+        [[nodiscard]] static PipelineDesc Compute(ShaderDesc computeShader)
+        {
+            PipelineDesc d;
+            d.shaders.compute = computeShader;
             return d;
         }
     };
