@@ -4,7 +4,8 @@
 #include "Engine/Graphics/MemoryDomain.h"
 #include "Graphics/backend/Vulkan/Translator/VulkanTranslator.h"
 #include "Engine/Graphics/ImGuiFrame.h"
-#include "Graphics/core/FrameData.h"
+#include <Engine/Graphics/FrameData.h>
+#include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Core.h>
 #include <Engine/Log.h>
 #include <Engine/Window.h>
@@ -273,7 +274,118 @@ namespace Zero
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(m_swapchain.GetExtent().width), static_cast<float>(m_swapchain.GetExtent().height), 0.0f, 1.0f));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), m_swapchain.GetExtent()));
 
-        ImDrawData* drawData = frame->imguiFrame.GetNativeDrawData();
+        if (frame && !frame->drawPackets.empty())
+        {
+            auto& impl = RenderInterfaceImpl::Get();
+
+            auto getVkBuffer = [&impl](BufferHandle handle) -> vk::Buffer {
+                if (!handle.IsValid()) return nullptr;
+                Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
+                if (!b) return nullptr;
+                return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
+            };
+
+            auto getGraphicsPipeline = [&impl](uint16_t pipelineId) -> VulkanGraphicsPipeline* {
+                if (pipelineId == 0) return nullptr;
+                Pipeline* p = impl.pipelineRegistry.GetBackendResource(PipelineHandle{ pipelineId });
+                if (!p || p->IsCompute()) return nullptr;
+                return static_cast<VulkanGraphicsPipeline*>(p);
+            };
+
+            uint16_t currentPipelineId = 0;
+            VulkanGraphicsPipeline* currentPipeline = nullptr;
+            BufferHandle currentVb{};
+            BufferHandle currentIb{};
+
+            for (const auto& packet : frame->drawPackets)
+            {
+                uint16_t pipelineId = RHI::GetPipelineIdFromSortKey(packet.sortKey);
+                if (pipelineId != currentPipelineId)
+                {
+                    currentPipelineId = pipelineId;
+                    currentPipeline = getGraphicsPipeline(pipelineId);
+                    if (currentPipeline)
+                    {
+                        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *currentPipeline->GetPipeline());
+                    }
+                }
+
+                if (!currentPipeline)
+                    continue;
+
+                if (packet.geometryId < frame->geometryTable.size())
+                {
+                    const auto& geom = frame->geometryTable[packet.geometryId];
+
+                    if (geom.vertexBuffer.IsValid() && geom.vertexBuffer != currentVb)
+                    {
+                        vk::Buffer vb = getVkBuffer(geom.vertexBuffer);
+                        if (vb)
+                        {
+                            commandBuffer.bindVertexBuffers(0, vb, { 0 });
+                            currentVb = geom.vertexBuffer;
+                        }
+                    }
+
+                    if (geom.indexBuffer.IsValid() && geom.indexBuffer != currentIb)
+                    {
+                        vk::Buffer ib = getVkBuffer(geom.indexBuffer);
+                        if (ib)
+                        {
+                            commandBuffer.bindIndexBuffer(ib, 0, vk::IndexType::eUint32);
+                            currentIb = geom.indexBuffer;
+                        }
+                    }
+                }
+
+                switch (static_cast<RHI::DrawCmdType>(packet.cmdType))
+                {
+                case RHI::DrawCmdType::Arrays:
+                    commandBuffer.draw(packet.arrays.vertexCount, 1, packet.arrays.firstVertex, 0);
+                    break;
+
+                case RHI::DrawCmdType::Indexed:
+                    commandBuffer.drawIndexed(packet.indexed.indexCount, 1, packet.indexed.firstIndex, packet.indexed.vertexOffset, 0);
+                    break;
+
+                case RHI::DrawCmdType::Instanced:
+                    commandBuffer.drawIndexed(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.vertexOffset, packet.instanced.firstInstance);
+                    break;
+
+                case RHI::DrawCmdType::MultiDrawIndirect:
+                {
+                    vk::Buffer indirectBuffer = getVkBuffer(BufferHandle{ packet.mdi.indirectBufferId });
+                    if (indirectBuffer)
+                    {
+                        constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
+                        commandBuffer.drawIndexedIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
+                    }
+                    break;
+                }
+
+                case RHI::DrawCmdType::MultiDrawIndirectCount:
+                {
+                    vk::Buffer indirectBuffer = getVkBuffer(BufferHandle{ packet.mdiCount.indirectBufferId });
+                    vk::Buffer countBuffer = getVkBuffer(BufferHandle{ packet.mdiCount.countBufferId });
+                    if (indirectBuffer && countBuffer)
+                    {
+                        constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
+                        commandBuffer.drawIndexedIndirectCount(
+                            indirectBuffer,
+                            packet.mdiCount.indirectOffset,
+                            countBuffer,
+                            packet.mdiCount.countOffset,
+                            packet.mdiCount.maxDrawCount,
+                            stride
+                        );
+                    }
+                    break;
+                }
+                }
+            }
+        }
+
+        ImDrawData* drawData = frame ? frame->imguiFrame.GetNativeDrawData() : nullptr;
         if (drawData)
         {
             ImGui_ImplVulkan_RenderDrawData(drawData, *commandBuffer);

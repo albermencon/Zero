@@ -58,17 +58,21 @@ namespace Zero
         vk::StructureChain<
             vk::PhysicalDeviceFeatures2,
             vk::PhysicalDeviceVulkan11Features,
+            vk::PhysicalDeviceVulkan12Features,
             vk::PhysicalDeviceVulkan13Features,
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
             //,vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesKHR
         > featureChain{};
 
         // Enable features directly in the chain
+        featureChain.get<vk::PhysicalDeviceFeatures2>().features.fillModeNonSolid = VK_TRUE;
+        featureChain.get<vk::PhysicalDeviceFeatures2>().features.multiDrawIndirect = VK_TRUE;
         //featureChain.get<vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesKHR>().presentModeFifoLatestReady = VK_TRUE;
+        featureChain.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters = VK_TRUE;
+        featureChain.get<vk::PhysicalDeviceVulkan12Features>().drawIndirectCount = VK_TRUE;
         featureChain.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering = VK_TRUE; // Enable dynamic rendering from Vulkan 1.3
         featureChain.get<vk::PhysicalDeviceVulkan13Features>().synchronization2 = VK_TRUE;
         featureChain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState = VK_TRUE; // Enable extended dynamic state from the extension
-        featureChain.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters = VK_TRUE;
         std::vector<const char*> deviceExtensions = {
             vk::KHRSwapchainExtensionName
             //,vk::KHRPresentModeFifoLatestReadyExtensionName

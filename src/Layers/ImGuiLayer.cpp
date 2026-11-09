@@ -5,7 +5,7 @@
 #include "Engine/Application.h"
 #include "Engine/Window.h"
 #include "Graphics/Renderer/Renderer.h"
-#include "Graphics/core/FrameData.h"
+#include <Engine/Graphics/FrameData.h>
 #include <GLFW/glfw3.h>
 #include "Engine/ConfigSystem.h"
 

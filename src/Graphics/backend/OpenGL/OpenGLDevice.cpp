@@ -4,7 +4,7 @@
 #include "Debug/OpenGLDebug.h"
 #include "Buffer/OpenGLBuffer.h"
 #include "Graphics/backend/OpenGL/Translator/OpenGLTranslator.h"
-#include "Graphics/core/FrameData.h"
+#include <Engine/Graphics/FrameData.h>
 #include <Engine/Window.h>
 #include <Engine/Log.h>
 #include <Engine/Graphics/RenderResources.h>

@@ -3,7 +3,7 @@
 #include <semaphore>
 #include <readerwritercircularbuffer.h>
 #include "Graphics/core/GraphicsCore.h"
-#include "Graphics/core/FrameData.h"
+#include <Engine/Graphics/FrameData.h>
 
 namespace Zero
 {

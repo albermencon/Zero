@@ -9,6 +9,7 @@
 #include <Engine/Thread/ScopedLock.h>
 #include <Engine/Profiler/Profiler.h>
 #include <semaphore>
+#include <algorithm>
 
 namespace Zero
 {
@@ -178,6 +179,14 @@ namespace Zero
 			}
 
 			ProcessResourceRequests();
+
+			if (frame && !frame->drawPackets.empty())
+			{
+				std::sort(frame->drawPackets.begin(), frame->drawPackets.end(),
+					[](const RHI::DrawPacket& a, const RHI::DrawPacket& b) noexcept {
+						return a.sortKey < b.sortKey;
+					});
+			}
 
 			m_backend->RenderFrame(frame);
 			m_backend->SwapBuffers();
