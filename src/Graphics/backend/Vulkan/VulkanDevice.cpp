@@ -32,7 +32,6 @@ namespace Zero
         , m_physicaldevice(m_instance.Get())
         , m_device(m_surface.Get(), m_physicaldevice.Get())
         , m_swapchain(&m_device, &m_physicaldevice, &m_surface, window, window->GetPresentModePolicy())
-        , m_pipeline(&m_device, &m_swapchain)
         , m_commandcontext(&m_device)
         , m_syncobjects(&m_device, &m_swapchain)
         , m_Window(window)
@@ -188,6 +187,15 @@ namespace Zero
         m_ImGuiDescriptorPool.clear();
     }
 
+    void VulkanDevice::UpdateImGuiTextures()
+    {
+        for (ImTextureData* tex : ImGui::GetPlatformIO().Textures)
+        {
+            if (tex->Status != ImTextureStatus_OK)
+                ImGui_ImplVulkan_UpdateTexture(tex);
+        }
+    }
+
     void VulkanDevice::RenderFrame(FrameData* frame)
     {
         m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
@@ -261,13 +269,9 @@ namespace Zero
 
         commandBuffer.beginRendering(renderingInfo);
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline.GetGraphicsPipeline());
-
         // Set dynamic data
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(m_swapchain.GetExtent().width), static_cast<float>(m_swapchain.GetExtent().height), 0.0f, 1.0f));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), m_swapchain.GetExtent()));
-
-        commandBuffer.draw(3, 1, 0, 0);
 
         ImDrawData* drawData = frame->imguiFrame.GetNativeDrawData();
         if (drawData)
@@ -329,20 +333,38 @@ namespace Zero
         commandBuffer.pipelineBarrier2(dependencyInfo);
     }
 
-    Pipeline* VulkanDevice::CreatePipeline(const PipelineDesc& desc)
+    GraphicsPipeline* VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc& desc)
     {
         try
         {
-            return new VulkanPipeline(&m_device, desc);
+            return new VulkanGraphicsPipeline(&m_device, desc);
         }
         catch (const std::exception& e)
         {
-            ZERO_CORE_ERROR("Failed to create Vulkan pipeline: {0}", e.what());
+            ZERO_CORE_ERROR("Failed to create Vulkan graphics pipeline: {0}", e.what());
             return nullptr;
         }
     }
 
-    void VulkanDevice::DestroyPipeline(Pipeline* pipeline)
+    void VulkanDevice::DestroyGraphicsPipeline(GraphicsPipeline* pipeline)
+    {
+        delete pipeline;
+    }
+
+    ComputePipeline* VulkanDevice::CreateComputePipeline(const ComputePipelineDesc& desc)
+    {
+        try
+        {
+            return new VulkanComputePipeline(&m_device, desc);
+        }
+        catch (const std::exception& e)
+        {
+            ZERO_CORE_ERROR("Failed to create Vulkan compute pipeline: {0}", e.what());
+            return nullptr;
+        }
+    }
+
+    void VulkanDevice::DestroyComputePipeline(ComputePipeline* pipeline)
     {
         delete pipeline;
     }

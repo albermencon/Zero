@@ -71,7 +71,8 @@ namespace Zero
         // Pipelines
 
         // PSO compilation is async on RenderThread. Poll IsReady() before use.
-        [[nodiscard]] PipelineHandle CreatePipeline(const PipelineDesc& desc);
+        [[nodiscard]] PipelineHandle CreateGraphicsPipeline(const GraphicsPipelineDesc& desc);
+        [[nodiscard]] PipelineHandle CreateComputePipeline(const ComputePipelineDesc& desc);
 
         void DestroyPipeline(PipelineHandle handle);
 

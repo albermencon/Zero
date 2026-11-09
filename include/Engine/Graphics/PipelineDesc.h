@@ -25,14 +25,12 @@ namespace Zero
         ShaderDesc fragment;
 
         // Optional stages
-        ShaderDesc compute;              // compute shader (CS)
         ShaderDesc hull;                 // tessellation control  (DX12: HS, Vulkan: TCS)
         ShaderDesc domain;               // tessellation eval     (DX12: DS, Vulkan: TES)
         ShaderDesc geometry;             // geometry shader
 
         [[nodiscard]] constexpr bool hasVertex()   const { return vertex.path != nullptr; }
         [[nodiscard]] constexpr bool hasFragment() const { return fragment.path != nullptr; }
-        [[nodiscard]] constexpr bool hasCompute()  const { return compute.path != nullptr; }
         [[nodiscard]] constexpr bool hasHull()      const { return hull.path != nullptr; }
         [[nodiscard]] constexpr bool hasDomain()    const { return domain.path != nullptr; }
         [[nodiscard]] constexpr bool hasGeometry()  const { return geometry.path != nullptr; }
@@ -296,19 +294,19 @@ namespace Zero
         }
     };
 
-    //   PipelineDesc desc;
+    //   GraphicsPipelineDesc desc;
     //   desc.debugName       = "PBR Forward";
     //   desc.shaders.vertex  = { "Shaders/PBR.vert.spv" };
     //   desc.shaders.fragment = { "Shaders/PBR.frag.spv" };
     //   desc.vertexLayout    = Layouts::Pos3_Norm3_UV2;
     //   desc.blendState      = BlendState::Opaque();
-    //   auto handle = renderer.createPipeline(desc);
-    struct PipelineDesc
+    //   auto handle = renderer.CreateGraphicsPipeline(desc);
+    struct GraphicsPipelineDesc
     {
         // Identity
         const char* debugName = nullptr;       // captured by Vulkan debug utils, PIX, etc.
 
-        // haders
+        // Shaders
         ShaderProgramDesc shaders;
 
         // Input Assembly
@@ -332,16 +330,14 @@ namespace Zero
         std::vector<PushConstantDesc>      pushConstants;
         std::vector<DescriptorBindingDesc> bindings;
 
-        [[nodiscard]] constexpr bool isCompute() const { return shaders.hasCompute(); }
-
         // Convenience factories — common pipeline archetypes
 
         /// Standard opaque forward-rendering pass
-        [[nodiscard]] static PipelineDesc ForwardOpaque(
+        [[nodiscard]] static GraphicsPipelineDesc ForwardOpaque(
             ShaderProgramDesc shaders,
             const VertexLayout& layout = Layouts::Pos3_Norm3_UV2)
         {
-            PipelineDesc d;
+            GraphicsPipelineDesc d;
             d.shaders = shaders;
             d.vertexLayout = layout;
             d.rasterizerState = RasterizerState::Default();
@@ -351,11 +347,11 @@ namespace Zero
         }
 
         /// Transparent pass (alpha blended, depth read-only)
-        [[nodiscard]] static PipelineDesc Transparent(
+        [[nodiscard]] static GraphicsPipelineDesc Transparent(
             ShaderProgramDesc shaders,
             const VertexLayout& layout = Layouts::Pos3_Norm3_UV2)
         {
-            PipelineDesc d;
+            GraphicsPipelineDesc d;
             d.shaders = shaders;
             d.vertexLayout = layout;
             d.rasterizerState = RasterizerState::NoCull();
@@ -365,11 +361,11 @@ namespace Zero
         }
 
         /// Depth pre-pass / shadow map
-        [[nodiscard]] static PipelineDesc DepthOnly(
+        [[nodiscard]] static GraphicsPipelineDesc DepthOnly(
             ShaderProgramDesc shaders,
             const VertexLayout& layout = Layouts::Pos3)
         {
-            PipelineDesc d;
+            GraphicsPipelineDesc d;
             d.shaders = shaders;
             d.vertexLayout = layout;
             d.rasterizerState = RasterizerState::ShadowMap();
@@ -384,9 +380,9 @@ namespace Zero
         }
 
         /// Fullscreen / post-process quad (no vertex input, no depth)
-        [[nodiscard]] static PipelineDesc FullscreenQuad(ShaderProgramDesc shaders)
+        [[nodiscard]] static GraphicsPipelineDesc FullscreenQuad(ShaderProgramDesc shaders)
         {
-            PipelineDesc d;
+            GraphicsPipelineDesc d;
             d.shaders = shaders;
             // No vertex input — VS generates clip-space triangle from gl_VertexIndex
             d.depthStencilState = DepthStencilState::Disabled();
@@ -394,12 +390,20 @@ namespace Zero
             d.blendState = BlendState::Opaque();
             return d;
         }
+    };
 
-        /// Compute pipeline
-        [[nodiscard]] static PipelineDesc Compute(ShaderDesc computeShader)
+    struct ComputePipelineDesc
+    {
+        const char* debugName = nullptr;
+        ShaderDesc computeShader;
+
+        std::vector<PushConstantDesc>      pushConstants;
+        std::vector<DescriptorBindingDesc> bindings;
+
+        [[nodiscard]] static ComputePipelineDesc Create(ShaderDesc computeShader)
         {
-            PipelineDesc d;
-            d.shaders.compute = computeShader;
+            ComputePipelineDesc d;
+            d.computeShader = computeShader;
             return d;
         }
     };

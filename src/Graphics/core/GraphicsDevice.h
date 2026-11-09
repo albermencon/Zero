@@ -6,9 +6,12 @@ namespace Zero
     class Buffer;
     class Texture;
     class Pipeline; 
+    class GraphicsPipeline;
+    class ComputePipeline;
 
     class BufferDesc;
-    class PipelineDesc;
+    struct GraphicsPipelineDesc;
+    struct ComputePipelineDesc;
     class TextureDesc;
 
     class GraphicsDevice
@@ -16,8 +19,11 @@ namespace Zero
     public:
         virtual ~GraphicsDevice() = default;
 
-        virtual Pipeline* CreatePipeline(const PipelineDesc& desc) = 0;
-        virtual void DestroyPipeline(Pipeline* pipeline) = 0;
+        virtual GraphicsPipeline* CreateGraphicsPipeline(const GraphicsPipelineDesc& desc) = 0;
+        virtual void DestroyGraphicsPipeline(GraphicsPipeline* pipeline) = 0;
+
+        virtual ComputePipeline* CreateComputePipeline(const ComputePipelineDesc& desc) = 0;
+        virtual void DestroyComputePipeline(ComputePipeline* pipeline) = 0;
 
         //virtual Texture* CreateTexture(const TextureDesc& desc) = 0;
         //virtual void DeleteTexture(Texture* texture) = 0; // ?
@@ -36,6 +42,7 @@ namespace Zero
 
         virtual void InitImGui() = 0;
         virtual void ShutdownImGui() = 0;
+        virtual void UpdateImGuiTextures() = 0;
 
         virtual void init() = 0;
         virtual void SwapBuffers() = 0;

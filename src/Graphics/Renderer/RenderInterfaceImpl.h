@@ -1,5 +1,4 @@
 #pragma once
-
 #include <Engine/Graphics/RenderInterface.h>
 #include <Engine/Graphics/RenderResources.h>
 #include "Graphics/core/ResourceRegistry.h"
@@ -25,7 +24,13 @@ namespace Zero
     struct PipelineCreateRequest
     {
         PipelineHandle handle;
-        PipelineDesc desc;
+        GraphicsPipelineDesc desc;
+    };
+
+    struct ComputePipelineCreateRequest
+    {
+        PipelineHandle handle;
+        ComputePipelineDesc desc;
     };
 
     struct ResourceDestroyRequest
@@ -55,6 +60,7 @@ namespace Zero
         std::vector<BufferCreateRequest> pendingBuffers;
         std::vector<TextureCreateRequest> pendingTextures;
         std::vector<PipelineCreateRequest> pendingPipelines;
+        std::vector<ComputePipelineCreateRequest> pendingComputePipelines;
         std::vector<ResourceDestroyRequest> pendingDestroys;
 
         void Clear()
@@ -63,6 +69,7 @@ namespace Zero
             pendingBuffers.clear();
             pendingTextures.clear();
             pendingPipelines.clear();
+            pendingComputePipelines.clear();
             pendingDestroys.clear();
         }
     };

@@ -109,7 +109,7 @@ namespace Zero
         impl.pendingDestroys.push_back({ handle.value, ResourceDestroyRequest::Type::Texture });
     }
 
-    PipelineHandle RenderInterface::CreatePipeline(const PipelineDesc& desc)
+    PipelineHandle RenderInterface::CreateGraphicsPipeline(const GraphicsPipelineDesc& desc)
     {
         auto& impl = RenderInterfaceImpl::Get();
         PipelineHandle handle = impl.pipelineRegistry.Allocate();
@@ -123,6 +123,24 @@ namespace Zero
 
             Zero::ScopedLock lock(impl.queueMutex);
             impl.pendingPipelines.push_back({ handle, desc });
+        }
+        return handle;
+    }
+
+    PipelineHandle RenderInterface::CreateComputePipeline(const ComputePipelineDesc& desc)
+    {
+        auto& impl = RenderInterfaceImpl::Get();
+        PipelineHandle handle = impl.pipelineRegistry.Allocate();
+        
+        if (handle.IsValid())
+        {
+#ifdef ZERO_DEBUG
+            if (desc.debugName)
+                impl.pipelineRegistry.SetDebugName(handle.GetIndex(), desc.debugName);
+#endif
+
+            Zero::ScopedLock lock(impl.queueMutex);
+            impl.pendingComputePipelines.push_back({ handle, desc });
         }
         return handle;
     }

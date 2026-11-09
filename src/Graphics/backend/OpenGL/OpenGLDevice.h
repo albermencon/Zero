@@ -22,6 +22,7 @@ namespace Zero
 
         virtual void InitImGui() override;
         virtual void ShutdownImGui() override;
+        virtual void UpdateImGuiTextures() override;
 
         virtual void OnFinished() override;
 
@@ -33,8 +34,11 @@ namespace Zero
 
         virtual void OnRenderSurfaceResize() override;
 
-        virtual Pipeline* CreatePipeline(const PipelineDesc& desc) override;
-        virtual void DestroyPipeline(Pipeline* pipeline) override {}
+        virtual GraphicsPipeline* CreateGraphicsPipeline(const GraphicsPipelineDesc& desc) override;
+        virtual void DestroyGraphicsPipeline(GraphicsPipeline* pipeline) override {}
+
+        virtual ComputePipeline* CreateComputePipeline(const ComputePipelineDesc& desc) override;
+        virtual void DestroyComputePipeline(ComputePipeline* pipeline) override {}
     private:
         Window* m_window = nullptr;
         bool m_SwapChainDirty = false;

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "OpenGLDevice.h"
+#include "Graphics/core/Pipeline.h"
 #include "Debug/OpenGLDebug.h"
 #include "Buffer/OpenGLBuffer.h"
 #include "Graphics/backend/OpenGL/Translator/OpenGLTranslator.h"
@@ -180,6 +181,20 @@ namespace Zero
         ImGui_ImplOpenGL3_Shutdown();
     }
 
+    void OpenGLDevice::UpdateImGuiTextures()
+    {
+        // Upload any pending Dear ImGui texture updates (e.g. font atlas glyphs
+        // rasterized at the current DPI scale) synchronously on the render thread,
+        // while the font atlas data is still valid. ImGui rebuilds its platform
+        // texture list in every EndFrame(), so this cannot be safely deferred
+        // until the frame is drawn on the render thread.
+        for (ImTextureData* tex : ImGui::GetPlatformIO().Textures)
+        {
+            if (tex->Status != ImTextureStatus_OK)
+                ImGui_ImplOpenGL3_UpdateTexture(tex);
+        }
+    }
+
     void OpenGLDevice::RenderFrame(FrameData* frame)
     {
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_window->GetNativeWindow());
@@ -210,9 +225,15 @@ namespace Zero
         m_SwapChainDirty = true;
     }
 
-    Pipeline* OpenGLDevice::CreatePipeline(const PipelineDesc& desc)
+    GraphicsPipeline* OpenGLDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc& desc)
     {
-        ZERO_CORE_ERROR("Pipeline creation not implemented");
+        ZERO_CORE_ERROR("Graphics pipeline creation not implemented");
+        return nullptr;
+    }
+
+    ComputePipeline* OpenGLDevice::CreateComputePipeline(const ComputePipelineDesc& desc)
+    {
+        ZERO_CORE_ERROR("Compute pipeline creation not implemented");
         return nullptr;
     }
 

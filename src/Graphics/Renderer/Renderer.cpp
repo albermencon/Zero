@@ -1,6 +1,7 @@
 #include "Engine/Window.h"
 #include "pch.h"
 #include "Graphics/Renderer/Renderer.h"
+#include "Graphics/core/Pipeline.h"
 #include "Graphics/core/GraphicsCore.h"
 #include "Graphics/BackendFactory/GraphicsBackendFactory.h"
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
@@ -133,6 +134,16 @@ namespace Zero
 		sem.acquire();
 	}
 
+	void Renderer::UpdateImGuiTextures()
+	{
+		std::binary_semaphore sem(0);
+		SubmitRenderCommand([this, &sem]() {
+			m_backend->UpdateImGuiTextures();
+			sem.release();
+		});
+		sem.acquire();
+	}
+
 	void Renderer::RenderLoop()
 	{
 		m_renderThread.SetName("RendererThread");
@@ -189,6 +200,7 @@ namespace Zero
 		static std::vector<BufferCreateRequest> localBuffers;
 		static std::vector<TextureCreateRequest> localTextures;
 		static std::vector<PipelineCreateRequest> localPipelines;
+		static std::vector<ComputePipelineCreateRequest> localComputePipelines;
 		static std::vector<ResourceDestroyRequest> localDestroys;
 
 		{
@@ -196,6 +208,7 @@ namespace Zero
 			localBuffers.swap(impl.pendingBuffers);
 			localTextures.swap(impl.pendingTextures);
 			localPipelines.swap(impl.pendingPipelines);
+			localComputePipelines.swap(impl.pendingComputePipelines);
 			localDestroys.swap(impl.pendingDestroys);
 		}
 
@@ -225,17 +238,34 @@ namespace Zero
 			impl.textureRegistry.MarkReady(req.handle, nullptr);
 		}
 
-		// Process Pipeline Creations
+		// Process Graphics Pipeline Creations
 		for (const auto& req : localPipelines)
 		{
-			Pipeline* pipeline = m_backend->CreatePipeline(req.desc);
+			GraphicsPipeline* pipeline = m_backend->CreateGraphicsPipeline(req.desc);
 			if (pipeline)
 			{
-				impl.pipelineRegistry.MarkReady(req.handle, pipeline);
+				Pipeline* basePipeline = pipeline;
+				impl.pipelineRegistry.MarkReady(req.handle, basePipeline);
 			}
 			else
 			{
-				ZERO_CORE_ERROR("Failed to create pipeline for handle {0}", req.handle.GetId());
+				ZERO_CORE_ERROR("Failed to create graphics pipeline for handle {0}", req.handle.GetId());
+				impl.pipelineRegistry.MarkFailed(req.handle);
+			}
+		}
+
+		// Process Compute Pipeline Creations
+		for (const auto& req : localComputePipelines)
+		{
+			ComputePipeline* pipeline = m_backend->CreateComputePipeline(req.desc);
+			if (pipeline)
+			{
+				Pipeline* basePipeline = pipeline;
+				impl.pipelineRegistry.MarkReady(req.handle, basePipeline);
+			}
+			else
+			{
+				ZERO_CORE_ERROR("Failed to create compute pipeline for handle {0}", req.handle.GetId());
 				impl.pipelineRegistry.MarkFailed(req.handle);
 			}
 		}
@@ -270,7 +300,13 @@ namespace Zero
 			{
 				PipelineHandle handle{ it->handleValue };
 				Pipeline* pipeline = impl.pipelineRegistry.GetBackendResource(handle);
-				if (pipeline) m_backend->DestroyPipeline(pipeline);
+				if (pipeline)
+				{
+					if (pipeline->IsCompute())
+						m_backend->DestroyComputePipeline(static_cast<ComputePipeline*>(pipeline));
+					else
+						m_backend->DestroyGraphicsPipeline(static_cast<GraphicsPipeline*>(pipeline));
+				}
 				impl.pipelineRegistry.ReclaimSlot(handle);
 			}
 
@@ -280,6 +316,7 @@ namespace Zero
 		localBuffers.clear();
 		localTextures.clear();
 		localPipelines.clear();
+		localComputePipelines.clear();
 		localDestroys.clear();
 	}
 }

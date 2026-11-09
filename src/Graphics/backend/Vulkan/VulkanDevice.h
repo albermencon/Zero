@@ -12,7 +12,8 @@ import vulkan_hpp;
 #include "Graphics/backend/Vulkan/Device/VulkanPhysicalDevice.h"
 #include "Graphics/backend/Vulkan/Device/VulkanLogicalDevice.h"
 #include "Graphics/backend/Vulkan/Swapchain/VulkanSwapchain.h"
-#include "Graphics/backend/Vulkan/Pipeline/VulkanPipeline.h"
+#include "Graphics/backend/Vulkan/Pipeline/VulkanGraphicsPipeline.h"
+#include "Graphics/backend/Vulkan/Pipeline/VulkanComputePipeline.h"
 #include "Graphics/backend/Vulkan/Command/VulkanCommandContext.h"
 #include "Graphics/backend/Vulkan/Sync/VulkanSyncObjects.h"
 #include "Graphics/backend/Vulkan/VMA/VulkanMemoryAllocator.h"
@@ -36,6 +37,7 @@ namespace Zero
 
         virtual void InitImGui() override;
         virtual void ShutdownImGui() override;
+        virtual void UpdateImGuiTextures() override;
 
         virtual void OnFinished() override;
 
@@ -45,8 +47,11 @@ namespace Zero
         virtual void DestroyBuffer(Buffer* buffer) override;
         virtual void CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes) override;
 
-        virtual Pipeline* CreatePipeline(const PipelineDesc& desc) override;
-        virtual void DestroyPipeline(Pipeline* pipeline) override;
+        virtual GraphicsPipeline* CreateGraphicsPipeline(const GraphicsPipelineDesc& desc) override;
+        virtual void DestroyGraphicsPipeline(GraphicsPipeline* pipeline) override;
+
+        virtual ComputePipeline* CreateComputePipeline(const ComputePipelineDesc& desc) override;
+        virtual void DestroyComputePipeline(ComputePipeline* pipeline) override;
 
         virtual void FlushTransfers() override;
 
@@ -69,7 +74,6 @@ namespace Zero
         VulkanPhysicalDevice m_physicaldevice;
         VulkanLogicalDevice m_device;
         VulkanSwapchain m_swapchain;
-        VulkanPipeline m_pipeline;
         VulkanCommandContext m_commandcontext;
         VulkanSyncObjects m_syncobjects;
         VulkanMemory m_memoryAllocator;

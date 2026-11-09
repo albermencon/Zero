@@ -37,9 +37,9 @@ float4 fragMain(VSOutput input) : SV_Target
 }
 )";
 
-    [[nodiscard]] ZERO_FORCE_INLINE PipelineDesc DefaultTrianglePipeline()
+    [[nodiscard]] ZERO_FORCE_INLINE GraphicsPipelineDesc DefaultTrianglePipeline()
     {
-        PipelineDesc d;
+        GraphicsPipelineDesc d;
         d.debugName = "Default Embedded Triangle";
         d.shaders.vertex.path = DefaultTriangleShader;
         d.shaders.vertex.entryPoint = "vertMain";
