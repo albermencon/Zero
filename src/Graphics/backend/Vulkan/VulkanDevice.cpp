@@ -291,7 +291,7 @@ namespace Zero
         if (frame && frame->gpuDriven.enabled && frame->gpuDriven.countBuffer.IsValid())
         {
             auto& impl = RenderInterfaceImpl::Get();
-            Buffer* b = impl.bufferRegistry.GetBackendResource(frame->gpuDriven.countBuffer);
+            Buffer* b = impl.bufferRegistry.GetBackendResourceByIndex(frame->gpuDriven.countBuffer.GetIndex());
             if (b)
             {
                 vk::Buffer countBuffer(static_cast<VulkanBuffer*>(b)->GetHandle());
@@ -375,6 +375,13 @@ namespace Zero
             auto getVkBuffer = [&impl](BufferHandle handle) -> vk::Buffer {
                 if (!handle.IsValid()) return nullptr;
                 Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
+                if (!b) return nullptr;
+                return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
+            };
+
+            auto getVkBufferByIndex = [&impl](uint32_t index) -> vk::Buffer {
+                if (index == 0) return nullptr;
+                Buffer* b = impl.bufferRegistry.GetBackendResourceByIndex(index);
                 if (!b) return nullptr;
                 return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
             };
@@ -488,7 +495,7 @@ namespace Zero
 
                 case RHI::DrawCmdType::MultiDrawIndirect:
                 {
-                    vk::Buffer indirectBuffer = getVkBuffer(BufferHandle{ packet.mdi.indirectBufferId });
+                    vk::Buffer indirectBuffer = getVkBufferByIndex(packet.mdi.indirectBufferId);
                     if (indirectBuffer)
                     {
                         if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
@@ -507,8 +514,8 @@ namespace Zero
 
                 case RHI::DrawCmdType::MultiDrawIndirectCount:
                 {
-                    vk::Buffer indirectBuffer = getVkBuffer(BufferHandle{ packet.mdiCount.indirectBufferId });
-                    vk::Buffer countBuffer = getVkBuffer(BufferHandle{ packet.mdiCount.countBufferId });
+                    vk::Buffer indirectBuffer = getVkBufferByIndex(packet.mdiCount.indirectBufferId);
+                    vk::Buffer countBuffer = getVkBufferByIndex(packet.mdiCount.countBufferId);
                     if (indirectBuffer && countBuffer)
                     {
                         if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())

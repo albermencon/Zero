@@ -78,8 +78,8 @@ namespace Zero::RHI
 		union {
 			uint32_t packedHeader;
 			struct {
-				uint32_t transformIndex : 14;
-				uint32_t geometryId     : 14;
+				uint32_t transformIndex : 20;
+				uint32_t geometryId     : 8;
 				uint32_t cmdType        : 4; 
 			};
 		};
