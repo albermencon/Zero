@@ -491,8 +491,16 @@ namespace Zero
                     vk::Buffer indirectBuffer = getVkBuffer(BufferHandle{ packet.mdi.indirectBufferId });
                     if (indirectBuffer)
                     {
-                        constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
-                        commandBuffer.drawIndexedIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
+                        if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
+                        {
+                            constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
+                            commandBuffer.drawIndexedIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
+                        }
+                        else
+                        {
+                            constexpr uint32_t stride = sizeof(VkDrawIndirectCommand);
+                            commandBuffer.drawIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
+                        }
                     }
                     break;
                 }
@@ -503,15 +511,30 @@ namespace Zero
                     vk::Buffer countBuffer = getVkBuffer(BufferHandle{ packet.mdiCount.countBufferId });
                     if (indirectBuffer && countBuffer)
                     {
-                        constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
-                        commandBuffer.drawIndexedIndirectCount(
-                            indirectBuffer,
-                            packet.mdiCount.indirectOffset,
-                            countBuffer,
-                            packet.mdiCount.countOffset,
-                            packet.mdiCount.maxDrawCount,
-                            stride
-                        );
+                        if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
+                        {
+                            constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
+                            commandBuffer.drawIndexedIndirectCount(
+                                indirectBuffer,
+                                packet.mdiCount.indirectOffset,
+                                countBuffer,
+                                packet.mdiCount.countOffset,
+                                packet.mdiCount.maxDrawCount,
+                                stride
+                            );
+                        }
+                        else
+                        {
+                            constexpr uint32_t stride = sizeof(VkDrawIndirectCommand);
+                            commandBuffer.drawIndirectCount(
+                                indirectBuffer,
+                                packet.mdiCount.indirectOffset,
+                                countBuffer,
+                                packet.mdiCount.countOffset,
+                                packet.mdiCount.maxDrawCount,
+                                stride
+                            );
+                        }
                     }
                     break;
                 }
@@ -850,8 +873,8 @@ namespace Zero
         case RHI::ComputeBarrier::ComputeToDrawIndirect:
             memBarrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
             memBarrier.srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
-            memBarrier.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
-            memBarrier.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead;
+            memBarrier.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect | vk::PipelineStageFlagBits2::eVertexShader;
+            memBarrier.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead | vk::AccessFlagBits2::eShaderStorageRead;
             break;
 
         case RHI::ComputeBarrier::ComputeToGraphics:
