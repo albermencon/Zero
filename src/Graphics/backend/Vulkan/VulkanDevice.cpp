@@ -45,6 +45,9 @@ namespace Zero
 
     VulkanDevice::~VulkanDevice()
     {
+        m_device.Get().waitIdle();
+        m_commandcontext.GetCommandPool().reset();
+        destroyDepthResources();
         if (m_stagingBuffer != VK_NULL_HANDLE && m_memoryAllocator.GetAllocator() != VK_NULL_HANDLE)
         {
             vmaDestroyBuffer(m_memoryAllocator.GetAllocator(), m_stagingBuffer, m_stagingAllocation);
@@ -56,6 +59,7 @@ namespace Zero
 
     void VulkanDevice::init() {
         m_memoryAllocator.Initialize(*m_instance.Get(), *m_physicaldevice.Get(), *m_device.Get());
+        createDepthResources();
 
         // ImGui
         vk::DescriptorPoolSize poolSize{
@@ -270,6 +274,8 @@ namespace Zero
     {
         m_swapchain.recreateSwapChain(m_currentPolicy);
         m_syncobjects.recreateSyncObjects();
+        destroyDepthResources();
+        createDepthResources();
     }
 
     void VulkanDevice::recordCommandBuffer(uint32_t imageIndex, FrameData* frame)
@@ -309,6 +315,17 @@ namespace Zero
             executeComputeDispatches(commandBuffer, frame->preComputeDispatches);
         }
 
+        // Transition depth buffer to DEPTH_ATTACHMENT_OPTIMAL
+        transition_depth_layout(
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+            commandBuffer
+        );
+
         // Before starting rendering, transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
         transition_image_layout(
             imageIndex,
@@ -321,7 +338,7 @@ namespace Zero
             commandBuffer
         );
 
-        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+        vk::ClearValue clearColor = vk::ClearColorValue(0.45f, 0.68f, 0.95f, 1.0f);
         vk::RenderingAttachmentInfo attachmentInfo = {};
 
         attachmentInfo.imageView = *m_swapchain.GetImageViews()[imageIndex];
@@ -330,11 +347,20 @@ namespace Zero
         attachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
         attachmentInfo.clearValue = clearColor;
 
+        vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+        vk::RenderingAttachmentInfo depthAttachmentInfo{};
+        depthAttachmentInfo.imageView = *m_depthImageView;
+        depthAttachmentInfo.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
+        depthAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
+        depthAttachmentInfo.storeOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachmentInfo.clearValue = clearDepth;
+
         vk::RenderingInfo renderingInfo = {};
         renderingInfo.renderArea = { .offset = { 0, 0 }, .extent = m_swapchain.GetExtent()};
         renderingInfo.layerCount = 1;
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachments = &attachmentInfo;
+        renderingInfo.pDepthAttachment = &depthAttachmentInfo;
 
         commandBuffer.beginRendering(renderingInfo);
 
@@ -355,7 +381,7 @@ namespace Zero
 
             auto getGraphicsPipeline = [&impl](uint16_t pipelineId) -> VulkanGraphicsPipeline* {
                 if (pipelineId == 0) return nullptr;
-                Pipeline* p = impl.pipelineRegistry.GetBackendResource(PipelineHandle{ pipelineId });
+                Pipeline* p = impl.pipelineRegistry.GetBackendResourceByIndex(pipelineId);
                 if (!p || p->IsCompute()) return nullptr;
                 return static_cast<VulkanGraphicsPipeline*>(p);
             };
@@ -372,38 +398,71 @@ namespace Zero
                 {
                     currentPipelineId = pipelineId;
                     currentPipeline = getGraphicsPipeline(pipelineId);
-                    if (currentPipeline)
+                    if (currentPipeline && *currentPipeline->GetPipeline())
                     {
                         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *currentPipeline->GetPipeline());
                     }
                 }
 
-                if (!currentPipeline)
+                if (!currentPipeline || !*currentPipeline->GetPipeline())
                     continue;
 
                 if (packet.geometryId < frame->geometryTable.size())
                 {
                     const auto& geom = frame->geometryTable[packet.geometryId];
 
-                    if (geom.vertexBuffer.IsValid() && geom.vertexBuffer != currentVb)
+                    if (geom.vertexBuffer.IsValid())
                     {
                         vk::Buffer vb = getVkBuffer(geom.vertexBuffer);
-                        if (vb)
+                        if (!vb)
+                            continue;
+
+                        if (geom.vertexBuffer != currentVb)
                         {
                             commandBuffer.bindVertexBuffers(0, vb, { 0 });
                             currentVb = geom.vertexBuffer;
                         }
                     }
 
-                    if (geom.indexBuffer.IsValid() && geom.indexBuffer != currentIb)
+                    if (geom.indexBuffer.IsValid())
                     {
                         vk::Buffer ib = getVkBuffer(geom.indexBuffer);
-                        if (ib)
+                        if (!ib)
+                            continue;
+
+                        if (geom.indexBuffer != currentIb)
                         {
                             commandBuffer.bindIndexBuffer(ib, 0, vk::IndexType::eUint32);
                             currentIb = geom.indexBuffer;
                         }
                     }
+                }
+
+                if (currentPipeline->GetPushConstantSize() > 0)
+                {
+                    struct PushConstants
+                    {
+                        Mat4 viewProj;
+                        Mat4 model;
+                    } push;
+                    push.viewProj = frame->viewProj;
+                    if (packet.transformIndex < frame->transform.size())
+                    {
+                        push.model = frame->transform[packet.transformIndex];
+                    }
+                    else
+                    {
+                        push.model = Mat4::Identity();
+                    }
+
+                    uint32_t pushSize = std::min(currentPipeline->GetPushConstantSize(), static_cast<uint32_t>(sizeof(push)));
+                    commandBuffer.pushConstants(
+                        *currentPipeline->GetPipelineLayout(),
+                        currentPipeline->GetPushConstantStages(),
+                        0,
+                        pushSize,
+                        &push
+                    );
                 }
 
                 switch (static_cast<RHI::DrawCmdType>(packet.cmdType))
@@ -417,7 +476,14 @@ namespace Zero
                     break;
 
                 case RHI::DrawCmdType::Instanced:
-                    commandBuffer.drawIndexed(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.vertexOffset, packet.instanced.firstInstance);
+                    if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
+                    {
+                        commandBuffer.drawIndexed(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.vertexOffset, packet.instanced.firstInstance);
+                    }
+                    else
+                    {
+                        commandBuffer.draw(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.firstInstance);
+                    }
                     break;
 
                 case RHI::DrawCmdType::MultiDrawIndirect:
@@ -660,6 +726,7 @@ namespace Zero
             {
                 memcpy(static_cast<uint8_t*>(allocResult.pMappedData) + dstOffset, data, sizeBytes);
 
+                // Direct PCIe write into GPU memory (BAR / ReBAR)    
                 if (vkDst->GetMemoryDomain() == MemoryDomain::CPUtoGPU)
                 {
                     vmaFlushAllocation(m_memoryAllocator.GetAllocator(), vkDst->GetAllocation(), dstOffset, sizeBytes);
@@ -873,6 +940,90 @@ namespace Zero
             {
                 emitComputeBarrier(commandBuffer, dispatch.barrier);
             }
+        }
+    }
+
+    void VulkanDevice::transition_depth_layout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask, vk::raii::CommandBuffer& commandBuffer)
+    {
+        if (m_depthImage == VK_NULL_HANDLE) return;
+
+        vk::ImageMemoryBarrier2 barrier{};
+        barrier.srcStageMask = srcStageMask;
+        barrier.srcAccessMask = srcAccessMask;
+        barrier.dstStageMask = dstStageMask;
+        barrier.dstAccessMask = dstAccessMask;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_depthImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        vk::DependencyInfo dependencyInfo{};
+        dependencyInfo.imageMemoryBarrierCount = 1;
+        dependencyInfo.pImageMemoryBarriers = &barrier;
+
+        commandBuffer.pipelineBarrier2(dependencyInfo);
+    }
+
+    void VulkanDevice::createDepthResources()
+    {
+        m_depthFormat = vk::Format::eD32Sfloat;
+        const vk::Extent2D extent = m_swapchain.GetExtent();
+
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = extent.width;
+        imageInfo.extent.height = extent.height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = static_cast<VkFormat>(m_depthFormat);
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        VkResult res = vmaCreateImage(
+            m_memoryAllocator.GetAllocator(),
+            &imageInfo,
+            &allocInfo,
+            &m_depthImage,
+            &m_depthAllocation,
+            nullptr
+        );
+        ZERO_CORE_ASSERT(res == VK_SUCCESS, "Failed to create depth image!");
+
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.image = m_depthImage;
+        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.format = m_depthFormat;
+        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+
+        m_depthImageView = vk::raii::ImageView(m_device.Get(), viewInfo);
+    }
+
+    void VulkanDevice::destroyDepthResources()
+    {
+        m_depthImageView.clear();
+        if (m_depthImage != VK_NULL_HANDLE && m_memoryAllocator.GetAllocator() != VK_NULL_HANDLE)
+        {
+            vmaDestroyImage(m_memoryAllocator.GetAllocator(), m_depthImage, m_depthAllocation);
+            m_depthImage = VK_NULL_HANDLE;
+            m_depthAllocation = VK_NULL_HANDLE;
         }
     }
 }

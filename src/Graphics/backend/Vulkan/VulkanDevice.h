@@ -74,6 +74,23 @@ namespace Zero
             vk::PipelineStageFlags2 dstStageMask,
             vk::raii::CommandBuffer& commandBuffer
         );
+        void transition_depth_layout(
+            vk::ImageLayout oldLayout,
+            vk::ImageLayout newLayout,
+            vk::AccessFlags2 srcAccessMask,
+            vk::AccessFlags2 dstAccessMask,
+            vk::PipelineStageFlags2 srcStageMask,
+            vk::PipelineStageFlags2 dstStageMask,
+            vk::raii::CommandBuffer& commandBuffer
+        );
+    private:
+        void createDepthResources();
+        void destroyDepthResources();
+
+        VkImage m_depthImage = VK_NULL_HANDLE;
+        VmaAllocation m_depthAllocation = VK_NULL_HANDLE;
+        vk::raii::ImageView m_depthImageView{nullptr};
+        vk::Format m_depthFormat = vk::Format::eD32Sfloat;
     private:
         struct PendingStagingCopy
         {

@@ -158,13 +158,13 @@ namespace Zero
             frame->cameras[sceneIdx] = cam;
             frame->sceneCount = sceneIdx + 1;
 
-            auto getOrAddGeometry = [frame](BufferHandle vb, BufferHandle ib) -> uint8_t {
+            auto getOrAddGeometry = [frame](BufferHandle vb, BufferHandle ib) -> uint32_t {
                 for (size_t g = 0; g < frame->geometryTable.size(); ++g)
                 {
                     if (frame->geometryTable[g].vertexBuffer == vb && frame->geometryTable[g].indexBuffer == ib)
-                        return static_cast<uint8_t>(g);
+                        return static_cast<uint32_t>(g);
                 }
-                uint8_t newId = static_cast<uint8_t>(frame->geometryTable.size());
+                uint32_t newId = static_cast<uint32_t>(frame->geometryTable.size());
                 frame->geometryTable.push_back({ vb, ib });
                 return newId;
             };
@@ -213,7 +213,7 @@ namespace Zero
                         pipelineId = store.pipelines[i].GetIndex();
 
                     RHI::DrawSortKey sortKey = RHI::CreateSortKey(pass, 0, pipelineId, store.materialId[i], depth);
-                    uint8_t geometryId = getOrAddGeometry(store.vertexBuffers[i], store.indexBuffers[i]);
+                    uint32_t geometryId = getOrAddGeometry(store.vertexBuffers[i], store.indexBuffers[i]);
 
                     RHI::DrawPacket packet{};
                     packet.sortKey = sortKey;

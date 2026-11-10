@@ -13,6 +13,7 @@
 namespace Zero
 {
 	class GraphicsDevice;
+	class Buffer;
 
 	class Renderer
 	{
@@ -31,6 +32,10 @@ namespace Zero
 		void InitImGui();
 		void ShutdownImGui();
 
+		// Uploads pending Dear ImGui texture updates synchronously on the render
+		// thread (blocks until done). Safe to call from the main thread.
+		void UpdateImGuiTextures();
+
 		void OnRenderSurfaceResize();
 
 		// Called from main thread
@@ -45,6 +50,8 @@ namespace Zero
 		void ProcessResourceRequests();
 		void ExecuteRenderCommands();
 
+		void CreateStagingBuffer();
+
 	private:
 		Zero::Mutex m_CommandMutex;
 		std::vector<std::move_only_function<void()>> m_RenderCommands;
@@ -56,6 +63,10 @@ namespace Zero
 		Thread m_renderThread;
 		std::atomic<bool> m_running{false};
 		std::atomic<bool> m_initialized{ false };
+
+		// Staging buffer for updates
+		Buffer* m_stagingBuffer = nullptr;
+		size_t m_stagingBufferOffset = 0;
 
 		struct DeferredDestroy {
 			uint32_t handleValue;

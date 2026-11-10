@@ -194,6 +194,20 @@ namespace Zero
             return BackendType{};
         }
 
+        BackendType GetBackendResourceByIndex(uint32_t index) const
+        {
+            if (index == 0 || index >= Capacity) return BackendType{};
+
+            const Detail::ResourceSlot<BackendType>& slot = m_slots[index];
+            ResourceState currentState = slot.state.load(std::memory_order_acquire);
+            if (currentState == ResourceState::Ready || currentState == ResourceState::DestroyPending)
+            {
+                return slot.resource;
+            }
+
+            return BackendType{};
+        }
+
         template<typename Func>
         void ForEach(Func func)
         {

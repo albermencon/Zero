@@ -37,7 +37,7 @@ namespace Zero
         m_Swapchain = nullptr;
         m_ImageViews.clear();
 
-        createSwapChain(policy, *oldSwapchain); // pass the old handle
+        createSwapChain(policy, *oldSwapchain);
         createImageViews();
     }
 

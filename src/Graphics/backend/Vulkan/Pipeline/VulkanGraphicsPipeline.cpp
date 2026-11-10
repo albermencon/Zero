@@ -22,6 +22,7 @@ namespace Zero
     {
         ShaderProgram shaderProgram;
         std::vector<ShaderModule> ownedModules;
+        ownedModules.reserve(8);
 
         if (desc.shaders.hasVertex())
         {
@@ -74,8 +75,12 @@ namespace Zero
 
         std::vector<vk::PushConstantRange> pushConstants;
         pushConstants.reserve(desc.pushConstants.size());
+        m_pushConstantSize = 0;
+        m_pushConstantStages = {};
         for (const auto& pc : desc.pushConstants)
         {
+            m_pushConstantSize = std::max(m_pushConstantSize, pc.offset + pc.size);
+            m_pushConstantStages |= Vulkan::toVkShaderStageFlags(pc.stages);
             pushConstants.push_back(vk::PushConstantRange{
                 Vulkan::toVkShaderStageFlags(pc.stages),
                 pc.offset,
