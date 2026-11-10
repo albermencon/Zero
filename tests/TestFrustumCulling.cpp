@@ -274,6 +274,7 @@ TEST_CASE("Generalized Compute Pipeline Architecture and Barriers")
 {
 	static_assert(sizeof(RHI::ComputeDispatch) == 160);
 	static_assert(alignof(RHI::ComputeDispatch) == 16);
+	static_assert(offsetof(RHI::ComputeDispatch, pushConstants) == 32);
 
 	FrameData frame{};
 	frame.Reserve(10, 10, 1);

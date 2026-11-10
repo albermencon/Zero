@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 #include <Engine/Core.h>
 #include <Engine/Graphics/ResourceHandle.h>
 #include <Engine/Window.h>
@@ -151,6 +152,8 @@ namespace Zero::RHI
 		alignas(16) uint8_t pushConstants[128]{};
 	};
 	static_assert(sizeof(ComputeDispatch) == 160);
+	static_assert(alignof(ComputeDispatch) == 16);
+	static_assert(offsetof(ComputeDispatch, pushConstants) == 32);
 
 	struct CullPushConstants
 	{

@@ -750,6 +750,7 @@ namespace Zero
         barrier.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead |
                                 vk::AccessFlagBits2::eIndexRead |
                                 vk::AccessFlagBits2::eShaderStorageRead |
+                                vk::AccessFlagBits2::eShaderStorageWrite |
                                 vk::AccessFlagBits2::eUniformRead |
                                 vk::AccessFlagBits2::eIndirectCommandRead;
 
@@ -807,7 +808,7 @@ namespace Zero
             return;
 
         auto& impl = RenderInterfaceImpl::Get();
-        uint16_t currentPipelineId = 0;
+        uint32_t currentPipelineId = ~0u;
         VulkanComputePipeline* currentPipeline = nullptr;
 
         for (const auto& dispatch : dispatches)
@@ -833,15 +834,30 @@ namespace Zero
             if (!currentPipeline)
                 continue;
 
-            if (dispatch.pushConstantSize > 0 && currentPipeline->GetPushConstantSize() >= dispatch.pushConstantSize)
+            if (dispatch.pushConstantSize > 0)
             {
-                commandBuffer.pushConstants(
-                    *currentPipeline->GetPipelineLayout(),
-                    vk::ShaderStageFlagBits::eCompute,
-                    0,
-                    dispatch.pushConstantSize,
-                    dispatch.pushConstants
-                );
+#ifdef ZERO_DEBUG
+                if (dispatch.pushConstantSize > sizeof(dispatch.pushConstants) ||
+                    (dispatch.pushConstantSize & 3) != 0 ||
+                    currentPipeline->GetPushConstantSize() < dispatch.pushConstantSize)
+                {
+                    ZERO_CORE_ERROR("Malformed compute push constants: size {0}, buffer capacity {1}, pipeline layout {2}",
+                                    dispatch.pushConstantSize, sizeof(dispatch.pushConstants), currentPipeline->GetPushConstantSize());
+                    continue;
+                }
+#endif
+                if (dispatch.pushConstantSize <= sizeof(dispatch.pushConstants) &&
+                    (dispatch.pushConstantSize & 3) == 0 &&
+                    currentPipeline->GetPushConstantSize() >= dispatch.pushConstantSize)
+                {
+                    commandBuffer.pushConstants(
+                        *currentPipeline->GetPipelineLayout(),
+                        vk::ShaderStageFlagBits::eCompute,
+                        0,
+                        dispatch.pushConstantSize,
+                        dispatch.pushConstants
+                    );
+                }
             }
 
             commandBuffer.dispatch(dispatch.groupCountX, dispatch.groupCountY, dispatch.groupCountZ);
