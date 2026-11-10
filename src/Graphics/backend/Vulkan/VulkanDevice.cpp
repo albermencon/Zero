@@ -282,9 +282,31 @@ namespace Zero
 
         recordPendingTransfers(commandBuffer);
 
-        if (frame && frame->gpuDriven.enabled && frame->gpuDriven.maxObjects > 0)
+        if (frame && frame->gpuDriven.enabled && frame->gpuDriven.countBuffer.IsValid())
         {
-            recordComputeCull(commandBuffer, frame);
+            auto& impl = RenderInterfaceImpl::Get();
+            Buffer* b = impl.bufferRegistry.GetBackendResource(frame->gpuDriven.countBuffer);
+            if (b)
+            {
+                vk::Buffer countBuffer(static_cast<VulkanBuffer*>(b)->GetHandle());
+                commandBuffer.fillBuffer(countBuffer, 0, sizeof(uint32_t), 0);
+
+                vk::MemoryBarrier2 fillBarrier{};
+                fillBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+                fillBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                fillBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+                fillBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite;
+
+                vk::DependencyInfo depInfo{};
+                depInfo.memoryBarrierCount = 1;
+                depInfo.pMemoryBarriers = &fillBarrier;
+                commandBuffer.pipelineBarrier2(depInfo);
+            }
+        }
+
+        if (frame && !frame->preComputeDispatches.empty())
+        {
+            executeComputeDispatches(commandBuffer, frame->preComputeDispatches);
         }
 
         // Before starting rendering, transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
@@ -438,6 +460,11 @@ namespace Zero
         }
 
         commandBuffer.endRendering();
+
+        if (frame && !frame->postComputeDispatches.empty())
+        {
+            executeComputeDispatches(commandBuffer, frame->postComputeDispatches);
+        }
 
         // After rendering, transition the swapchain image to PRESENT_SRC
         transition_image_layout(
@@ -733,87 +760,96 @@ namespace Zero
         commandBuffer.pipelineBarrier2(depInfo);
     }
 
-    struct CullPushConstants
+    void VulkanDevice::emitComputeBarrier(vk::raii::CommandBuffer& commandBuffer, RHI::ComputeBarrier barrier)
     {
-        float frustumPlanes[24];
-        uint32_t maxObjects;
-        uint32_t _pad[3];
-    };
+        vk::MemoryBarrier2 memBarrier{};
+        switch (barrier)
+        {
+        case RHI::ComputeBarrier::ComputeToCompute:
+            memBarrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            memBarrier.srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
+            memBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            memBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite;
+            break;
 
-    void VulkanDevice::recordComputeCull(vk::raii::CommandBuffer& commandBuffer, FrameData* frame)
-    {
-        if (!frame || !frame->gpuDriven.enabled || frame->gpuDriven.maxObjects == 0)
+        case RHI::ComputeBarrier::ComputeToDrawIndirect:
+            memBarrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            memBarrier.srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
+            memBarrier.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
+            memBarrier.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead;
+            break;
+
+        case RHI::ComputeBarrier::ComputeToGraphics:
+            memBarrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            memBarrier.srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
+            memBarrier.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput |
+                                      vk::PipelineStageFlagBits2::eVertexShader |
+                                      vk::PipelineStageFlagBits2::eFragmentShader;
+            memBarrier.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead |
+                                      vk::AccessFlagBits2::eIndexRead |
+                                      vk::AccessFlagBits2::eShaderStorageRead |
+                                      vk::AccessFlagBits2::eUniformRead;
+            break;
+
+        default:
             return;
-
-        auto& impl = RenderInterfaceImpl::Get();
-
-        auto getVkBuffer = [&impl](BufferHandle handle) -> vk::Buffer {
-            if (!handle.IsValid()) return nullptr;
-            Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
-            if (!b) return nullptr;
-            return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
-        };
-
-        vk::Buffer countBuffer = getVkBuffer(frame->gpuDriven.countBuffer);
-        if (countBuffer)
-        {
-            commandBuffer.fillBuffer(countBuffer, 0, sizeof(uint32_t), 0);
-
-            vk::MemoryBarrier2 fillBarrier{};
-            fillBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-            fillBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-            fillBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-            fillBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite;
-
-            vk::DependencyInfo depInfo{};
-            depInfo.memoryBarrierCount = 1;
-            depInfo.pMemoryBarriers = &fillBarrier;
-            commandBuffer.pipelineBarrier2(depInfo);
         }
-
-        if (frame->gpuDriven.cullPipeline.IsValid())
-        {
-            Pipeline* p = impl.pipelineRegistry.GetBackendResource(frame->gpuDriven.cullPipeline);
-            if (p && p->IsCompute())
-            {
-                auto* computePipeline = static_cast<VulkanComputePipeline*>(p);
-                commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, *computePipeline->GetPipeline());
-
-                if (computePipeline->GetPushConstantSize() >= sizeof(CullPushConstants))
-                {
-                    Frustum frustum = Frustum::FromViewProj(frame->viewProj);
-                    CullPushConstants pushData{};
-                    for (int i = 0; i < 6; ++i)
-                    {
-                        pushData.frustumPlanes[i * 4 + 0] = frustum.planes[i].a;
-                        pushData.frustumPlanes[i * 4 + 1] = frustum.planes[i].b;
-                        pushData.frustumPlanes[i * 4 + 2] = frustum.planes[i].c;
-                        pushData.frustumPlanes[i * 4 + 3] = frustum.planes[i].d;
-                    }
-                    pushData.maxObjects = frame->gpuDriven.maxObjects;
-
-                    commandBuffer.pushConstants<CullPushConstants>(
-                        *computePipeline->GetPipelineLayout(),
-                        vk::ShaderStageFlagBits::eCompute,
-                        0,
-                        pushData
-                    );
-                }
-
-                uint32_t groupCountX = (frame->gpuDriven.maxObjects + 63) / 64;
-                commandBuffer.dispatch(groupCountX, 1, 1);
-            }
-        }
-
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-        barrier.srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect;
-        barrier.dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead;
 
         vk::DependencyInfo depInfo{};
         depInfo.memoryBarrierCount = 1;
-        depInfo.pMemoryBarriers = &barrier;
+        depInfo.pMemoryBarriers = &memBarrier;
         commandBuffer.pipelineBarrier2(depInfo);
+    }
+
+    void VulkanDevice::executeComputeDispatches(vk::raii::CommandBuffer& commandBuffer, const std::vector<RHI::ComputeDispatch>& dispatches)
+    {
+        if (dispatches.empty())
+            return;
+
+        auto& impl = RenderInterfaceImpl::Get();
+        uint16_t currentPipelineId = 0;
+        VulkanComputePipeline* currentPipeline = nullptr;
+
+        for (const auto& dispatch : dispatches)
+        {
+            if (!dispatch.pipeline.IsValid())
+                continue;
+
+            if (dispatch.pipeline.GetIndex() != currentPipelineId)
+            {
+                currentPipelineId = dispatch.pipeline.GetIndex();
+                Pipeline* p = impl.pipelineRegistry.GetBackendResource(dispatch.pipeline);
+                if (p && p->IsCompute())
+                {
+                    currentPipeline = static_cast<VulkanComputePipeline*>(p);
+                    commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, *currentPipeline->GetPipeline());
+                }
+                else
+                {
+                    currentPipeline = nullptr;
+                }
+            }
+
+            if (!currentPipeline)
+                continue;
+
+            if (dispatch.pushConstantSize > 0 && currentPipeline->GetPushConstantSize() >= dispatch.pushConstantSize)
+            {
+                commandBuffer.pushConstants(
+                    *currentPipeline->GetPipelineLayout(),
+                    vk::ShaderStageFlagBits::eCompute,
+                    0,
+                    dispatch.pushConstantSize,
+                    dispatch.pushConstants
+                );
+            }
+
+            commandBuffer.dispatch(dispatch.groupCountX, dispatch.groupCountY, dispatch.groupCountZ);
+
+            if (dispatch.barrier != RHI::ComputeBarrier::None)
+            {
+                emitComputeBarrier(commandBuffer, dispatch.barrier);
+            }
+        }
     }
 }

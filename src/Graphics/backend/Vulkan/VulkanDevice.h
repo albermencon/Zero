@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+#include <Engine/Graphics/RHITypes.h>
 #include "Graphics/core/GraphicsDevice.h"
 #include "Graphics/core/GraphicsCore.h"
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
@@ -60,7 +62,8 @@ namespace Zero
 
         void recordCommandBuffer(uint32_t imageIndex, class FrameData* frame);
         void recordPendingTransfers(vk::raii::CommandBuffer& commandBuffer);
-        void recordComputeCull(vk::raii::CommandBuffer& commandBuffer, class FrameData* frame);
+        void executeComputeDispatches(vk::raii::CommandBuffer& commandBuffer, const std::vector<RHI::ComputeDispatch>& dispatches);
+        void emitComputeBarrier(vk::raii::CommandBuffer& commandBuffer, RHI::ComputeBarrier barrier);
         void transition_image_layout(
             uint32_t imageIndex,
             vk::ImageLayout oldLayout,

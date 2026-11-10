@@ -54,6 +54,8 @@ namespace Zero
         std::vector<RHI::GeometryBinding> geometryTable;
         std::vector<Mat4>                 transform;   // Uploaded to SSBO
         GPUDrivenBatch                    gpuDriven;   // compute culled, indirect draw
+        std::vector<RHI::ComputeDispatch> preComputeDispatches;
+        std::vector<RHI::ComputeDispatch> postComputeDispatches;
 
         std::vector<DirectionalLightData> dirLights;
         std::vector<PointLightData> pointLights;
@@ -65,6 +67,8 @@ namespace Zero
             drawPackets.reserve(drawCount);
             transform.reserve(transformCount);
             gpuDriven.Reserve(gpuBatchCount);
+            preComputeDispatches.reserve(8);
+            postComputeDispatches.reserve(4);
         }
 
         void Clear()
@@ -73,6 +77,8 @@ namespace Zero
             geometryTable.clear();
             transform.clear();
             gpuDriven.Clear();
+            preComputeDispatches.clear();
+            postComputeDispatches.clear();
             dirLights.clear();
             pointLights.clear();
             sceneCount = 0;

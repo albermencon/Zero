@@ -234,6 +234,32 @@ namespace Zero
                 {
                     frame->gpuDriven = gpuBatch;
 
+                    if (gpuBatch.cullPipeline.IsValid())
+                    {
+                        RHI::ComputeDispatch cullDispatch{};
+                        cullDispatch.pipeline = gpuBatch.cullPipeline;
+                        cullDispatch.groupCountX = (gpuBatch.maxObjects + 63) / 64;
+                        cullDispatch.groupCountY = 1;
+                        cullDispatch.groupCountZ = 1;
+
+                        RHI::CullPushConstants pushData{};
+                        Frustum frustum = Frustum::FromViewProj(viewProj);
+                        for (int p = 0; p < 6; ++p)
+                        {
+                            pushData.frustumPlanes[p * 4 + 0] = frustum.planes[p].a;
+                            pushData.frustumPlanes[p * 4 + 1] = frustum.planes[p].b;
+                            pushData.frustumPlanes[p * 4 + 2] = frustum.planes[p].c;
+                            pushData.frustumPlanes[p * 4 + 3] = frustum.planes[p].d;
+                        }
+                        pushData.maxObjects = gpuBatch.maxObjects;
+
+                        cullDispatch.pushConstantSize = sizeof(RHI::CullPushConstants);
+                        std::memcpy(cullDispatch.pushConstants, &pushData, sizeof(RHI::CullPushConstants));
+                        cullDispatch.barrier = RHI::ComputeBarrier::ComputeToDrawIndirect;
+
+                        frame->preComputeDispatches.push_back(cullDispatch);
+                    }
+
                     uint8_t geometryId = getOrAddGeometry(gpuBatch.vertexBuffer, gpuBatch.indexBuffer);
                     uint16_t pipelineId = gpuBatch.renderPipeline.IsValid() ? gpuBatch.renderPipeline.GetIndex() : 0;
                     RHI::DrawSortKey sortKey = RHI::CreateSortKey(RHI::RenderPass::Opaque, 0, pipelineId, 0, 0.0f);

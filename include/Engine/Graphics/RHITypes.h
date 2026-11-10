@@ -130,4 +130,33 @@ namespace Zero::RHI
 		uint32_t firstInstance;
 	};
 	static_assert(sizeof(DrawIndexedIndirectCommand) == 20);
+
+	enum class ComputeBarrier : uint8_t
+	{
+		None = 0,
+		ComputeToCompute = 1,
+		ComputeToDrawIndirect = 2,
+		ComputeToGraphics = 3
+	};
+
+	struct alignas(16) ComputeDispatch
+	{
+		PipelineHandle pipeline;
+		uint32_t groupCountX = 1;
+		uint32_t groupCountY = 1;
+		uint32_t groupCountZ = 1;
+		uint32_t pushConstantSize = 0;
+		ComputeBarrier barrier = ComputeBarrier::None;
+		uint8_t padding[11]{};
+		alignas(16) uint8_t pushConstants[128]{};
+	};
+	static_assert(sizeof(ComputeDispatch) == 160);
+
+	struct CullPushConstants
+	{
+		float frustumPlanes[24];
+		uint32_t maxObjects;
+		uint32_t _pad[3];
+	};
+	static_assert(sizeof(CullPushConstants) == 112);
 }

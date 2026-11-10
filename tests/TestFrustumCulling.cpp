@@ -254,5 +254,72 @@ TEST_CASE("GPUDriven Batch Emission and DrawPacket Generation")
 	}
 	CHECK(foundMdiCount);
 
+	REQUIRE(frame->preComputeDispatches.size() == 1);
+	const auto& cullDispatch = frame->preComputeDispatches[0];
+	CHECK(cullDispatch.pipeline == PipelineHandle{ 6 });
+	CHECK(cullDispatch.groupCountX == (5000 + 63) / 64);
+	CHECK(cullDispatch.groupCountY == 1);
+	CHECK(cullDispatch.groupCountZ == 1);
+	CHECK(cullDispatch.barrier == RHI::ComputeBarrier::ComputeToDrawIndirect);
+	CHECK(cullDispatch.pushConstantSize == sizeof(RHI::CullPushConstants));
+
+	RHI::CullPushConstants pushConstants{};
+	std::memcpy(&pushConstants, cullDispatch.pushConstants, sizeof(RHI::CullPushConstants));
+	CHECK(pushConstants.maxObjects == 5000);
+
 	SceneManager::Get().DestroyScene(gpuSceneId);
+}
+
+TEST_CASE("Generalized Compute Pipeline Architecture and Barriers")
+{
+	static_assert(sizeof(RHI::ComputeDispatch) == 160);
+	static_assert(alignof(RHI::ComputeDispatch) == 16);
+
+	FrameData frame{};
+	frame.Reserve(10, 10, 1);
+
+	// Pre-compute: simulation step -> barrier to compute -> cull step -> barrier to draw indirect
+	RHI::ComputeDispatch simStep{};
+	simStep.pipeline = PipelineHandle{ 101 };
+	simStep.groupCountX = 32;
+	simStep.groupCountY = 1;
+	simStep.groupCountZ = 1;
+	simStep.barrier = RHI::ComputeBarrier::ComputeToCompute;
+	frame.preComputeDispatches.push_back(simStep);
+
+	RHI::ComputeDispatch cullStep{};
+	cullStep.pipeline = PipelineHandle{ 102 };
+	cullStep.groupCountX = 16;
+	cullStep.groupCountY = 1;
+	cullStep.groupCountZ = 1;
+	cullStep.barrier = RHI::ComputeBarrier::ComputeToDrawIndirect;
+	frame.preComputeDispatches.push_back(cullStep);
+
+	// Post-compute: bloom or tonemap pass -> barrier to graphics
+	RHI::ComputeDispatch postStep{};
+	postStep.pipeline = PipelineHandle{ 201 };
+	postStep.groupCountX = 60;
+	postStep.groupCountY = 34;
+	postStep.groupCountZ = 1;
+	postStep.barrier = RHI::ComputeBarrier::ComputeToGraphics;
+	struct PostPush { float exposure; float gamma; } postPush{ 1.2f, 2.2f };
+	postStep.pushConstantSize = sizeof(postPush);
+	std::memcpy(postStep.pushConstants, &postPush, sizeof(postPush));
+	frame.postComputeDispatches.push_back(postStep);
+
+	CHECK(frame.preComputeDispatches.size() == 2);
+	CHECK(frame.postComputeDispatches.size() == 1);
+
+	CHECK(frame.preComputeDispatches[0].barrier == RHI::ComputeBarrier::ComputeToCompute);
+	CHECK(frame.preComputeDispatches[1].barrier == RHI::ComputeBarrier::ComputeToDrawIndirect);
+	CHECK(frame.postComputeDispatches[0].barrier == RHI::ComputeBarrier::ComputeToGraphics);
+
+	PostPush retrieved{};
+	std::memcpy(&retrieved, frame.postComputeDispatches[0].pushConstants, sizeof(PostPush));
+	CHECK(retrieved.exposure == doctest::Approx(1.2f));
+	CHECK(retrieved.gamma == doctest::Approx(2.2f));
+
+	frame.Clear();
+	CHECK(frame.preComputeDispatches.empty());
+	CHECK(frame.postComputeDispatches.empty());
 }
