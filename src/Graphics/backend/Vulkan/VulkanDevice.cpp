@@ -172,6 +172,16 @@ namespace Zero
             return false;
         }
 
+        auto& imagesInFlight = m_syncobjects.GetImagesInFlight();
+        if (imageIndex < imagesInFlight.size())
+        {
+            if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
+            {
+                (void)m_device.Get().waitForFences(imagesInFlight[imageIndex], vk::True, UINT64_MAX);
+            }
+            imagesInFlight[imageIndex] = *m_syncobjects.GetInFlightFences()[currentFrame];
+        }
+
         m_currentImageIndex = imageIndex;
 
         return true;
@@ -242,22 +252,30 @@ namespace Zero
 
     void VulkanDevice::RenderFrame(FrameData* frame)
     {
-        m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
-        m_commandcontext.GetCommandBuffers()[currentFrame].reset();
-        recordCommandBuffer(m_currentImageIndex, frame);
+        try
+        {
+            m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
+            m_commandcontext.GetCommandBuffers()[currentFrame].reset();
+            recordCommandBuffer(m_currentImageIndex, frame);
 
-        vk::PipelineStageFlags waitMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        vk::SubmitInfo submitInfo{};
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &*m_syncobjects.GetImageAvailableSemaphores()[currentFrame];
-        submitInfo.pWaitDstStageMask = &waitMask;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &*m_commandcontext.GetCommandBuffers()[currentFrame];
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[m_currentImageIndex];
+            vk::PipelineStageFlags waitMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+            vk::SubmitInfo submitInfo{};
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = &*m_syncobjects.GetImageAvailableSemaphores()[currentFrame];
+            submitInfo.pWaitDstStageMask = &waitMask;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &*m_commandcontext.GetCommandBuffers()[currentFrame];
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[m_currentImageIndex];
 
-        m_device.GetGraphicsQueue().submit(submitInfo,
-            *m_syncobjects.GetInFlightFences()[currentFrame]);
+            m_device.GetGraphicsQueue().submit(submitInfo,
+                *m_syncobjects.GetInFlightFences()[currentFrame]);
+        }
+        catch (const std::exception& e)
+        {
+            ZERO_CORE_CRITICAL("VulkanDevice::RenderFrame caught exception: {}", e.what());
+            throw;
+        }
     }
 
     void VulkanDevice::OnFinished()

@@ -23,6 +23,7 @@ namespace Zero
 		const std::vector<vk::raii::Semaphore>& GetRenderFinishedSemaphores() const { return m_renderFinishedSemaphores; };
 		const std::vector<vk::raii::Fence>& GetInFlightFences() const { return m_inFlightFences; };
 		const std::vector<vk::Fence>& GetImagesInFlight() const { return m_imagesInFlight; };
+		std::vector<vk::Fence>& GetImagesInFlight() noexcept { return m_imagesInFlight; }
 
 		void recreateSyncObjects();
 
