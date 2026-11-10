@@ -14,6 +14,13 @@ namespace Zero
         BufferDesc desc;
         std::vector<uint8_t> ownedInitialData;
     };
+
+    struct BufferUpdateRequest
+    {
+        BufferHandle handle;
+        uint64_t dstOffset = 0;
+        std::vector<uint8_t> data;
+    };
     
     struct TextureCreateRequest
     {
@@ -58,6 +65,7 @@ namespace Zero
 
         Zero::Mutex queueMutex;
         std::vector<BufferCreateRequest> pendingBuffers;
+        std::vector<BufferUpdateRequest> pendingBufferUpdates;
         std::vector<TextureCreateRequest> pendingTextures;
         std::vector<PipelineCreateRequest> pendingPipelines;
         std::vector<ComputePipelineCreateRequest> pendingComputePipelines;
@@ -67,6 +75,7 @@ namespace Zero
         {
             Zero::ScopedLock lock(queueMutex);
             pendingBuffers.clear();
+            pendingBufferUpdates.clear();
             pendingTextures.clear();
             pendingPipelines.clear();
             pendingComputePipelines.clear();

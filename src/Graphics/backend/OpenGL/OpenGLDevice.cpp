@@ -275,6 +275,13 @@ namespace Zero
         }
     }
 
+    void OpenGLDevice::UpdateBuffer(Buffer* dst, size_t dstOffset, const void* data, size_t sizeBytes)
+    {
+        if (!dst || !data || sizeBytes == 0) return;
+        OpenGLBuffer* glDst = static_cast<OpenGLBuffer*>(dst);
+        glNamedBufferSubData(glDst->GetHandle(), dstOffset, sizeBytes, data);
+    }
+
     void OpenGLDevice::CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes)
     {
         if (!src || !dst) return;

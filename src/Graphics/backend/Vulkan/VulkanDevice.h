@@ -45,6 +45,7 @@ namespace Zero
 
         virtual Buffer* CreateBuffer(const BufferDesc& desc) override;
         virtual void DestroyBuffer(Buffer* buffer) override;
+        virtual void UpdateBuffer(Buffer* dst, size_t dstOffset, const void* data, size_t sizeBytes) override;
         virtual void CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes) override;
 
         virtual GraphicsPipeline* CreateGraphicsPipeline(const GraphicsPipelineDesc& desc) override;
@@ -58,6 +59,7 @@ namespace Zero
         void recreateSwapChain();
 
         void recordCommandBuffer(uint32_t imageIndex, class FrameData* frame);
+        void recordPendingTransfers(vk::raii::CommandBuffer& commandBuffer);
         void transition_image_layout(
             uint32_t imageIndex,
             vk::ImageLayout oldLayout,
@@ -68,6 +70,34 @@ namespace Zero
             vk::PipelineStageFlags2 dstStageMask,
             vk::raii::CommandBuffer& commandBuffer
         );
+    private:
+        struct PendingStagingCopy
+        {
+            VkBuffer dstBuffer = VK_NULL_HANDLE;
+            VkDeviceSize srcOffset = 0;
+            VkDeviceSize dstOffset = 0;
+            VkDeviceSize size = 0;
+        };
+
+        struct PendingBufferCopy
+        {
+            VkBuffer srcBuffer = VK_NULL_HANDLE;
+            VkBuffer dstBuffer = VK_NULL_HANDLE;
+            VkDeviceSize srcOffset = 0;
+            VkDeviceSize dstOffset = 0;
+            VkDeviceSize size = 0;
+        };
+
+        static constexpr size_t STAGING_SLAB_SIZE = 32 * 1024 * 1024;
+        static constexpr size_t STAGING_BUFFER_SIZE = STAGING_SLAB_SIZE * MAX_FRAMES_IN_FLIGHT;
+
+        VkBuffer m_stagingBuffer = VK_NULL_HANDLE;
+        VmaAllocation m_stagingAllocation = VK_NULL_HANDLE;
+        uint8_t* m_stagingMappedPtr = nullptr;
+        size_t m_slabCursor = 0;
+
+        std::vector<PendingStagingCopy> m_pendingStagingCopies;
+        std::vector<PendingBufferCopy> m_pendingBufferCopies;
     private:
         VulkanInstance m_instance;
         VulkanSurface m_surface;

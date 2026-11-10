@@ -1,6 +1,8 @@
+#include "pch.h"
 #include <Engine/Graphics/RenderInterface.h>
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Thread/ScopedLock.h>
+#include <utility>
 
 namespace Zero
 {
@@ -38,9 +40,17 @@ namespace Zero
 
     void RenderInterface::UpdateBuffer(BufferHandle handle, const BufferUpdate& update)
     {
-        // TODO
-        // Enqueues an upload request. For now we assume upload requests 
-        // are handled elsewhere or add a stub.
+        if (!handle.IsValid() || !update.data || update.size == 0) return;
+
+        auto& impl = RenderInterfaceImpl::Get();
+        BufferUpdateRequest req;
+        req.handle = handle;
+        req.dstOffset = update.dstOffset;
+        const auto* src = static_cast<const uint8_t*>(update.data);
+        req.data.assign(src, src + update.size);
+
+        Zero::ScopedLock lock(impl.queueMutex);
+        impl.pendingBufferUpdates.push_back(std::move(req));
     }
 
     void RenderInterface::DestroyBuffer(BufferHandle handle)

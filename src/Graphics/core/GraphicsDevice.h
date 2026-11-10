@@ -49,6 +49,7 @@ namespace Zero
 
         virtual Buffer* CreateBuffer(const BufferDesc& desc) = 0;
         virtual void DestroyBuffer(Buffer* buffer) = 0;
+        virtual void UpdateBuffer(Buffer* dst, size_t dstOffset, const void* data, size_t sizeBytes) = 0;
 
         // Queues a copy operation. Does NOT block.
         // If dst is CPU-visible, memcpy directly.

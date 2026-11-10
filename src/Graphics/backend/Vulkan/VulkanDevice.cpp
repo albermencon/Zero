@@ -44,7 +44,13 @@ namespace Zero
 
     VulkanDevice::~VulkanDevice()
     {
-        //cleanupSwapChain();
+        if (m_stagingBuffer != VK_NULL_HANDLE && m_memoryAllocator.GetAllocator() != VK_NULL_HANDLE)
+        {
+            vmaDestroyBuffer(m_memoryAllocator.GetAllocator(), m_stagingBuffer, m_stagingAllocation);
+            m_stagingBuffer = VK_NULL_HANDLE;
+            m_stagingAllocation = VK_NULL_HANDLE;
+            m_stagingMappedPtr = nullptr;
+        }
     }
 
     void VulkanDevice::init() {
@@ -63,6 +69,36 @@ namespace Zero
         };
 
         ZERO_CORE_INFO("Memory allocator succesfully initialized");
+
+        VkBufferCreateInfo stagingBufferInfo{};
+        stagingBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        stagingBufferInfo.size = STAGING_BUFFER_SIZE;
+        stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        stagingBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo stagingAllocInfo{};
+        stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+        stagingAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        VmaAllocationInfo allocResult{};
+        VkResult stagingResult = vmaCreateBuffer(
+            m_memoryAllocator.GetAllocator(),
+            &stagingBufferInfo,
+            &stagingAllocInfo,
+            &m_stagingBuffer,
+            &m_stagingAllocation,
+            &allocResult
+        );
+
+        if (stagingResult == VK_SUCCESS && allocResult.pMappedData)
+        {
+            m_stagingMappedPtr = static_cast<uint8_t*>(allocResult.pMappedData);
+            ZERO_CORE_INFO("Persistent staging buffer initialized (96 MB across 3 frame slabs).");
+        }
+        else
+        {
+            ZERO_CORE_ERROR("Failed to allocate persistent staging buffer.");
+        }
 
         ZERO_CORE_INFO("Vulkan Device initialized successfully.");
     }
@@ -108,6 +144,8 @@ namespace Zero
         auto fenceResult = m_device.Get().waitForFences(*m_syncobjects.GetInFlightFences()[currentFrame], vk::True, UINT64_MAX);
 
         ZERO_CORE_ASSERT(fenceResult == vk::Result::eSuccess, "failed to wait for fence");
+
+        m_slabCursor = 0;
 
         // Grab an image from the framebuffer
         // First parameter indices the timeout in nanoseconds, beign the max unsigned 64 bit integer effictivily disable the timeout
@@ -240,6 +278,8 @@ namespace Zero
 
         vk::CommandBufferBeginInfo beginInfo{};
         commandBuffer.begin(beginInfo);
+
+        recordPendingTransfers(commandBuffer);
 
         // Before starting rendering, transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
         transition_image_layout(
@@ -489,6 +529,11 @@ namespace Zero
         bufferInfo.usage = Vulkan::toVkBufferUsage(desc.usage);
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+        if (desc.memory == MemoryDomain::GPU)
+        {
+            bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        }
+
         VmaAllocationCreateInfo allocInfo{};
         allocInfo.usage = Vulkan::toVmaMemoryUsage(desc.memory);
 
@@ -518,28 +563,9 @@ namespace Zero
 
         VulkanBuffer* vulkanBuffer = new VulkanBuffer(&m_memoryAllocator, buffer, allocation, desc.size, desc.usage, desc.memory);
 
-        if (desc.initialData)
+        if (desc.initialData && desc.initialDataSize > 0)
         {
-            if (vulkanBuffer->IsMappable())
-            {
-                // VMA already mapped it due to VMA_ALLOCATION_CREATE_MAPPED_BIT
-                VmaAllocationInfo allocResult;
-                vmaGetAllocationInfo(m_memoryAllocator.GetAllocator(), allocation, &allocResult);
-            
-                if (allocResult.pMappedData)
-                {
-                    memcpy(allocResult.pMappedData, desc.initialData, desc.initialDataSize);
-                    
-                    if (desc.memory == MemoryDomain::CPUtoGPU)
-                    {
-                        vmaFlushAllocation(m_memoryAllocator.GetAllocator(), allocation, 0, desc.initialDataSize);
-                    }
-                }
-            }
-            else
-            {
-                ZERO_CORE_WARN("initialData provided for GPU-only buffer without Staging Buffer support yet.");
-            }
+            UpdateBuffer(vulkanBuffer, 0, desc.initialData, desc.initialDataSize);
         }
 
 #ifdef ZERO_DEBUG
@@ -580,46 +606,124 @@ namespace Zero
         }
     }
 
+    void VulkanDevice::UpdateBuffer(Buffer* dst, size_t dstOffset, const void* data, size_t sizeBytes)
+    {
+        if (!dst || !data || sizeBytes == 0) return;
+
+        VulkanBuffer* vkDst = static_cast<VulkanBuffer*>(dst);
+        if (vkDst->IsMappable())
+        {
+            VmaAllocationInfo allocResult{};
+            vmaGetAllocationInfo(m_memoryAllocator.GetAllocator(), vkDst->GetAllocation(), &allocResult);
+
+            if (allocResult.pMappedData)
+            {
+                memcpy(static_cast<uint8_t*>(allocResult.pMappedData) + dstOffset, data, sizeBytes);
+
+                if (vkDst->GetMemoryDomain() == MemoryDomain::CPUtoGPU)
+                {
+                    vmaFlushAllocation(m_memoryAllocator.GetAllocator(), vkDst->GetAllocation(), dstOffset, sizeBytes);
+                }
+            }
+        }
+        else
+        {
+            if (m_stagingMappedPtr)
+            {
+                const size_t alignedSize = (sizeBytes + 15) & ~size_t(15);
+                if (m_slabCursor + alignedSize <= STAGING_SLAB_SIZE)
+                {
+                    const size_t slabOffset = (currentFrame * STAGING_SLAB_SIZE) + m_slabCursor;
+                    memcpy(m_stagingMappedPtr + slabOffset, data, sizeBytes);
+                    vmaFlushAllocation(m_memoryAllocator.GetAllocator(), m_stagingAllocation, slabOffset, alignedSize);
+
+                    m_pendingStagingCopies.push_back({
+                        vkDst->GetHandle(),
+                        static_cast<VkDeviceSize>(slabOffset),
+                        static_cast<VkDeviceSize>(dstOffset),
+                        static_cast<VkDeviceSize>(sizeBytes)
+                    });
+                    m_slabCursor += alignedSize;
+                }
+                else
+                {
+                    ZERO_CORE_ERROR("Staging slab exhausted: required {0} bytes, available {1} bytes",
+                                    alignedSize, STAGING_SLAB_SIZE - m_slabCursor);
+                }
+            }
+            else
+            {
+                ZERO_CORE_ERROR("Staging buffer uninitialized; dropping update for GPU buffer.");
+            }
+        }
+    }
+
     void VulkanDevice::CopyBuffer(Buffer* src, size_t srcOffset, Buffer* dst, size_t dstOffset, size_t sizeBytes)
     {
-        if (!src || !dst) return;
-        
-        VulkanBuffer* vkSrc = static_cast<VulkanBuffer*>(src);
-        VulkanBuffer* vkDst = static_cast<VulkanBuffer*>(dst);
-        
-        VkBufferCopy copyRegion{};
-        copyRegion.srcOffset = srcOffset;
-        copyRegion.dstOffset = dstOffset;
-        copyRegion.size = sizeBytes;
+        if (!dst || sizeBytes == 0) return;
 
-        // m_transferCmdBuffer must be managed by VulkanDevice (vkBeginCommandBuffer called at BeginFrame)
-        //vkCmdCopyBuffer(m_transferCmdBuffer, vkSrc->GetHandle(), vkDst->GetHandle(), 1, &copyRegion);
+        VulkanBuffer* vkDst = static_cast<VulkanBuffer*>(dst);
+
+        if (src)
+        {
+            VulkanBuffer* vkSrc = static_cast<VulkanBuffer*>(src);
+            m_pendingBufferCopies.push_back({
+                vkSrc->GetHandle(),
+                vkDst->GetHandle(),
+                static_cast<VkDeviceSize>(srcOffset),
+                static_cast<VkDeviceSize>(dstOffset),
+                static_cast<VkDeviceSize>(sizeBytes)
+            });
+        }
     }
 
     void VulkanDevice::FlushTransfers()
     {
-        // Ensure all transfer writes are visible to subsequent reads in the pipeline
-        VkMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | 
-                            VK_ACCESS_INDEX_READ_BIT | 
-                            VK_ACCESS_UNIFORM_READ_BIT | 
-                            VK_ACCESS_SHADER_READ_BIT;
-        
-        /*
-        vkCmdPipelineBarrier(
-            m_transferCmdBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            1, &barrier,
-            0, nullptr,
-            0, nullptr
-        );
-        */
+    }
 
-        // After this, VulkanDevice should either submit m_transferCmdBuffer to the queue,
-        // or if m_transferCmdBuffer IS the main frame command buffer, just continue recording graphics commands.
+    void VulkanDevice::recordPendingTransfers(vk::raii::CommandBuffer& commandBuffer)
+    {
+        if (m_pendingStagingCopies.empty() && m_pendingBufferCopies.empty())
+            return;
+
+        for (const auto& copy : m_pendingStagingCopies)
+        {
+            vk::BufferCopy region{};
+            region.srcOffset = copy.srcOffset;
+            region.dstOffset = copy.dstOffset;
+            region.size = copy.size;
+            commandBuffer.copyBuffer(m_stagingBuffer, copy.dstBuffer, region);
+        }
+        m_pendingStagingCopies.clear();
+
+        for (const auto& copy : m_pendingBufferCopies)
+        {
+            vk::BufferCopy region{};
+            region.srcOffset = copy.srcOffset;
+            region.dstOffset = copy.dstOffset;
+            region.size = copy.size;
+            commandBuffer.copyBuffer(copy.srcBuffer, copy.dstBuffer, region);
+        }
+        m_pendingBufferCopies.clear();
+
+        vk::MemoryBarrier2 barrier{};
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eVertexInput |
+                               vk::PipelineStageFlagBits2::eVertexShader |
+                               vk::PipelineStageFlagBits2::eFragmentShader |
+                               vk::PipelineStageFlagBits2::eComputeShader |
+                               vk::PipelineStageFlagBits2::eDrawIndirect;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead |
+                                vk::AccessFlagBits2::eIndexRead |
+                                vk::AccessFlagBits2::eShaderStorageRead |
+                                vk::AccessFlagBits2::eUniformRead |
+                                vk::AccessFlagBits2::eIndirectCommandRead;
+
+        vk::DependencyInfo depInfo{};
+        depInfo.memoryBarrierCount = 1;
+        depInfo.pMemoryBarriers = &barrier;
+
+        commandBuffer.pipelineBarrier2(depInfo);
     }
 }

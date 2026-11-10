@@ -188,6 +188,7 @@ namespace Zero
 					});
 			}
 
+			m_backend->FlushTransfers();
 			m_backend->RenderFrame(frame);
 			m_backend->SwapBuffers();
 
@@ -207,6 +208,7 @@ namespace Zero
 		auto& impl = RenderInterfaceImpl::Get();
 
 		static std::vector<BufferCreateRequest> localBuffers;
+		static std::vector<BufferUpdateRequest> localBufferUpdates;
 		static std::vector<TextureCreateRequest> localTextures;
 		static std::vector<PipelineCreateRequest> localPipelines;
 		static std::vector<ComputePipelineCreateRequest> localComputePipelines;
@@ -215,6 +217,7 @@ namespace Zero
 		{
 			Zero::ScopedLock lock(impl.queueMutex);
 			localBuffers.swap(impl.pendingBuffers);
+			localBufferUpdates.swap(impl.pendingBufferUpdates);
 			localTextures.swap(impl.pendingTextures);
 			localPipelines.swap(impl.pendingPipelines);
 			localComputePipelines.swap(impl.pendingComputePipelines);
@@ -238,6 +241,16 @@ namespace Zero
 			{
 				ZERO_CORE_ERROR("Failed to create buffer for handle {0}", req.handle.GetId());
 				impl.bufferRegistry.MarkFailed(req.handle);
+			}
+		}
+
+		// Process Buffer Updates
+		for (const auto& req : localBufferUpdates)
+		{
+			Buffer* buffer = impl.bufferRegistry.GetBackendResource(req.handle);
+			if (buffer)
+			{
+				m_backend->UpdateBuffer(buffer, req.dstOffset, req.data.data(), req.data.size());
 			}
 		}
 
@@ -323,6 +336,7 @@ namespace Zero
 		}
 
 		localBuffers.clear();
+		localBufferUpdates.clear();
 		localTextures.clear();
 		localPipelines.clear();
 		localComputePipelines.clear();
