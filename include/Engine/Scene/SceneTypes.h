@@ -71,4 +71,31 @@ namespace Zero
         float radius = 10.f;
         float intensity = 1.f;
     };
+
+    struct ZERO_API GPUDrivenBatch
+    {
+        BufferHandle   objectDataBuffer;  // SSBO (chunk / instance data)
+        BufferHandle   indirectBuffer;    // filled by compute cull (VkDrawIndexedIndirectCommand)
+        BufferHandle   countBuffer;       // for vkCmdDrawIndexedIndirectCount
+        BufferHandle   vertexBuffer;      // geometry vertex buffer
+        BufferHandle   indexBuffer;       // geometry index buffer
+        PipelineHandle renderPipeline;    // graphics PSO
+        PipelineHandle cullPipeline;      // compute cull PSO
+        uint32_t       maxObjects = 0;
+        bool           enabled = false;
+
+        void Reserve(uint32_t n) {}
+        void Clear()
+        {
+            objectDataBuffer = {};
+            indirectBuffer = {};
+            countBuffer = {};
+            vertexBuffer = {};
+            indexBuffer = {};
+            renderPipeline = {};
+            cullPipeline = {};
+            maxObjects = 0;
+            enabled = false;
+        }
+    };
 }

@@ -44,6 +44,10 @@ namespace Zero
 
         void SetCamera(const CameraDesc& desc);
 
+        // GPU-Driven Batch
+
+        void SetGPUBatch(const GPUDrivenBatch& batch);
+
         // Query 
 
         [[nodiscard]] std::string_view GetName() const noexcept;

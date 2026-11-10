@@ -1,6 +1,9 @@
 #include <doctest.h>
 #include <Engine/Math/Mat4.h>
 #include <Engine/Math/Frustum.h>
+#include <Engine/Scene/SceneManager.h>
+#include <Engine/Scene/Scene.h>
+#include <Engine/Graphics/FrameData.h>
 #include <vector>
 #include <cmath>
 
@@ -198,4 +201,58 @@ TEST_CASE("Frustum SIMD Batch Culling Equivalence")
 	{
 		CHECK(batchVisible[v] == scalarVisible[v]);
 	}
+}
+
+TEST_CASE("GPUDriven Batch Emission and DrawPacket Generation")
+{
+	SceneManager::Get().Init();
+
+	SceneId gpuSceneId = SceneManager::Get().CreateScene("TerrainChunks", RenderPath::GPUDriven);
+	SceneManager::Get().SetSceneActive(gpuSceneId, true);
+	Scene* scene = SceneManager::Get().GetScene(gpuSceneId);
+	REQUIRE(scene != nullptr);
+
+	GPUDrivenBatch batch{};
+	batch.objectDataBuffer = BufferHandle{ 10 };
+	batch.indirectBuffer = BufferHandle{ 11 };
+	batch.countBuffer = BufferHandle{ 12 };
+	batch.vertexBuffer = BufferHandle{ 13 };
+	batch.indexBuffer = BufferHandle{ 14 };
+	batch.renderPipeline = PipelineHandle{ 5 };
+	batch.cullPipeline = PipelineHandle{ 6 };
+	batch.maxObjects = 5000;
+	batch.enabled = true;
+
+	scene->SetGPUBatch(batch);
+	SceneManager::Get().FlushCommands();
+
+	FrameData* frame = SceneManager::Get().BuildFrame(1, 0.016f);
+	REQUIRE(frame != nullptr);
+
+	CHECK(frame->gpuDriven.enabled == true);
+	CHECK(frame->gpuDriven.maxObjects == 5000);
+	CHECK(frame->gpuDriven.indirectBuffer.GetIndex() == 11);
+	CHECK(frame->gpuDriven.countBuffer.GetIndex() == 12);
+
+	bool foundMdiCount = false;
+	for (const auto& packet : frame->drawPackets)
+	{
+		if (static_cast<RHI::DrawCmdType>(packet.cmdType) == RHI::DrawCmdType::MultiDrawIndirectCount)
+		{
+			foundMdiCount = true;
+			CHECK(packet.mdiCount.indirectBufferId == 11);
+			CHECK(packet.mdiCount.countBufferId == 12);
+			CHECK(packet.mdiCount.maxDrawCount == 5000);
+
+			REQUIRE(packet.geometryId < frame->geometryTable.size());
+			CHECK(frame->geometryTable[packet.geometryId].vertexBuffer == BufferHandle{ 13 });
+			CHECK(frame->geometryTable[packet.geometryId].indexBuffer == BufferHandle{ 14 });
+
+			uint16_t pipelineId = RHI::GetPipelineIdFromSortKey(packet.sortKey);
+			CHECK(pipelineId == 5);
+		}
+	}
+	CHECK(foundMdiCount);
+
+	SceneManager::Get().DestroyScene(gpuSceneId);
 }

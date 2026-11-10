@@ -120,6 +120,14 @@ namespace Zero
         m_impl->commands.enqueue(cmd);
     }
 
+    void Scene::SetGPUBatch(const GPUDrivenBatch& batch)
+    {
+        SceneCommand cmd;
+        cmd.type = SceneCommandType::SetGPUBatch;
+        cmd.gpuBatch = batch;
+        m_impl->commands.enqueue(cmd);
+    }
+
     // Scene internal — called only by SceneManager (friend)
 
     void Scene_FlushCommands(Scene& scene)
@@ -177,6 +185,10 @@ namespace Zero
 
             case SceneCommandType::SetCamera:
                 impl.camera = cmd.camera;
+                break;
+
+            case SceneCommandType::SetGPUBatch:
+                impl.gpuBatch = cmd.gpuBatch;
                 break;
             }
         }

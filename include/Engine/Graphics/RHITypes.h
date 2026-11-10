@@ -120,4 +120,14 @@ namespace Zero::RHI
 	};
 
 	static_assert(sizeof(DrawPacket) == 32, "DrawPacket must fit exactly in 32 bytes");
+
+	struct DrawIndexedIndirectCommand
+	{
+		uint32_t indexCount;
+		uint32_t instanceCount;
+		uint32_t firstIndex;
+		int32_t  vertexOffset;
+		uint32_t firstInstance;
+	};
+	static_assert(sizeof(DrawIndexedIndirectCommand) == 20);
 }

@@ -21,6 +21,7 @@ namespace Zero
 		[[nodiscard]] const vk::raii::PipelineLayout& GetPipelineLayout() const noexcept { return m_pipelineLayout; }
 		[[nodiscard]] const vk::raii::DescriptorSetLayout& GetDescriptorSetLayout() const noexcept { return m_descriptorSetLayout; }
 		[[nodiscard]] const vk::raii::Pipeline& GetPipeline() const noexcept { return m_pipeline; }
+		[[nodiscard]] uint32_t GetPushConstantSize() const noexcept { return m_pushConstantSize; }
 
 	private:
 		void createComputePipeline(const ComputePipelineDesc& desc);
@@ -29,6 +30,7 @@ namespace Zero
 		vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
 		vk::raii::PipelineLayout m_pipelineLayout = nullptr;
 		vk::raii::Pipeline m_pipeline = nullptr;
+		uint32_t m_pushConstantSize = 0;
 
 		VulkanLogicalDevice* m_device = nullptr;
 	};

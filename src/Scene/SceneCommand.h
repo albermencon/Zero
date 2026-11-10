@@ -19,6 +19,7 @@ namespace Zero
         RemoveLight,
         UpdatePointLightPosition,
         SetCamera,
+        SetGPUBatch,
     };
 
     // Trivial version of RenderableDesc — stores handle IDs as uint32_t
@@ -63,6 +64,7 @@ namespace Zero
             struct { Vec3 position; }               updatePointLight;
 
             CameraDesc                              camera;
+            GPUDrivenBatch                          gpuBatch;
         };
 
         SceneCommand() { std::memset(this, 0, sizeof(*this)); }

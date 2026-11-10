@@ -39,13 +39,14 @@ namespace Zero
         // MainScene cannot be destroyed.
         void DestroyScene(SceneId id);
 
-    private:
-        // Internal lifecycle — called only by Application
-        friend class Application;
-
+        // Frame pipeline lifecycle
         void Shutdown();
         void FlushCommands();
         [[nodiscard]] struct FrameData* BuildFrame(uint64_t frameNumber, float deltaTime);
+
+    private:
+        // Internal lifecycle — called only by Application
+        friend class Application;
 
         SceneManager() = default;
         ~SceneManager() = default;

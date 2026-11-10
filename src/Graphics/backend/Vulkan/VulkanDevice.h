@@ -60,6 +60,7 @@ namespace Zero
 
         void recordCommandBuffer(uint32_t imageIndex, class FrameData* frame);
         void recordPendingTransfers(vk::raii::CommandBuffer& commandBuffer);
+        void recordComputeCull(vk::raii::CommandBuffer& commandBuffer, class FrameData* frame);
         void transition_image_layout(
             uint32_t imageIndex,
             vk::ImageLayout oldLayout,

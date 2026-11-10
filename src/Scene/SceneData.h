@@ -323,6 +323,7 @@ namespace Zero
         RenderableStore renderables;
         LightStore      lights;
         CameraDesc      camera{};
+        GPUDrivenBatch  gpuBatch{};
 
         moodycamel::ConcurrentQueue<SceneCommand> commands;
         std::atomic<uint32_t> nextHandleId{ 1 };

@@ -37,18 +37,6 @@ namespace Zero
         float intensity = 1.f;
     };
 
-    struct GPUDrivenBatch
-    {
-        BufferHandle   objectDataBuffer;  // SSBO
-        BufferHandle   indirectBuffer;    // filled by cull compute
-        BufferHandle   countBuffer;       // for vkCmdDrawIndexedIndirectCount
-        PipelineHandle cullPipeline;      // compute cull PSO
-        uint32_t       maxObjects = 0;
-
-        void Reserve(uint32_t n) {}
-        void Clear() {}
-    };
-
     struct FrameData
     {
         uint64_t frameIndex = 0;

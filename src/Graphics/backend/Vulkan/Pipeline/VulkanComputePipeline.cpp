@@ -43,8 +43,10 @@ namespace Zero
 
         std::vector<vk::PushConstantRange> pushConstants;
         pushConstants.reserve(desc.pushConstants.size());
+        m_pushConstantSize = 0;
         for (const auto& pc : desc.pushConstants)
         {
+            m_pushConstantSize += pc.size;
             pushConstants.push_back(vk::PushConstantRange{
                 Vulkan::toVkShaderStageFlags(pc.stages),
                 pc.offset,

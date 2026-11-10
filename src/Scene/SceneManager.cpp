@@ -157,6 +157,17 @@ namespace Zero
             frame->cameras[sceneIdx] = cam;
             frame->sceneCount = sceneIdx + 1;
 
+            auto getOrAddGeometry = [frame](BufferHandle vb, BufferHandle ib) -> uint8_t {
+                for (size_t g = 0; g < frame->geometryTable.size(); ++g)
+                {
+                    if (frame->geometryTable[g].vertexBuffer == vb && frame->geometryTable[g].indexBuffer == ib)
+                        return static_cast<uint8_t>(g);
+                }
+                uint8_t newId = static_cast<uint8_t>(frame->geometryTable.size());
+                frame->geometryTable.push_back({ vb, ib });
+                return newId;
+            };
+
             if (path == RenderPath::CPUDriven && count > 0)
             {
                 Frustum frustum = Frustum::FromViewProj(viewProj);
@@ -175,17 +186,6 @@ namespace Zero
 
                 // Pre-allocate draw packets to avoid vector reallocations
                 frame->drawPackets.reserve(frame->drawPackets.size() + visibleCount);
-
-                auto getOrAddGeometry = [frame](BufferHandle vb, BufferHandle ib) -> uint8_t {
-                    for (size_t g = 0; g < frame->geometryTable.size(); ++g)
-                    {
-                        if (frame->geometryTable[g].vertexBuffer == vb && frame->geometryTable[g].indexBuffer == ib)
-                            return static_cast<uint8_t>(g);
-                    }
-                    uint8_t newId = static_cast<uint8_t>(frame->geometryTable.size());
-                    frame->geometryTable.push_back({ vb, ib });
-                    return newId;
-                };
 
                 const float depthRangeInv = (cam.farPlane > cam.nearPlane)
                     ? (1.0f / (cam.farPlane - cam.nearPlane))
@@ -229,9 +229,28 @@ namespace Zero
             }
             else if (path == RenderPath::GPUDriven)
             {
-                // GPU driven — just copy the batch handles, no SOA iteration
-                // SceneManager only forwards what the scene has
-                //frame->gpuDriven = scene->m_impl->gpuBatch;
+                const auto& gpuBatch = scene->m_impl->gpuBatch;
+                if (gpuBatch.enabled && gpuBatch.maxObjects > 0)
+                {
+                    frame->gpuDriven = gpuBatch;
+
+                    uint8_t geometryId = getOrAddGeometry(gpuBatch.vertexBuffer, gpuBatch.indexBuffer);
+                    uint16_t pipelineId = gpuBatch.renderPipeline.IsValid() ? gpuBatch.renderPipeline.GetIndex() : 0;
+                    RHI::DrawSortKey sortKey = RHI::CreateSortKey(RHI::RenderPass::Opaque, 0, pipelineId, 0, 0.0f);
+
+                    RHI::DrawPacket packet{};
+                    packet.sortKey = sortKey;
+                    packet.geometryId = geometryId;
+                    packet.cmdType = static_cast<uint8_t>(RHI::DrawCmdType::MultiDrawIndirectCount);
+
+                    packet.mdiCount.indirectBufferId = gpuBatch.indirectBuffer.GetIndex();
+                    packet.mdiCount.countBufferId = gpuBatch.countBuffer.GetIndex();
+                    packet.mdiCount.indirectOffset = 0;
+                    packet.mdiCount.countOffset = 0;
+                    packet.mdiCount.maxDrawCount = gpuBatch.maxObjects;
+
+                    frame->drawPackets.push_back(packet);
+                }
             }
 
             // Lights (both paths)
