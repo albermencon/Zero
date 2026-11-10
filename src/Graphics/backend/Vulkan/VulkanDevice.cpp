@@ -596,6 +596,13 @@ namespace Zero
 
         VulkanBuffer* vulkanBuffer = new VulkanBuffer(&m_memoryAllocator, buffer, allocation, desc.size, desc.usage, desc.memory);
 
+        if (bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+        {
+            vk::BufferDeviceAddressInfo addrInfo{ buffer };
+            vk::DeviceAddress deviceAddress = m_device.Get().getBufferAddress(addrInfo);
+            vulkanBuffer->SetDeviceAddress(static_cast<uint64_t>(deviceAddress));
+        }
+
         if (desc.initialData && desc.initialDataSize > 0)
         {
             UpdateBuffer(vulkanBuffer, 0, desc.initialData, desc.initialDataSize);

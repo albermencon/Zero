@@ -13,6 +13,7 @@ namespace Zero
         allocatorInfo.instance = instance;
         allocatorInfo.physicalDevice = physicalDevice;
         allocatorInfo.device = device;
+        allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
         allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
 
         VkResult result = vmaCreateAllocator(&allocatorInfo, &m_Allocator);

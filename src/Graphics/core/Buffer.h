@@ -15,6 +15,7 @@ namespace Zero
         virtual MemoryDomain GetMemoryDomain() const = 0;
 
         virtual bool IsMappable() const = 0;
+        virtual uint64_t GetDeviceAddress() const { return 0; }
 
         virtual ~Buffer() = default;
     };

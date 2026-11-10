@@ -83,6 +83,8 @@ namespace Zero
         [[nodiscard]] bool IsReady(TextureHandle  handle) const noexcept;
         [[nodiscard]] bool IsReady(PipelineHandle handle) const noexcept;
 
+        [[nodiscard]] uint64_t GetBufferDeviceAddress(BufferHandle handle) const noexcept;
+
     private:
         RenderInterface() = default;
         ~RenderInterface() = default;

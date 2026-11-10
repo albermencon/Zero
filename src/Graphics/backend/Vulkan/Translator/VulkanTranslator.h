@@ -343,10 +343,11 @@ namespace Zero::Vulkan
         if (hasUsage(usage, BufferUsage::Vertex))      flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         if (hasUsage(usage, BufferUsage::Index))        flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
         if (hasUsage(usage, BufferUsage::Uniform))      flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        if (hasUsage(usage, BufferUsage::Storage))      flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        if (hasUsage(usage, BufferUsage::Indirect))     flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+        if (hasUsage(usage, BufferUsage::Storage))      flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        if (hasUsage(usage, BufferUsage::Indirect))     flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         if (hasUsage(usage, BufferUsage::TransferSrc))  flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         if (hasUsage(usage, BufferUsage::TransferDst))  flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        if (hasUsage(usage, BufferUsage::ShaderDeviceAddress)) flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         return flags;
     }
 

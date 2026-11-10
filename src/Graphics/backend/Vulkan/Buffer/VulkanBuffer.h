@@ -21,6 +21,8 @@ namespace Zero
         VmaAllocation GetAllocation() const { return m_allocation; }
 
         virtual bool IsMappable() const override;
+        virtual uint64_t GetDeviceAddress() const override { return m_deviceAddress; }
+        void SetDeviceAddress(uint64_t address) { m_deviceAddress = address; }
 
         VkBuffer GetHandle() const { return m_buffer; }
 
@@ -31,5 +33,6 @@ namespace Zero
         size_t m_size = 0;
         BufferUsage m_usage;
         MemoryDomain m_domain;
+        uint64_t m_deviceAddress = 0;
     };
 }

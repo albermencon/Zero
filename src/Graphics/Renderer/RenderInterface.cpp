@@ -1,6 +1,7 @@
 #include "pch.h"
 #include <Engine/Graphics/RenderInterface.h>
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
+#include "Graphics/core/Buffer.h"
 #include <Engine/Thread/ScopedLock.h>
 #include <utility>
 
@@ -180,5 +181,14 @@ namespace Zero
     {
         auto& impl = RenderInterfaceImpl::Get();
         return impl.pipelineRegistry.GetState(handle) == ResourceState::Ready;
+    }
+
+    uint64_t RenderInterface::GetBufferDeviceAddress(BufferHandle handle) const noexcept
+    {
+        if (!handle.IsValid()) return 0;
+        auto& impl = RenderInterfaceImpl::Get();
+        Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
+        if (!b) return 0;
+        return b->GetDeviceAddress();
     }
 }

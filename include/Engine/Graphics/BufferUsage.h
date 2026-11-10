@@ -14,7 +14,8 @@ namespace Zero
         Storage = 1 << 3,       // SSBO / UAV
         Indirect = 1 << 4,      // indirect draw/dispatch args
         TransferSrc = 1 << 5,   // staging source
-        TransferDst = 1 << 6    // GPU-side destination
+        TransferDst = 1 << 6,   // GPU-side destination
+        ShaderDeviceAddress = 1 << 7 // Buffer Device Address (BDA)
     };
 
     // Bitmask operators

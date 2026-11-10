@@ -4,6 +4,8 @@
 #include <Engine/Scene/SceneManager.h>
 #include <Engine/Scene/Scene.h>
 #include <Engine/Graphics/FrameData.h>
+#include <Engine/Graphics/BufferUsage.h>
+#include <Engine/Graphics/RenderInterface.h>
 #include <vector>
 #include <cmath>
 
@@ -275,6 +277,16 @@ TEST_CASE("Generalized Compute Pipeline Architecture and Barriers")
 	static_assert(sizeof(RHI::ComputeDispatch) == 160);
 	static_assert(alignof(RHI::ComputeDispatch) == 16);
 	static_assert(offsetof(RHI::ComputeDispatch, pushConstants) == 32);
+
+	static_assert(sizeof(RHI::CullPushConstants) == 128);
+	static_assert(offsetof(RHI::CullPushConstants, frustumPlanes) == 0);
+	static_assert(offsetof(RHI::CullPushConstants, objectDataAddress) == 96);
+	static_assert(offsetof(RHI::CullPushConstants, indirectBufferAddress) == 104);
+	static_assert(offsetof(RHI::CullPushConstants, countBufferAddress) == 112);
+	static_assert(offsetof(RHI::CullPushConstants, maxObjects) == 120);
+
+	CHECK(hasUsage(BufferUsage::ShaderDeviceAddress, BufferUsage::ShaderDeviceAddress));
+	CHECK(RenderInterface::Get().GetBufferDeviceAddress(BufferHandle{}) == 0);
 
 	FrameData frame{};
 	frame.Reserve(10, 10, 1);

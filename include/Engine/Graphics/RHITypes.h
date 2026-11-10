@@ -158,8 +158,17 @@ namespace Zero::RHI
 	struct CullPushConstants
 	{
 		float frustumPlanes[24];
+		uint64_t objectDataAddress;
+		uint64_t indirectBufferAddress;
+		uint64_t countBufferAddress;
 		uint32_t maxObjects;
-		uint32_t _pad[3];
+		uint32_t _pad;
 	};
-	static_assert(sizeof(CullPushConstants) == 112);
+	static_assert(sizeof(CullPushConstants) == 128);
+	static_assert(sizeof(CullPushConstants) <= sizeof(ComputeDispatch::pushConstants));
+	static_assert(offsetof(CullPushConstants, frustumPlanes) == 0);
+	static_assert(offsetof(CullPushConstants, objectDataAddress) == 96);
+	static_assert(offsetof(CullPushConstants, indirectBufferAddress) == 104);
+	static_assert(offsetof(CullPushConstants, countBufferAddress) == 112);
+	static_assert(offsetof(CullPushConstants, maxObjects) == 120);
 }

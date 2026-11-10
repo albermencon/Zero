@@ -4,6 +4,7 @@
 #include <Engine/Log.h>
 #include "Scene/SceneData.h"
 #include <Engine/Graphics/FrameData.h>
+#include <Engine/Graphics/RenderInterface.h>
 #include <Engine/Math/Frustum.h>
 #include <vector>
 #include <memory>
@@ -251,7 +252,11 @@ namespace Zero
                             pushData.frustumPlanes[p * 4 + 2] = frustum.planes[p].c;
                             pushData.frustumPlanes[p * 4 + 3] = frustum.planes[p].d;
                         }
+                        pushData.objectDataAddress = RenderInterface::Get().GetBufferDeviceAddress(gpuBatch.objectDataBuffer);
+                        pushData.indirectBufferAddress = RenderInterface::Get().GetBufferDeviceAddress(gpuBatch.indirectBuffer);
+                        pushData.countBufferAddress = RenderInterface::Get().GetBufferDeviceAddress(gpuBatch.countBuffer);
                         pushData.maxObjects = gpuBatch.maxObjects;
+                        pushData._pad = 0;
 
                         cullDispatch.pushConstantSize = sizeof(RHI::CullPushConstants);
                         std::memcpy(cullDispatch.pushConstants, &pushData, sizeof(RHI::CullPushConstants));
