@@ -41,11 +41,13 @@ target_link_libraries(ZeroBenchmarks PRIVATE
     Zero
     benchmark::benchmark
     benchmark::benchmark_main
+    hwy
 )
 
 target_include_directories(ZeroBenchmarks PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/moodycamel
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/highway
 )
 
 # Enforce Release optimizations and NDEBUG for accurate benchmarking

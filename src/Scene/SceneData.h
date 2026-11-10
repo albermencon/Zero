@@ -9,7 +9,6 @@
 #include <Engine/Scene/SceneTypes.h>
 #include <Engine/Scene/Scene.h>
 #include <concurrentqueue.h>
-#include "Graphics/core/RHITypes.h"
 #include "Scene/SceneCommand.h"
 
 namespace Zero

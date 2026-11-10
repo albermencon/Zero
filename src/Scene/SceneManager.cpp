@@ -4,6 +4,7 @@
 #include <Engine/Log.h>
 #include "Scene/SceneData.h"
 #include <Engine/Graphics/FrameData.h>
+#include <Engine/Math/Frustum.h>
 #include <vector>
 #include <memory>
 #include <algorithm>
@@ -18,6 +19,9 @@ namespace Zero
         std::vector<std::unique_ptr<Scene>> scenes;
         std::vector<SceneId>                activeIds;
         uint32_t                            nextSceneId = 1;
+        static constexpr int BUFFER = 3;
+        FrameData                           frames[BUFFER];
+        std::vector<uint32_t>               visibleIndices;
     };
 
     SceneManager& SceneManager::Get()
@@ -28,6 +32,7 @@ namespace Zero
 
     void SceneManager::Init()
     {
+        if (m_impl) return; // idempotent
         m_impl = new Impl();
         m_impl->scenes.emplace_back(new Scene(MainSceneId, "Main", RenderPath::CPUDriven));
         m_impl->activeIds.push_back(MainSceneId);
@@ -102,13 +107,9 @@ namespace Zero
 
     FrameData* SceneManager::BuildFrame(uint64_t frameNumber, float deltaTime)
     {
-        // temp 
-        // UB -> Might use data that the gpu is still utilizing!
-        constexpr int BUFFER = 3;
-        static FrameData frames[BUFFER];
-
-        uint32_t frameIndex = frameNumber % BUFFER;
-        FrameData* frame = &frames[frameIndex];
+        if (!m_impl) return nullptr;
+        uint32_t frameIndex = frameNumber % Impl::BUFFER;
+        FrameData* frame = &m_impl->frames[frameIndex];
 
         frame->Clear();
         frame->frameIndex = frameIndex;
@@ -132,7 +133,7 @@ namespace Zero
                 ++gpuBatchCount;
             }
         }
-        frame->Reserve(cpuDrawCount, cpuTransformCount, gpuBatchCount);
+        //frame->Reserve(cpuDrawCount, cpuTransformCount, gpuBatchCount);
 
         uint32_t cpuOffset = 0;
         uint32_t sceneIdx = 0;
@@ -147,39 +148,84 @@ namespace Zero
             auto& store = scene->m_impl->renderables;
             const uint32_t count = store.Count();
 
+            const auto& cam = scene->m_impl->camera;
+            Mat4 viewProj = cam.proj * cam.view;
+            if (sceneIdx == 0)
+                frame->viewProj = viewProj;
+
             frame->sceneRanges[sceneIdx] = { cpuOffset, count, sceneIdx, path };
-            frame->cameras[sceneIdx] = scene->m_impl->camera;
+            frame->cameras[sceneIdx] = cam;
             frame->sceneCount = sceneIdx + 1;
 
             if (path == RenderPath::CPUDriven && count > 0)
             {
-                // memcpy HOT
-                AppendArray(frame->cpuDriven.boundsMinX, store.boundsMinX, cpuOffset);
-                AppendArray(frame->cpuDriven.boundsMinY, store.boundsMinY, cpuOffset);
-                AppendArray(frame->cpuDriven.boundsMinZ, store.boundsMinZ, cpuOffset);
-                AppendArray(frame->cpuDriven.boundsMaxX, store.boundsMaxX, cpuOffset);
-                AppendArray(frame->cpuDriven.boundsMaxY, store.boundsMaxY, cpuOffset);
-                AppendArray(frame->cpuDriven.boundsMaxZ, store.boundsMaxZ, cpuOffset);
+                Frustum frustum = Frustum::FromViewProj(viewProj);
 
-                // memcpy WARM
-                AppendArray(frame->cpuDriven.sortKeys, store.sortKeys, cpuOffset);
-                AppendArray(frame->cpuDriven.transformIndex, store.transformIndex, cpuOffset);
+                m_impl->visibleIndices.resize(count);
+                uint32_t visibleCount = frustum.CullAABBBatch(
+                    store.boundsMinX.data(), store.boundsMinY.data(), store.boundsMinZ.data(),
+                    store.boundsMaxX.data(), store.boundsMaxY.data(), store.boundsMaxZ.data(),
+                    count,
+                    m_impl->visibleIndices.data()
+                );
 
-                // memcpy COLD
-                AppendArray(frame->cpuDriven.vertexBuffers, store.vertexBuffers, cpuOffset);
-                AppendArray(frame->cpuDriven.indexBuffers, store.indexBuffers, cpuOffset);
+                // Append this scene's transforms to the global frame transform array (for the SSBO)
+                const uint32_t baseTransformIndex = static_cast<uint32_t>(frame->transform.size());
+                frame->transform.insert(frame->transform.end(), store.transforms.begin(), store.transforms.end());
 
-                AppendArray(frame->cpuDriven.indexCount, store.indexCount, cpuOffset);
-                AppendArray(frame->cpuDriven.firstIndex, store.firstIndex, cpuOffset);
-                AppendArray(frame->cpuDriven.vertexOffset, store.vertexOffset, cpuOffset);
-                AppendArray(frame->cpuDriven.materialId, store.materialId, cpuOffset);
-                AppendArray(frame->cpuDriven.castsShadow, store.castsShadow, cpuOffset);
-                AppendArray(frame->cpuDriven.isTransparent, store.isTransparent, cpuOffset);
+                // Pre-allocate draw packets to avoid vector reallocations
+                frame->drawPackets.reserve(frame->drawPackets.size() + visibleCount);
 
-                const uint32_t tOffset = frame->cpuDriven.TransformCount();
-                AppendArray(frame->cpuDriven.transforms, store.transforms, tOffset);
+                auto getOrAddGeometry = [frame](BufferHandle vb, BufferHandle ib) -> uint8_t {
+                    for (size_t g = 0; g < frame->geometryTable.size(); ++g)
+                    {
+                        if (frame->geometryTable[g].vertexBuffer == vb && frame->geometryTable[g].indexBuffer == ib)
+                            return static_cast<uint8_t>(g);
+                    }
+                    uint8_t newId = static_cast<uint8_t>(frame->geometryTable.size());
+                    frame->geometryTable.push_back({ vb, ib });
+                    return newId;
+                };
 
-                cpuOffset += count;
+                const float depthRangeInv = (cam.farPlane > cam.nearPlane)
+                    ? (1.0f / (cam.farPlane - cam.nearPlane))
+                    : 1.0f;
+
+                // Emit DrawPackets for visible items
+                for (uint32_t v = 0; v < visibleCount; ++v)
+                {
+                    uint32_t i = m_impl->visibleIndices[v];
+
+                    RHI::RenderPass pass = store.isTransparent[i] ?
+                                        RHI::RenderPass::Transparent : RHI::RenderPass::Opaque;
+
+                    const float cx = 0.5f * (store.boundsMinX[i] + store.boundsMaxX[i]);
+                    const float cy = 0.5f * (store.boundsMinY[i] + store.boundsMaxY[i]);
+                    const float cz = 0.5f * (store.boundsMinZ[i] + store.boundsMaxZ[i]);
+
+                    const float viewZ = -(cam.view.m[2] * cx + cam.view.m[6] * cy + cam.view.m[10] * cz + cam.view.m[14]);
+                    float depth = (viewZ - cam.nearPlane) * depthRangeInv;
+                    depth = std::clamp(depth, 0.0f, 1.0f);
+
+                    uint16_t pipelineId = store.pipelineId[i];
+                    if (pipelineId == 0 && store.pipelines[i].IsValid())
+                        pipelineId = store.pipelines[i].GetIndex();
+
+                    RHI::DrawSortKey sortKey = RHI::CreateSortKey(pass, 0, pipelineId, store.materialId[i], depth);
+                    uint8_t geometryId = getOrAddGeometry(store.vertexBuffers[i], store.indexBuffers[i]);
+
+                    RHI::DrawPacket packet{};
+                    packet.sortKey = sortKey;
+                    packet.transformIndex = baseTransformIndex + store.transformIndex[i];
+                    packet.geometryId = geometryId;
+                    packet.cmdType = static_cast<uint8_t>(RHI::DrawCmdType::Indexed);
+
+                    packet.indexed.indexCount = store.indexCount[i];
+                    packet.indexed.firstIndex = store.firstIndex[i];
+                    packet.indexed.vertexOffset = store.vertexOffset[i];
+
+                    frame->drawPackets.push_back(packet);
+                }
             }
             else if (path == RenderPath::GPUDriven)
             {

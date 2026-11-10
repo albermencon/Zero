@@ -24,8 +24,7 @@ namespace Zero
     {
     public:
         static SceneManager& Get();
-
-        // Scene management (public, any thread)
+        void Init();
 
         // Creates a new scene. Returns its stable id.
         [[nodiscard]] SceneId CreateScene(std::string_view name, RenderPath path = RenderPath::CPUDriven);
@@ -44,7 +43,6 @@ namespace Zero
         // Internal lifecycle — called only by Application
         friend class Application;
 
-        void Init();
         void Shutdown();
         void FlushCommands();
         [[nodiscard]] struct FrameData* BuildFrame(uint64_t frameNumber, float deltaTime);
