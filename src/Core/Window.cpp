@@ -75,7 +75,7 @@ namespace Zero
 
     uint32_t Window::GetFrameBufferHeight() const
     {
-        return m_Impl->GetFrameBufferWidth();
+        return m_Impl->GetFrameBufferHeight();
     }
 
     std::pair<uint32_t, uint32_t> Window::GetFrameBufferSize() const
