@@ -81,6 +81,25 @@ namespace Zero
 		ZERO_CORE_WARN("Renderer shut down");
 	}
 
+	void Renderer::WaitIdle()
+	{
+		if (!m_initialized.load(std::memory_order_acquire) || !m_running.load(std::memory_order_acquire))
+			return;
+
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+			m_queue.Adquire();
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+			m_queue.FrameConsumed();
+
+		std::binary_semaphore sem(0);
+		SubmitRenderCommand([this, &sem]() {
+			if (m_backend)
+				m_backend->OnFinished();
+			sem.release();
+		});
+		sem.acquire();
+	}
+
 	void Renderer::OnRenderSurfaceResize()
 	{
 		m_backend->OnRenderSurfaceResize();

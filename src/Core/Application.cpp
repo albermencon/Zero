@@ -86,7 +86,8 @@ namespace Zero
     Application::~Application()
     {
         FileWatcher::Get().Shutdown();
-        m_LayerStack.reset(); // Destroy layers first to make sure no user code is generating work 
+        Renderer::Get().WaitIdle();
+        m_LayerStack.reset();
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
         BlockingThreadPool::Get().Shutdown();

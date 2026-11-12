@@ -28,6 +28,7 @@ namespace Zero
 
 		void Init(RHI::API api, Window* window);
 		void Shutdown();
+		void WaitIdle();
 
 		void InitImGui();
 		void ShutdownImGui();

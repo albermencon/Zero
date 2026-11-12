@@ -237,6 +237,7 @@ namespace Zero
 
     void VulkanDevice::ShutdownImGui()
     {
+        m_device.Get().waitIdle();
         ImGui_ImplVulkan_Shutdown();
         m_ImGuiDescriptorPool.clear();
     }

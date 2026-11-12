@@ -42,6 +42,7 @@ namespace Zero
 
     void SceneManager::Shutdown()
     {
+        if (!m_impl) return;
         m_impl->scenes.clear();
         m_impl->activeIds.clear();
         delete m_impl;
