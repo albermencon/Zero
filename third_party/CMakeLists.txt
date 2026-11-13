@@ -238,13 +238,19 @@ target_link_libraries(imgui
 
 if (ZERO_ENABLE_PROFILING)
 
-    # Prevent Tracy from installing itself
-    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    # Force Tracy's configure-time options OFF so config-scoped definitions control Debug/RelWithDebInfo cleanly
+    set(TRACY_ENABLE OFF CACHE BOOL "" FORCE)
     set(TRACY_ON_DEMAND OFF CACHE BOOL "" FORCE)
-    set(TRACY_CALLSTACK 10 CACHE STRING "" FORCE)
+    set(TRACY_CALLSTACK OFF CACHE STRING "" FORCE)
     set(TRACY_NO_EXIT OFF CACHE BOOL "" FORCE)
+    set(TRACY_NO_CRASH_HANDLER OFF CACHE BOOL "" FORCE)
     set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 
     add_subdirectory(tracy)
+
+    target_compile_definitions(TracyClient PUBLIC
+        $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:TRACY_ENABLE TRACY_NO_CRASH_HANDLER>
+        $<$<AND:$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>,$<BOOL:${ZERO_PROFILE_ON_DEMAND}>>:TRACY_ON_DEMAND>
+    )
 
 endif()
