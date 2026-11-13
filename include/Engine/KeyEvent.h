@@ -1,5 +1,6 @@
 #pragma once
 #include "Core.h"
+#include "Engine/Platform.h"
 #include "Event.h"
 #include <sstream> // For std::stringstream
 
@@ -25,6 +26,7 @@ namespace Zero
             : KeyEvent(keycode), m_RepeatCount(repeatCount) {}
 
         ZERO_FORCE_INLINE int GetRepeatCount() const { return m_RepeatCount; }
+        ZERO_FORCE_INLINE bool IsRepeat() const { return m_RepeatCount > 0; }
 
         std::string ToString() const override
         {
