@@ -1,5 +1,5 @@
 #pragma once
-#include "Core.h"
+#include <Engine/Core.h>
 #include <memory>
 #include <string_view>
 #include <format>
@@ -20,6 +20,7 @@ namespace Zero
     {
     public:
         static void Init();
+        static void SetEnabled(bool enabled);
 
         // The single entry point.
         // We pass the final formatted string to the .cpp to keep spdlog hidden.

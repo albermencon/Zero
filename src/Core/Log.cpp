@@ -2,12 +2,19 @@
 #include <Engine/Core.h>
 #include <Engine/Log.h>
 
+#include <atomic>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
 namespace Zero
 {
+    namespace
+    {
+        std::atomic<bool> s_LogEnabled{ true };
+    }
+
     struct Log::Impl
     {
         std::shared_ptr<spdlog::logger> CoreLogger;
@@ -16,6 +23,11 @@ namespace Zero
 
     // Static instance definition
     std::unique_ptr<Log::Impl> Log::s_Impl;
+
+    void Log::SetEnabled(bool enabled)
+    {
+        s_LogEnabled.store(enabled, std::memory_order_relaxed);
+    }
 
     void Log::Init()
     {
@@ -51,6 +63,11 @@ namespace Zero
 
     void Log::LogMessage(bool isCore, LogLevel level, std::string_view message)
     {
+        if (!s_LogEnabled.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+
         if (!s_Impl)
         {
             // If not initialized, log to stderr
