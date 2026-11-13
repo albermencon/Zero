@@ -136,6 +136,11 @@ namespace Zero
 
         // Setup callbacks
         SetupCallBacks();
+
+        int fbWidth = 0, fbHeight = 0;
+        glfwGetFramebufferSize(m_Window, &fbWidth, &fbHeight);
+        m_Data.FramebufferWidth = static_cast<uint32_t>(fbWidth);
+        m_Data.FramebufferHeight = static_cast<uint32_t>(fbHeight);
     }
 
     void GLFWWindowImpl::SetupCallBacks()
@@ -316,11 +321,31 @@ namespace Zero
 
     uint32_t GLFWWindowImpl::GetFrameBufferWidth() const
     {
+        if (m_Window)
+        {
+            int w = 0, h = 0;
+            glfwGetFramebufferSize(m_Window, &w, &h);
+            if (w > 0)
+            {
+                const_cast<GLFWWindowImpl*>(this)->m_Data.FramebufferWidth = static_cast<uint32_t>(w);
+                return static_cast<uint32_t>(w);
+            }
+        }
         return m_Data.FramebufferWidth;
     }
 
     uint32_t GLFWWindowImpl::GetFrameBufferHeight() const
     {
+        if (m_Window)
+        {
+            int w = 0, h = 0;
+            glfwGetFramebufferSize(m_Window, &w, &h);
+            if (h > 0)
+            {
+                const_cast<GLFWWindowImpl*>(this)->m_Data.FramebufferHeight = static_cast<uint32_t>(h);
+                return static_cast<uint32_t>(h);
+            }
+        }
         return m_Data.FramebufferHeight;
     }
 

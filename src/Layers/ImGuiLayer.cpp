@@ -61,22 +61,52 @@ namespace Zero
 
     void ImGuiLayer::Begin()
     {
-        // Keep the DPI scale in sync in case the window is moved to a monitor
-        // with a different scaling factor
         Application& app = Application::Get();
         GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
-        const float contentScale = ImGui_ImplGlfw_GetContentScaleForWindow(window);
-        if (contentScale > 0.0f)
-            ImGui::GetStyle().FontScaleDpi = contentScale;
 
         ImGui_ImplGlfw_NewFrame();
-
         ImGui::NewFrame();
+
+        // Per-monitor DPI scaling. GLFW reports physical pixels on a DPI-aware
+        // process and the ImGui GLFW backend does not scale the UI, so:
+        //  - style.FontScaleDpi scales the whole UI by the monitor content scale.
+        //  - The main viewport's FramebufferScale is what ImGui uses as the font
+        //    rasterizer density. It stays 1.0 on Windows (even at 175% scaling),
+        //    which would rasterize glyphs at 1x and make text look soft when
+        //    scaled. Override it with the content scale so glyphs are rasterized
+        //    at DPI resolution (crisp on 4K). ImDrawData::FramebufferScale is
+        //    taken from io.DisplayFramebufferScale, so this does not affect the
+        //    render projection.
+        const float contentScale = ImGui_ImplGlfw_GetContentScaleForWindow(window);
+        if (contentScale > 0.0f)
+        {
+            ImGui::GetStyle().FontScaleDpi = contentScale;
+            if (ImGuiViewport* viewport = ImGui::GetMainViewport())
+                viewport->FramebufferScale = ImVec2(contentScale, contentScale);
+        }
     }
 
     void ImGuiLayer::End(FrameData* currentFrame)
     {
         ImGui::Render();
+
+        // The engine defers rendering to a render thread, but ImGui rebuilds its
+        // platform texture list every frame. Upload any pending font-atlas texture
+        // updates (e.g. glyphs rasterized at the current DPI scale) synchronously
+        // on the render thread right now, while the atlas data is still valid, so
+        // the deferred frame never acts on stale texture state.
+        bool pendingTextureUpdates = false;
+        for (const ImTextureData* tex : ImGui::GetPlatformIO().Textures)
+        {
+            if (tex->Status != ImTextureStatus_OK)
+            {
+                pendingTextureUpdates = true;
+                break;
+            }
+        }
+        if (pendingTextureUpdates)
+            Renderer::Get().UpdateImGuiTextures();
+
         currentFrame->imguiFrame.CopyFrom(ImGui::GetDrawData());
     }
 
