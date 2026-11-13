@@ -7,11 +7,10 @@ namespace Zero
     ImGuiFrame::ImGuiFrame() = default;
 
     ImGuiFrame::ImGuiFrame(ImGuiFrame&& other) noexcept
-        : m_DrawData(other.m_DrawData),
+        : m_DrawData(std::move(other.m_DrawData)),
           m_DrawListPool(std::move(other.m_DrawListPool)),
           m_ActiveDrawLists(other.m_ActiveDrawLists)
     {
-        other.m_DrawData = nullptr;
         other.m_ActiveDrawLists = 0;
     }
 
@@ -19,15 +18,13 @@ namespace Zero
     {
         if (this != &other)
         {
-            delete m_DrawData;
             for (ImDrawList* list : m_DrawListPool)
                 delete list;
             
-            m_DrawData = other.m_DrawData;
+            m_DrawData = std::move(other.m_DrawData);
             m_DrawListPool = std::move(other.m_DrawListPool);
             m_ActiveDrawLists = other.m_ActiveDrawLists;
 
-            other.m_DrawData = nullptr;
             other.m_ActiveDrawLists = 0;
         }
         return *this;
@@ -40,7 +37,6 @@ namespace Zero
             delete list;
         }
         m_DrawListPool.clear();
-        delete m_DrawData;
     }
 
     void ImGuiFrame::CopyFrom(ImDrawData* src)
@@ -58,7 +54,7 @@ namespace Zero
             m_DrawListPool.reserve(m_ActiveDrawLists);
             while (m_DrawListPool.size() < m_ActiveDrawLists)
             {
-                m_DrawListPool.push_back(new ImDrawList(src->CmdLists[0]->_Data));
+                m_DrawListPool.push_back(new ImDrawList(nullptr));
             }
         }
 
@@ -73,24 +69,30 @@ namespace Zero
             dst->Flags     = source->Flags;
         }
 
-        if (!m_DrawData) m_DrawData = new ImDrawData();
-        *m_DrawData = *src;
-        m_DrawData->CmdLists.resize(src->CmdListsCount);
+        m_DrawData.Valid            = src->Valid;
+        m_DrawData.CmdListsCount    = src->CmdListsCount;
+        m_DrawData.TotalIdxCount    = src->TotalIdxCount;
+        m_DrawData.TotalVtxCount    = src->TotalVtxCount;
+        m_DrawData.DisplayPos       = src->DisplayPos;
+        m_DrawData.DisplaySize      = src->DisplaySize;
+        m_DrawData.FramebufferScale = src->FramebufferScale;
+        m_DrawData.OwnerViewport    = src->OwnerViewport;
+        m_DrawData.Textures         = src->Textures;
+        m_DrawData.CmdLists.resize(src->CmdListsCount);
         for (int i = 0; i < src->CmdListsCount; ++i)
         {
-            m_DrawData->CmdLists[i] = m_DrawListPool[i];
+            m_DrawData.CmdLists[i] = m_DrawListPool[i];
         }
     }
 
     void ImGuiFrame::Reset()
     {
         m_ActiveDrawLists = 0;
-        if (m_DrawData)
-        {
-            m_DrawData->CmdListsCount = 0;
-            m_DrawData->TotalVtxCount = 0;
-            m_DrawData->TotalIdxCount = 0;
-            m_DrawData->CmdLists.resize(0);
-        }
+        m_DrawData.Valid = false;
+        m_DrawData.CmdListsCount = 0;
+        m_DrawData.TotalVtxCount = 0;
+        m_DrawData.TotalIdxCount = 0;
+        m_DrawData.Textures = nullptr;
+        m_DrawData.CmdLists.clear();
     }
 }

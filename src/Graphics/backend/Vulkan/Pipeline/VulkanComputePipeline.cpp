@@ -12,6 +12,9 @@ namespace Zero
     VulkanComputePipeline::VulkanComputePipeline(VulkanLogicalDevice* device, const ComputePipelineDesc& desc)
         : m_device(device)
     {
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+        SetDebugName(desc.debugName, "ComputePipeline");
+#endif
         createComputePipeline(desc);
     }
 

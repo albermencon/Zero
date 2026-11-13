@@ -46,6 +46,8 @@ namespace Zero
 
 		void SubmitRenderCommand(std::move_only_function<void()> cmd);
 
+		[[nodiscard]] RHI::FrameTimingStats GetFrameTimings() const;
+
 	private:
 		void RenderLoop();
 		void ProcessResourceRequests();
@@ -75,5 +77,11 @@ namespace Zero
 			uint32_t frameCountdown;
 		};
 		std::vector<DeferredDestroy> m_deferredDestroys;
+
+#ifdef ZERO_ENABLE_PROFILING
+		mutable Zero::Mutex m_timingsMutex;
+		RHI::FrameTimingStats m_latestTimings{};
+		uint64_t m_completedFrameCount = 0;
+#endif
 	};
 }

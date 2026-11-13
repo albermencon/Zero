@@ -15,6 +15,9 @@ namespace Zero
     VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanLogicalDevice* device, const GraphicsPipelineDesc& desc)
         : m_device(device)
     {
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+        SetDebugName(desc.debugName, "GraphicsPipeline");
+#endif
         createFromDesc(desc);
     }
 

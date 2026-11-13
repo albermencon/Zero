@@ -9,11 +9,18 @@
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
 #include <Engine/Core.h>
 #include <Engine/Log.h>
+#include <Engine/Profiler/Profiler.h>
 #include <Engine/Window.h>
 #include <Engine/Graphics/RenderResources.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
+
+#ifdef ZERO_ENABLE_PROFILING
+#include <cstdio>
+#include <cstring>
+#include <optional>
+#endif
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
@@ -28,6 +35,85 @@ import vulkan_hpp;
 
 namespace Zero
 {
+#ifdef ZERO_ENABLE_PROFILING
+    namespace
+    {
+        const char* RenderPassPrefix(RHI::RenderPass pass) noexcept
+        {
+            switch (pass)
+            {
+            case RHI::RenderPass::DepthPrepass: return "Depth";
+            case RHI::RenderPass::Opaque:       return "Opaque";
+            case RHI::RenderPass::Transparent:  return "Transparent";
+            case RHI::RenderPass::UI:           return "UI";
+            default:                            return "Pass";
+            }
+        }
+
+        void FormatPassPipelineLabel(char (&dst)[48], const char* prefix, const char* pipelineName) noexcept
+        {
+            const char* safePrefix = (prefix && prefix[0] != '\0') ? prefix : "Pass";
+            const char* safeName = (pipelineName && pipelineName[0] != '\0') ? pipelineName : "Pipeline";
+            std::snprintf(dst, sizeof(dst), "%s/%s", safePrefix, safeName);
+            dst[sizeof(dst) - 1] = '\0';
+        }
+
+        class VulkanGpuZoneScope
+        {
+        public:
+            VulkanGpuZoneScope(
+                VulkanGpuProfiler* profiler,
+                TracyVkCtx tracyCtx,
+                uint32_t frameIndex,
+                vk::raii::CommandBuffer* cmd,
+                const char* name,
+                uint32_t line,
+                const char* file,
+                const char* func)
+                : m_profiler(profiler)
+                , m_frameIndex(frameIndex)
+                , m_cmd(cmd)
+            {
+                if (m_profiler && m_cmd)
+                    m_profiler->BeginZone(m_frameIndex, *m_cmd, name);
+                if (tracyCtx && m_cmd)
+                {
+                    m_tracyScope.emplace(
+                        tracyCtx,
+                        line,
+                        file, std::strlen(file),
+                        func, std::strlen(func),
+                        name, std::strlen(name),
+                        **m_cmd,
+                        true
+                    );
+                }
+            }
+
+            ~VulkanGpuZoneScope()
+            {
+                m_tracyScope.reset();
+                if (m_profiler && m_cmd)
+                    m_profiler->EndZone(m_frameIndex, *m_cmd);
+            }
+
+            VulkanGpuZoneScope(const VulkanGpuZoneScope&) = delete;
+            VulkanGpuZoneScope& operator=(const VulkanGpuZoneScope&) = delete;
+
+        private:
+            VulkanGpuProfiler* m_profiler = nullptr;
+            uint32_t m_frameIndex = 0;
+            vk::raii::CommandBuffer* m_cmd = nullptr;
+            std::optional<tracy::VkCtxScope> m_tracyScope;
+        };
+    }
+
+    #define ZERO_VK_GPU_ZONE(varName, profilerPtr, tracyCtx, frameIdx, cmdRef, zoneName) \
+        VulkanGpuZoneScope varName(profilerPtr, tracyCtx, frameIdx, &(cmdRef), zoneName, TracyLine, TracyFile, TracyFunction)
+#else
+    #define ZERO_VK_GPU_ZONE(varName, profilerPtr, tracyCtx, frameIdx, cmdRef, zoneName) ((void)0)
+#endif
+
     VulkanDevice::VulkanDevice(Window* window)
         : m_instance()
         , m_surface(m_instance.Get(), *window)
@@ -46,6 +132,14 @@ namespace Zero
     VulkanDevice::~VulkanDevice()
     {
         m_device.Get().waitIdle();
+#ifdef ZERO_ENABLE_PROFILING
+        if (m_tracyVkCtx)
+        {
+            TracyVkDestroy(m_tracyVkCtx);
+            m_tracyVkCtx = nullptr;
+        }
+        m_gpuProfiler.Shutdown();
+#endif
         m_commandcontext.GetCommandPool().reset();
         destroyDepthResources();
         if (m_stagingBuffer != VK_NULL_HANDLE && m_memoryAllocator.GetAllocator() != VK_NULL_HANDLE)
@@ -105,11 +199,38 @@ namespace Zero
             ZERO_CORE_ERROR("Failed to allocate persistent staging buffer.");
         }
 
+#ifdef ZERO_ENABLE_PROFILING
+        m_gpuProfiler.Init(m_physicaldevice.Get(), m_device.Get(), m_device.GetFamilyGraphicsIndex());
+        {
+            vk::CommandBufferAllocateInfo tracyCmdAlloc{};
+            tracyCmdAlloc.commandPool = *m_commandcontext.GetCommandPool();
+            tracyCmdAlloc.level = vk::CommandBufferLevel::ePrimary;
+            tracyCmdAlloc.commandBufferCount = 1;
+            vk::raii::CommandBuffers tracyCmds(m_device.Get(), tracyCmdAlloc);
+
+            m_tracyVkCtx = TracyVkContext(
+                *m_instance.Get(),
+                *m_physicaldevice.Get(),
+                *m_device.Get(),
+                *m_device.GetGraphicsQueue(),
+                *tracyCmds[0],
+                m_instance.Get().getDispatcher()->vkGetInstanceProcAddr,
+                m_device.Get().getDispatcher()->vkGetDeviceProcAddr
+            );
+            if (m_tracyVkCtx)
+            {
+                constexpr const char kQueueName[] = "GraphicsQueue";
+                TracyVkContextName(m_tracyVkCtx, kQueueName, sizeof(kQueueName) - 1);
+            }
+        }
+#endif
+
         ZERO_CORE_INFO("Vulkan Device initialized successfully.");
     }
 
     void VulkanDevice::SwapBuffers()
     {
+        ZERO_PROFILE_FUNCTION();
 
         vk::PresentInfoKHR presentInfo{};
         presentInfo.waitSemaphoreCount = 1;
@@ -118,7 +239,11 @@ namespace Zero
         presentInfo.pSwapchains = &*m_swapchain.Get();
         presentInfo.pImageIndices = &m_currentImageIndex;
 
-        auto result = m_device.GetPresentQueue().presentKHR(presentInfo);
+        vk::Result result = vk::Result::eSuccess;
+        {
+            ZERO_PROFILE_SCOPE("QueuePresent");
+            result = m_device.GetPresentQueue().presentKHR(presentInfo);
+        }
 
         if (result == vk::Result::eErrorOutOfDateKHR ||
             result == vk::Result::eSuboptimalKHR)
@@ -130,6 +255,8 @@ namespace Zero
     }
     bool VulkanDevice::BeginFrame()
     {
+        ZERO_PROFILE_FUNCTION();
+
         PresentModePolicy requestedPolicy = m_Window->GetPresentModePolicy();
         if (m_currentPolicy != requestedPolicy)
         {
@@ -146,9 +273,18 @@ namespace Zero
         }
 
         // Wait for the previus frame to complete
-        auto fenceResult = m_device.Get().waitForFences(*m_syncobjects.GetInFlightFences()[currentFrame], vk::True, UINT64_MAX);
+        vk::Result fenceResult = vk::Result::eSuccess;
+        {
+            ZERO_PROFILE_SCOPE("WaitForFence");
+            fenceResult = m_device.Get().waitForFences(*m_syncobjects.GetInFlightFences()[currentFrame], vk::True, UINT64_MAX);
+        }
 
         ZERO_CORE_ASSERT(fenceResult == vk::Result::eSuccess, "failed to wait for fence");
+
+#ifdef ZERO_ENABLE_PROFILING
+        m_gpuProfiler.Collect(currentFrame, m_lastFrameTimings);
+        m_gpuProfiler.ResetFrameState(currentFrame);
+#endif
 
         m_slabCursor = 0;
 
@@ -157,7 +293,14 @@ namespace Zero
         // The next to parameters are the syncronizations objects to be signaled when the presentation engine is finished using the image
         // It is possible to specify a semaphore, a fence or both.
         // The last paramater specifies a variable to output the index of the swap chain image that has become avaible
-        auto [result, imageIndex] = m_swapchain.Get().acquireNextImage(UINT64_MAX, *m_syncobjects.GetImageAvailableSemaphores()[currentFrame], nullptr);
+        vk::Result result = vk::Result::eSuccess;
+        uint32_t imageIndex = 0;
+        {
+            ZERO_PROFILE_SCOPE("AcquireNextImage");
+            auto acquired = m_swapchain.Get().acquireNextImage(UINT64_MAX, *m_syncobjects.GetImageAvailableSemaphores()[currentFrame], nullptr);
+            result = acquired.result;
+            imageIndex = acquired.value;
+        }
 
         if (result == vk::Result::eErrorOutOfDateKHR)
         {
@@ -253,11 +396,15 @@ namespace Zero
 
     void VulkanDevice::RenderFrame(FrameData* frame)
     {
+        ZERO_PROFILE_FUNCTION();
         try
         {
             m_device.Get().resetFences(*m_syncobjects.GetInFlightFences()[currentFrame]);
             m_commandcontext.GetCommandBuffers()[currentFrame].reset();
-            recordCommandBuffer(m_currentImageIndex, frame);
+            {
+                ZERO_PROFILE_SCOPE("RecordCommandBuffer");
+                recordCommandBuffer(m_currentImageIndex, frame);
+            }
 
             vk::PipelineStageFlags waitMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
             vk::SubmitInfo submitInfo{};
@@ -269,8 +416,14 @@ namespace Zero
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = &*m_syncobjects.GetRenderFinishedSemaphores()[m_currentImageIndex];
 
-            m_device.GetGraphicsQueue().submit(submitInfo,
-                *m_syncobjects.GetInFlightFences()[currentFrame]);
+            {
+                ZERO_PROFILE_SCOPE("QueueSubmit");
+                m_device.GetGraphicsQueue().submit(submitInfo,
+                    *m_syncobjects.GetInFlightFences()[currentFrame]);
+            }
+#ifdef ZERO_ENABLE_PROFILING
+            m_gpuProfiler.MarkSubmitted(currentFrame);
+#endif
         }
         catch (const std::exception& e)
         {
@@ -305,293 +458,355 @@ namespace Zero
         vk::CommandBufferBeginInfo beginInfo{};
         commandBuffer.begin(beginInfo);
 
-        recordPendingTransfers(commandBuffer);
+#ifdef ZERO_ENABLE_PROFILING
+        m_gpuProfiler.BeginCommandBuffer(currentFrame, commandBuffer);
+#endif
 
-        if (frame && frame->gpuDriven.enabled && frame->gpuDriven.countBuffer.IsValid())
         {
-            auto& impl = RenderInterfaceImpl::Get();
-            Buffer* b = impl.bufferRegistry.GetBackendResourceByIndex(frame->gpuDriven.countBuffer.GetIndex());
-            if (b)
+            ZERO_VK_GPU_ZONE(gpuFrameZone, &m_gpuProfiler, m_tracyVkCtx, currentFrame, commandBuffer, "GPU::Frame");
+
+            if (!m_pendingStagingCopies.empty() || !m_pendingBufferCopies.empty())
             {
-                vk::Buffer countBuffer(static_cast<VulkanBuffer*>(b)->GetHandle());
-                commandBuffer.fillBuffer(countBuffer, 0, sizeof(uint32_t), 0);
-
-                vk::MemoryBarrier2 fillBarrier{};
-                fillBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-                fillBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-                fillBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-                fillBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite;
-
-                vk::DependencyInfo depInfo{};
-                depInfo.memoryBarrierCount = 1;
-                depInfo.pMemoryBarriers = &fillBarrier;
-                commandBuffer.pipelineBarrier2(depInfo);
+                ZERO_VK_GPU_ZONE(transfersZone, &m_gpuProfiler, m_tracyVkCtx, currentFrame, commandBuffer, "Transfers");
+                recordPendingTransfers(commandBuffer);
             }
-        }
 
-        if (frame && !frame->preComputeDispatches.empty())
-        {
-            executeComputeDispatches(commandBuffer, frame->preComputeDispatches);
-        }
-
-        // Transition depth buffer to DEPTH_ATTACHMENT_OPTIMAL
-        transition_depth_layout(
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eDepthAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-            commandBuffer
-        );
-
-        // Before starting rendering, transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
-        transition_image_layout(
-            imageIndex,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            {},                                                         // srcAccessMask (no need to wait for previous operations)
-            vk::AccessFlagBits2::eColorAttachmentWrite,                 // dstAccessMask
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,         // srcStage
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,          // dstStage
-            commandBuffer
-        );
-
-        vk::ClearValue clearColor = vk::ClearColorValue(0.45f, 0.68f, 0.95f, 1.0f);
-        vk::RenderingAttachmentInfo attachmentInfo = {};
-
-        attachmentInfo.imageView = *m_swapchain.GetImageViews()[imageIndex];
-        attachmentInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        attachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
-        attachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
-        attachmentInfo.clearValue = clearColor;
-
-        vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
-        vk::RenderingAttachmentInfo depthAttachmentInfo{};
-        depthAttachmentInfo.imageView = *m_depthImageView;
-        depthAttachmentInfo.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
-        depthAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
-        depthAttachmentInfo.storeOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachmentInfo.clearValue = clearDepth;
-
-        vk::RenderingInfo renderingInfo = {};
-        renderingInfo.renderArea = { .offset = { 0, 0 }, .extent = m_swapchain.GetExtent()};
-        renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachments = &attachmentInfo;
-        renderingInfo.pDepthAttachment = &depthAttachmentInfo;
-
-        commandBuffer.beginRendering(renderingInfo);
-
-        // Set dynamic data
-        commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(m_swapchain.GetExtent().width), static_cast<float>(m_swapchain.GetExtent().height), 0.0f, 1.0f));
-        commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), m_swapchain.GetExtent()));
-
-        if (frame && !frame->drawPackets.empty())
-        {
-            auto& impl = RenderInterfaceImpl::Get();
-
-            auto getVkBuffer = [&impl](BufferHandle handle) -> vk::Buffer {
-                if (!handle.IsValid()) return nullptr;
-                Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
-                if (!b) return nullptr;
-                return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
-            };
-
-            auto getVkBufferByIndex = [&impl](uint32_t index) -> vk::Buffer {
-                if (index == 0) return nullptr;
-                Buffer* b = impl.bufferRegistry.GetBackendResourceByIndex(index);
-                if (!b) return nullptr;
-                return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
-            };
-
-            auto getGraphicsPipeline = [&impl](uint16_t pipelineId) -> VulkanGraphicsPipeline* {
-                if (pipelineId == 0) return nullptr;
-                Pipeline* p = impl.pipelineRegistry.GetBackendResourceByIndex(pipelineId);
-                if (!p || p->IsCompute()) return nullptr;
-                return static_cast<VulkanGraphicsPipeline*>(p);
-            };
-
-            uint16_t currentPipelineId = 0;
-            VulkanGraphicsPipeline* currentPipeline = nullptr;
-            BufferHandle currentVb{};
-            BufferHandle currentIb{};
-
-            for (const auto& packet : frame->drawPackets)
+            const bool hasGpuDrivenReset = (frame && frame->gpuDriven.enabled && frame->gpuDriven.countBuffer.IsValid());
+            const bool hasPreCompute = (frame && !frame->preComputeDispatches.empty());
+            if (hasGpuDrivenReset || hasPreCompute)
             {
-                uint16_t pipelineId = RHI::GetPipelineIdFromSortKey(packet.sortKey);
-                if (pipelineId != currentPipelineId)
+                ZERO_VK_GPU_ZONE(computePreZone, &m_gpuProfiler, m_tracyVkCtx, currentFrame, commandBuffer, "ComputePre");
+
+                if (hasGpuDrivenReset)
                 {
-                    currentPipelineId = pipelineId;
-                    currentPipeline = getGraphicsPipeline(pipelineId);
-                    if (currentPipeline && *currentPipeline->GetPipeline())
+                    auto& impl = RenderInterfaceImpl::Get();
+                    Buffer* b = impl.bufferRegistry.GetBackendResourceByIndex(frame->gpuDriven.countBuffer.GetIndex());
+                    if (b)
                     {
-                        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *currentPipeline->GetPipeline());
+                        vk::Buffer countBuffer(static_cast<VulkanBuffer*>(b)->GetHandle());
+                        commandBuffer.fillBuffer(countBuffer, 0, sizeof(uint32_t), 0);
+
+                        vk::MemoryBarrier2 fillBarrier{};
+                        fillBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+                        fillBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                        fillBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+                        fillBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite;
+
+                        vk::DependencyInfo depInfo{};
+                        depInfo.memoryBarrierCount = 1;
+                        depInfo.pMemoryBarriers = &fillBarrier;
+                        commandBuffer.pipelineBarrier2(depInfo);
                     }
                 }
 
-                if (!currentPipeline || !*currentPipeline->GetPipeline())
-                    continue;
-
-                if (packet.geometryId < frame->geometryTable.size())
+                if (hasPreCompute)
                 {
-                    const auto& geom = frame->geometryTable[packet.geometryId];
-
-                    if (geom.vertexBuffer.IsValid())
-                    {
-                        vk::Buffer vb = getVkBuffer(geom.vertexBuffer);
-                        if (!vb)
-                            continue;
-
-                        if (geom.vertexBuffer != currentVb)
-                        {
-                            commandBuffer.bindVertexBuffers(0, vb, { 0 });
-                            currentVb = geom.vertexBuffer;
-                        }
-                    }
-
-                    if (geom.indexBuffer.IsValid())
-                    {
-                        vk::Buffer ib = getVkBuffer(geom.indexBuffer);
-                        if (!ib)
-                            continue;
-
-                        if (geom.indexBuffer != currentIb)
-                        {
-                            commandBuffer.bindIndexBuffer(ib, 0, vk::IndexType::eUint32);
-                            currentIb = geom.indexBuffer;
-                        }
-                    }
-                }
-
-                if (currentPipeline->GetPushConstantSize() > 0)
-                {
-                    struct PushConstants
-                    {
-                        Mat4 viewProj;
-                        Mat4 model;
-                    } push;
-                    push.viewProj = frame->viewProj;
-                    if (packet.transformIndex < frame->transform.size())
-                    {
-                        push.model = frame->transform[packet.transformIndex];
-                    }
-                    else
-                    {
-                        push.model = Mat4::Identity();
-                    }
-
-                    uint32_t pushSize = std::min(currentPipeline->GetPushConstantSize(), static_cast<uint32_t>(sizeof(push)));
-                    commandBuffer.pushConstants(
-                        *currentPipeline->GetPipelineLayout(),
-                        currentPipeline->GetPushConstantStages(),
-                        0,
-                        pushSize,
-                        &push
-                    );
-                }
-
-                switch (static_cast<RHI::DrawCmdType>(packet.cmdType))
-                {
-                case RHI::DrawCmdType::Arrays:
-                    commandBuffer.draw(packet.arrays.vertexCount, 1, packet.arrays.firstVertex, 0);
-                    break;
-
-                case RHI::DrawCmdType::Indexed:
-                    commandBuffer.drawIndexed(packet.indexed.indexCount, 1, packet.indexed.firstIndex, packet.indexed.vertexOffset, 0);
-                    break;
-
-                case RHI::DrawCmdType::Instanced:
-                    if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
-                    {
-                        commandBuffer.drawIndexed(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.vertexOffset, packet.instanced.firstInstance);
-                    }
-                    else
-                    {
-                        commandBuffer.draw(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.firstInstance);
-                    }
-                    break;
-
-                case RHI::DrawCmdType::MultiDrawIndirect:
-                {
-                    vk::Buffer indirectBuffer = getVkBufferByIndex(packet.mdi.indirectBufferId);
-                    if (indirectBuffer)
-                    {
-                        if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
-                        {
-                            constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
-                            commandBuffer.drawIndexedIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
-                        }
-                        else
-                        {
-                            constexpr uint32_t stride = sizeof(VkDrawIndirectCommand);
-                            commandBuffer.drawIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
-                        }
-                    }
-                    break;
-                }
-
-                case RHI::DrawCmdType::MultiDrawIndirectCount:
-                {
-                    vk::Buffer indirectBuffer = getVkBufferByIndex(packet.mdiCount.indirectBufferId);
-                    vk::Buffer countBuffer = getVkBufferByIndex(packet.mdiCount.countBufferId);
-                    if (indirectBuffer && countBuffer)
-                    {
-                        if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
-                        {
-                            constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
-                            commandBuffer.drawIndexedIndirectCount(
-                                indirectBuffer,
-                                packet.mdiCount.indirectOffset,
-                                countBuffer,
-                                packet.mdiCount.countOffset,
-                                packet.mdiCount.maxDrawCount,
-                                stride
-                            );
-                        }
-                        else
-                        {
-                            constexpr uint32_t stride = sizeof(VkDrawIndirectCommand);
-                            commandBuffer.drawIndirectCount(
-                                indirectBuffer,
-                                packet.mdiCount.indirectOffset,
-                                countBuffer,
-                                packet.mdiCount.countOffset,
-                                packet.mdiCount.maxDrawCount,
-                                stride
-                            );
-                        }
-                    }
-                    break;
-                }
+                    executeComputeDispatches(commandBuffer, frame->preComputeDispatches, "Pre");
                 }
             }
+
+            {
+                ZERO_VK_GPU_ZONE(renderPassZone, &m_gpuProfiler, m_tracyVkCtx, currentFrame, commandBuffer, "MainRenderPass");
+
+                // Transition depth buffer to DEPTH_ATTACHMENT_OPTIMAL
+                transition_depth_layout(
+                    vk::ImageLayout::eUndefined,
+                    vk::ImageLayout::eDepthAttachmentOptimal,
+                    {},
+                    vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+                    vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+                    vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+                    commandBuffer
+                );
+
+                // Before starting rendering, transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
+                transition_image_layout(
+                    imageIndex,
+                    vk::ImageLayout::eUndefined,
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    {},                                                         // srcAccessMask (no need to wait for previous operations)
+                    vk::AccessFlagBits2::eColorAttachmentWrite,                 // dstAccessMask
+                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,         // srcStage
+                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,          // dstStage
+                    commandBuffer
+                );
+
+                vk::ClearValue clearColor = vk::ClearColorValue(0.45f, 0.68f, 0.95f, 1.0f);
+                vk::RenderingAttachmentInfo attachmentInfo = {};
+
+                attachmentInfo.imageView = *m_swapchain.GetImageViews()[imageIndex];
+                attachmentInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+                attachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
+                attachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
+                attachmentInfo.clearValue = clearColor;
+
+                vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+                vk::RenderingAttachmentInfo depthAttachmentInfo{};
+                depthAttachmentInfo.imageView = *m_depthImageView;
+                depthAttachmentInfo.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
+                depthAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
+                depthAttachmentInfo.storeOp = vk::AttachmentStoreOp::eDontCare;
+                depthAttachmentInfo.clearValue = clearDepth;
+
+                vk::RenderingInfo renderingInfo = {};
+                renderingInfo.renderArea = { .offset = { 0, 0 }, .extent = m_swapchain.GetExtent()};
+                renderingInfo.layerCount = 1;
+                renderingInfo.colorAttachmentCount = 1;
+                renderingInfo.pColorAttachments = &attachmentInfo;
+                renderingInfo.pDepthAttachment = &depthAttachmentInfo;
+
+                commandBuffer.beginRendering(renderingInfo);
+
+                // Set dynamic data
+                commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(m_swapchain.GetExtent().width), static_cast<float>(m_swapchain.GetExtent().height), 0.0f, 1.0f));
+                commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), m_swapchain.GetExtent()));
+
+                if (frame && !frame->drawPackets.empty())
+                {
+                    auto& impl = RenderInterfaceImpl::Get();
+
+                    auto getVkBuffer = [&impl](BufferHandle handle) -> vk::Buffer {
+                        if (!handle.IsValid()) return nullptr;
+                        Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
+                        if (!b) return nullptr;
+                        return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
+                    };
+
+                    auto getVkBufferByIndex = [&impl](uint32_t index) -> vk::Buffer {
+                        if (index == 0) return nullptr;
+                        Buffer* b = impl.bufferRegistry.GetBackendResourceByIndex(index);
+                        if (!b) return nullptr;
+                        return vk::Buffer(static_cast<VulkanBuffer*>(b)->GetHandle());
+                    };
+
+                    auto getGraphicsPipeline = [&impl](uint16_t pipelineId) -> VulkanGraphicsPipeline* {
+                        if (pipelineId == 0) return nullptr;
+                        Pipeline* p = impl.pipelineRegistry.GetBackendResourceByIndex(pipelineId);
+                        if (!p || p->IsCompute()) return nullptr;
+                        return static_cast<VulkanGraphicsPipeline*>(p);
+                    };
+
+                    RHI::RenderPass currentPass = RHI::RenderPass::Opaque;
+                    bool hasCurrentPass = false;
+                    uint16_t currentPipelineId = 0;
+                    VulkanGraphicsPipeline* currentPipeline = nullptr;
+                    BufferHandle currentVb{};
+                    BufferHandle currentIb{};
+#ifdef ZERO_ENABLE_PROFILING
+                    std::optional<VulkanGpuZoneScope> activePipelineZone;
+#endif
+
+                    for (const auto& packet : frame->drawPackets)
+                    {
+                        const RHI::RenderPass packetPass = RHI::GetRenderPassFromSortKey(packet.sortKey);
+                        const uint16_t pipelineId = RHI::GetPipelineIdFromSortKey(packet.sortKey);
+                        const bool pipelineChanged = (pipelineId != currentPipelineId);
+                        const bool passChanged = (!hasCurrentPass || packetPass != currentPass);
+
+                        if (pipelineChanged)
+                        {
+                            currentPipelineId = pipelineId;
+                            currentPipeline = getGraphicsPipeline(pipelineId);
+                            if (currentPipeline && *currentPipeline->GetPipeline())
+                            {
+                                commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *currentPipeline->GetPipeline());
+                            }
+                        }
+
+                        if (passChanged || pipelineChanged)
+                        {
+                            currentPass = packetPass;
+                            hasCurrentPass = true;
+#ifdef ZERO_ENABLE_PROFILING
+                            activePipelineZone.reset();
+                            if (currentPipeline && *currentPipeline->GetPipeline())
+                            {
+                                char zoneLabel[48]{};
+                                FormatPassPipelineLabel(zoneLabel, RenderPassPrefix(packetPass), currentPipeline->GetDebugName());
+                                activePipelineZone.emplace(&m_gpuProfiler, m_tracyVkCtx, currentFrame, &commandBuffer, zoneLabel, TracyLine, TracyFile, TracyFunction);
+                            }
+#endif
+                        }
+
+                        if (!currentPipeline || !*currentPipeline->GetPipeline())
+                            continue;
+
+                        if (packet.geometryId < frame->geometryTable.size())
+                        {
+                            const auto& geom = frame->geometryTable[packet.geometryId];
+
+                            if (geom.vertexBuffer.IsValid())
+                            {
+                                vk::Buffer vb = getVkBuffer(geom.vertexBuffer);
+                                if (!vb)
+                                    continue;
+
+                                if (geom.vertexBuffer != currentVb)
+                                {
+                                    commandBuffer.bindVertexBuffers(0, vb, { 0 });
+                                    currentVb = geom.vertexBuffer;
+                                }
+                            }
+
+                            if (geom.indexBuffer.IsValid())
+                            {
+                                vk::Buffer ib = getVkBuffer(geom.indexBuffer);
+                                if (!ib)
+                                    continue;
+
+                                if (geom.indexBuffer != currentIb)
+                                {
+                                    commandBuffer.bindIndexBuffer(ib, 0, vk::IndexType::eUint32);
+                                    currentIb = geom.indexBuffer;
+                                }
+                            }
+                        }
+
+                        if (currentPipeline->GetPushConstantSize() > 0)
+                        {
+                            struct PushConstants
+                            {
+                                Mat4 viewProj;
+                                Mat4 model;
+                            } push;
+                            push.viewProj = frame->viewProj;
+                            if (packet.transformIndex < frame->transform.size())
+                            {
+                                push.model = frame->transform[packet.transformIndex];
+                            }
+                            else
+                            {
+                                push.model = Mat4::Identity();
+                            }
+
+                            uint32_t pushSize = std::min(currentPipeline->GetPushConstantSize(), static_cast<uint32_t>(sizeof(push)));
+                            commandBuffer.pushConstants(
+                                *currentPipeline->GetPipelineLayout(),
+                                currentPipeline->GetPushConstantStages(),
+                                0,
+                                pushSize,
+                                &push
+                            );
+                        }
+
+                        switch (static_cast<RHI::DrawCmdType>(packet.cmdType))
+                        {
+                        case RHI::DrawCmdType::Arrays:
+                            commandBuffer.draw(packet.arrays.vertexCount, 1, packet.arrays.firstVertex, 0);
+                            break;
+
+                        case RHI::DrawCmdType::Indexed:
+                            commandBuffer.drawIndexed(packet.indexed.indexCount, 1, packet.indexed.firstIndex, packet.indexed.vertexOffset, 0);
+                            break;
+
+                        case RHI::DrawCmdType::Instanced:
+                            if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
+                            {
+                                commandBuffer.drawIndexed(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.vertexOffset, packet.instanced.firstInstance);
+                            }
+                            else
+                            {
+                                commandBuffer.draw(packet.instanced.indexCount, packet.instanced.instanceCount, packet.instanced.firstIndex, packet.instanced.firstInstance);
+                            }
+                            break;
+
+                        case RHI::DrawCmdType::MultiDrawIndirect:
+                        {
+                            vk::Buffer indirectBuffer = getVkBufferByIndex(packet.mdi.indirectBufferId);
+                            if (indirectBuffer)
+                            {
+                                if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
+                                {
+                                    constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
+                                    commandBuffer.drawIndexedIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
+                                }
+                                else
+                                {
+                                    constexpr uint32_t stride = sizeof(VkDrawIndirectCommand);
+                                    commandBuffer.drawIndirect(indirectBuffer, packet.mdi.offset, packet.mdi.drawCount, stride);
+                                }
+                            }
+                            break;
+                        }
+
+                        case RHI::DrawCmdType::MultiDrawIndirectCount:
+                        {
+                            vk::Buffer indirectBuffer = getVkBufferByIndex(packet.mdiCount.indirectBufferId);
+                            vk::Buffer countBuffer = getVkBufferByIndex(packet.mdiCount.countBufferId);
+                            if (indirectBuffer && countBuffer)
+                            {
+                                if (packet.geometryId < frame->geometryTable.size() && frame->geometryTable[packet.geometryId].indexBuffer.IsValid())
+                                {
+                                    constexpr uint32_t stride = sizeof(VkDrawIndexedIndirectCommand);
+                                    commandBuffer.drawIndexedIndirectCount(
+                                        indirectBuffer,
+                                        packet.mdiCount.indirectOffset,
+                                        countBuffer,
+                                        packet.mdiCount.countOffset,
+                                        packet.mdiCount.maxDrawCount,
+                                        stride
+                                    );
+                                }
+                                else
+                                {
+                                    constexpr uint32_t stride = sizeof(VkDrawIndirectCommand);
+                                    commandBuffer.drawIndirectCount(
+                                        indirectBuffer,
+                                        packet.mdiCount.indirectOffset,
+                                        countBuffer,
+                                        packet.mdiCount.countOffset,
+                                        packet.mdiCount.maxDrawCount,
+                                        stride
+                                    );
+                                }
+                            }
+                            break;
+                        }
+                        }
+                    }
+                }
+
+                ImDrawData* drawData = frame ? frame->imguiFrame.GetNativeDrawData() : nullptr;
+                if (drawData)
+                {
+#ifdef ZERO_ENABLE_PROFILING
+                    std::optional<VulkanGpuZoneScope> imguiZone;
+                    if (drawData->CmdListsCount > 0)
+                    {
+                        imguiZone.emplace(&m_gpuProfiler, m_tracyVkCtx, currentFrame, &commandBuffer, "ImGui", TracyLine, TracyFile, TracyFunction);
+                    }
+#endif
+                    ImGui_ImplVulkan_RenderDrawData(drawData, *commandBuffer);
+                }
+
+                commandBuffer.endRendering();
+            }
+
+            if (frame && !frame->postComputeDispatches.empty())
+            {
+                ZERO_VK_GPU_ZONE(computePostZone, &m_gpuProfiler, m_tracyVkCtx, currentFrame, commandBuffer, "ComputePost");
+                executeComputeDispatches(commandBuffer, frame->postComputeDispatches, "Post");
+            }
+
+            // After rendering, transition the swapchain image to PRESENT_SRC
+            transition_image_layout(
+                imageIndex,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::ePresentSrcKHR,
+                vk::AccessFlagBits2::eColorAttachmentWrite,             // srcAccessMask
+                {},                                                     // dstAccessMask
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,     // srcStage
+                vk::PipelineStageFlagBits2::eBottomOfPipe,               // dstStage
+                commandBuffer
+            );
         }
 
-        ImDrawData* drawData = frame ? frame->imguiFrame.GetNativeDrawData() : nullptr;
-        if (drawData)
+#ifdef ZERO_ENABLE_PROFILING
+        if (m_tracyVkCtx)
         {
-            ImGui_ImplVulkan_RenderDrawData(drawData, *commandBuffer);
+            TracyVkCollect(m_tracyVkCtx, *commandBuffer);
         }
-
-        commandBuffer.endRendering();
-
-        if (frame && !frame->postComputeDispatches.empty())
-        {
-            executeComputeDispatches(commandBuffer, frame->postComputeDispatches);
-        }
-
-        // After rendering, transition the swapchain image to PRESENT_SRC
-        transition_image_layout(
-            imageIndex,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::ePresentSrcKHR,
-            vk::AccessFlagBits2::eColorAttachmentWrite,             // srcAccessMask
-            {},                                                     // dstAccessMask
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,     // srcStage
-            vk::PipelineStageFlagBits2::eBottomOfPipe,               // dstStage
-            commandBuffer
-        );
+#endif
 
         commandBuffer.end();
     }
@@ -925,14 +1140,18 @@ namespace Zero
         commandBuffer.pipelineBarrier2(depInfo);
     }
 
-    void VulkanDevice::executeComputeDispatches(vk::raii::CommandBuffer& commandBuffer, const std::vector<RHI::ComputeDispatch>& dispatches)
+    void VulkanDevice::executeComputeDispatches(vk::raii::CommandBuffer& commandBuffer, const std::vector<RHI::ComputeDispatch>& dispatches, const char* passPrefix)
     {
+        (void)passPrefix;
         if (dispatches.empty())
             return;
 
         auto& impl = RenderInterfaceImpl::Get();
         uint32_t currentPipelineId = ~0u;
         VulkanComputePipeline* currentPipeline = nullptr;
+#ifdef ZERO_ENABLE_PROFILING
+        std::optional<VulkanGpuZoneScope> activePipelineZone;
+#endif
 
         for (const auto& dispatch : dispatches)
         {
@@ -941,12 +1160,20 @@ namespace Zero
 
             if (dispatch.pipeline.GetIndex() != currentPipelineId)
             {
+#ifdef ZERO_ENABLE_PROFILING
+                activePipelineZone.reset();
+#endif
                 currentPipelineId = dispatch.pipeline.GetIndex();
                 Pipeline* p = impl.pipelineRegistry.GetBackendResource(dispatch.pipeline);
                 if (p && p->IsCompute())
                 {
                     currentPipeline = static_cast<VulkanComputePipeline*>(p);
                     commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, *currentPipeline->GetPipeline());
+#ifdef ZERO_ENABLE_PROFILING
+                    char zoneLabel[48]{};
+                    FormatPassPipelineLabel(zoneLabel, passPrefix, currentPipeline->GetDebugName());
+                    activePipelineZone.emplace(&m_gpuProfiler, m_tracyVkCtx, currentFrame, &commandBuffer, zoneLabel, TracyLine, TracyFile, TracyFunction);
+#endif
                 }
                 else
                 {

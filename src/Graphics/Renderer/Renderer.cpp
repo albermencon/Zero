@@ -3,6 +3,7 @@
 #include <Engine/Log.h>
 #include <Engine/Thread/ScopedLock.h>
 #include <Engine/Profiler/Profiler.h>
+#include <chrono>
 #include <semaphore>
 #include <algorithm>
 #include "Graphics/core/GraphicsCore.h"
@@ -174,6 +175,12 @@ namespace Zero
 		ZERO_PROFILE_THREAD("RendererThread");
 		ZERO_PROFILE_FUNCTION();
 		size_t idleCount = 0;
+#ifdef ZERO_ENABLE_PROFILING
+		using Clock = std::chrono::steady_clock;
+		auto elapsedMs = [](Clock::time_point start, Clock::time_point end) -> float {
+			return std::chrono::duration<float, std::milli>(end - start).count();
+		};
+#endif
 		while (m_running.load())
 		{
 			ExecuteRenderCommands();
@@ -190,7 +197,14 @@ namespace Zero
 			}
 			idleCount = 0;
 
+#ifdef ZERO_ENABLE_PROFILING
+			const auto tFrameStart = Clock::now();
+			const bool frameBegan = m_backend->BeginFrame();
+			const auto tAfterBegin = Clock::now();
+			if (!frameBegan)
+#else
 			if (!m_backend->BeginFrame())
+#endif
 			{
 				m_queue.FrameConsumed();
 				Thread::Sleep(1); // Yield while the backend is unready
@@ -207,9 +221,32 @@ namespace Zero
 					});
 			}
 
+#ifdef ZERO_ENABLE_PROFILING
+			const auto tBeforeTransfers = Clock::now();
+			m_backend->FlushTransfers();
+			const auto tBeforeRender = Clock::now();
+			m_backend->RenderFrame(frame);
+			const auto tBeforeSwap = Clock::now();
+			m_backend->SwapBuffers();
+			const auto tFrameEnd = Clock::now();
+
+			RHI::FrameTimingStats stats = m_backend->GetLastFrameTimings();
+			stats.frameIndex = ++m_completedFrameCount;
+			stats.cpuBeginFrameMs = elapsedMs(tFrameStart, tAfterBegin);
+			stats.cpuTransfersMs = elapsedMs(tBeforeTransfers, tBeforeRender);
+			stats.cpuRenderRecordMs = elapsedMs(tBeforeRender, tBeforeSwap);
+			stats.cpuSwapPresentMs = elapsedMs(tBeforeSwap, tFrameEnd);
+			stats.cpuRenderTotalMs = elapsedMs(tFrameStart, tFrameEnd);
+
+			{
+				Zero::ScopedLock lock(m_timingsMutex);
+				m_latestTimings = stats;
+			}
+#else
 			m_backend->FlushTransfers();
 			m_backend->RenderFrame(frame);
 			m_backend->SwapBuffers();
+#endif
 
 			// 1. Wait for frame
 			// 2. Consume from FrameQueue
@@ -220,6 +257,16 @@ namespace Zero
 			m_queue.FrameConsumed();
 			ZERO_PROFILE_FRAME_NAME("Render");
 		}
+	}
+
+	RHI::FrameTimingStats Renderer::GetFrameTimings() const
+	{
+#ifdef ZERO_ENABLE_PROFILING
+		Zero::ScopedLock lock(m_timingsMutex);
+		return m_latestTimings;
+#else
+		return {};
+#endif
 	}
 
 	void Renderer::ProcessResourceRequests()
@@ -280,8 +327,11 @@ namespace Zero
 		}
 
 		// Process Graphics Pipeline Creations
-		for (const auto& req : localPipelines)
+		for (auto& req : localPipelines)
 		{
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+			req.desc.debugName = req.ownedDebugName.empty() ? nullptr : req.ownedDebugName.c_str();
+#endif
 			GraphicsPipeline* pipeline = m_backend->CreateGraphicsPipeline(req.desc);
 			if (pipeline)
 			{
@@ -296,8 +346,11 @@ namespace Zero
 		}
 
 		// Process Compute Pipeline Creations
-		for (const auto& req : localComputePipelines)
+		for (auto& req : localComputePipelines)
 		{
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+			req.desc.debugName = req.ownedDebugName.empty() ? nullptr : req.ownedDebugName.c_str();
+#endif
 			ComputePipeline* pipeline = m_backend->CreateComputePipeline(req.desc);
 			if (pipeline)
 			{

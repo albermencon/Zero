@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <cstddef>
 #include <Engine/Core.h>
@@ -54,6 +55,11 @@ namespace Zero::RHI
 		}
 
 		return key;
+	}
+
+	[[nodiscard]] static constexpr RenderPass GetRenderPassFromSortKey(DrawSortKey key) noexcept
+	{
+		return static_cast<RenderPass>((key >> 60) & 0xFull);
 	}
 
 	[[nodiscard]] static constexpr uint16_t GetPipelineIdFromSortKey(DrawSortKey key) noexcept
@@ -171,4 +177,31 @@ namespace Zero::RHI
 	static_assert(offsetof(CullPushConstants, indirectBufferAddress) == 104);
 	static_assert(offsetof(CullPushConstants, countBufferAddress) == 112);
 	static_assert(offsetof(CullPushConstants, maxObjects) == 120);
+
+	inline constexpr uint32_t MAX_GPU_PROFILE_ZONES = 32;
+
+	struct GpuZoneTiming
+	{
+		char name[48]{};
+		float durationMs = 0.0f;
+		uint16_t depth = 0;
+	};
+
+	struct FrameTimingStats
+	{
+		uint64_t frameIndex = 0;
+
+		float cpuBeginFrameMs = 0.0f;
+		float cpuTransfersMs = 0.0f;
+		float cpuRenderRecordMs = 0.0f;
+		float cpuSwapPresentMs = 0.0f;
+		float cpuRenderTotalMs = 0.0f;
+
+		float gpuFrameMs = 0.0f;
+		uint32_t zoneCount = 0;
+		uint32_t attemptedZoneCount = 0;
+		std::array<GpuZoneTiming, MAX_GPU_PROFILE_ZONES> zones{};
+		bool timestampsSupported = false;
+		bool truncated = false;
+	};
 }

@@ -4,6 +4,7 @@
 #include "Graphics/core/ResourceRegistry.h"
 #include <Engine/Thread/Mutex.h>
 #include <Engine/Thread/ScopedLock.h>
+#include <string>
 #include <vector>
 
 namespace Zero
@@ -32,12 +33,18 @@ namespace Zero
     {
         PipelineHandle handle;
         GraphicsPipelineDesc desc;
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+        std::string ownedDebugName;
+#endif
     };
 
     struct ComputePipelineCreateRequest
     {
         PipelineHandle handle;
         ComputePipelineDesc desc;
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+        std::string ownedDebugName;
+#endif
     };
 
     struct ResourceDestroyRequest

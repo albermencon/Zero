@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <Engine/Graphics/RHITypes.h>
 
 namespace Zero
 {
@@ -59,6 +60,8 @@ namespace Zero
         virtual void OnFinished() = 0;
 
         virtual void OnRenderSurfaceResize() = 0;
+
+        virtual RHI::FrameTimingStats GetLastFrameTimings() const { return {}; }
     };
 
 }

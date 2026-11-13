@@ -1,12 +1,37 @@
 #include "pch.h"
 #include <Engine/Graphics/RenderInterface.h>
 #include "Graphics/Renderer/RenderInterfaceImpl.h"
+#include "Graphics/Renderer/Renderer.h"
 #include "Graphics/core/Buffer.h"
 #include <Engine/Thread/ScopedLock.h>
 #include <utility>
 
 namespace Zero
 {
+    namespace
+    {
+        template <typename RequestT, typename DescT, typename QueueT>
+        PipelineHandle EnqueuePipelineRequest(RenderInterfaceImpl& impl, QueueT& queue, const DescT& desc)
+        {
+            PipelineHandle handle = impl.pipelineRegistry.Allocate();
+            if (handle.IsValid())
+            {
+#ifdef ZERO_DEBUG
+                if (desc.debugName)
+                    impl.pipelineRegistry.SetDebugName(handle.GetIndex(), desc.debugName);
+#endif
+                RequestT req{ handle, desc };
+                req.desc.debugName = nullptr;
+#if defined(ZERO_DEBUG) || defined(ZERO_ENABLE_PROFILING)
+                if (desc.debugName)
+                    req.ownedDebugName = desc.debugName;
+#endif
+                Zero::ScopedLock lock(impl.queueMutex);
+                queue.push_back(std::move(req));
+            }
+            return handle;
+        }
+    }
     RenderInterface& RenderInterface::Get()
     {
         static RenderInterface instance;
@@ -123,37 +148,13 @@ namespace Zero
     PipelineHandle RenderInterface::CreateGraphicsPipeline(const GraphicsPipelineDesc& desc)
     {
         auto& impl = RenderInterfaceImpl::Get();
-        PipelineHandle handle = impl.pipelineRegistry.Allocate();
-        
-        if (handle.IsValid())
-        {
-#ifdef ZERO_DEBUG
-            if (desc.debugName)
-                impl.pipelineRegistry.SetDebugName(handle.GetIndex(), desc.debugName);
-#endif
-
-            Zero::ScopedLock lock(impl.queueMutex);
-            impl.pendingPipelines.push_back({ handle, desc });
-        }
-        return handle;
+        return EnqueuePipelineRequest<PipelineCreateRequest>(impl, impl.pendingPipelines, desc);
     }
 
     PipelineHandle RenderInterface::CreateComputePipeline(const ComputePipelineDesc& desc)
     {
         auto& impl = RenderInterfaceImpl::Get();
-        PipelineHandle handle = impl.pipelineRegistry.Allocate();
-        
-        if (handle.IsValid())
-        {
-#ifdef ZERO_DEBUG
-            if (desc.debugName)
-                impl.pipelineRegistry.SetDebugName(handle.GetIndex(), desc.debugName);
-#endif
-
-            Zero::ScopedLock lock(impl.queueMutex);
-            impl.pendingComputePipelines.push_back({ handle, desc });
-        }
-        return handle;
+        return EnqueuePipelineRequest<ComputePipelineCreateRequest>(impl, impl.pendingComputePipelines, desc);
     }
 
     void RenderInterface::DestroyPipeline(PipelineHandle handle)
@@ -190,5 +191,10 @@ namespace Zero
         Buffer* b = impl.bufferRegistry.GetBackendResource(handle);
         if (!b) return 0;
         return b->GetDeviceAddress();
+    }
+
+    RHI::FrameTimingStats RenderInterface::GetFrameTimings() const
+    {
+        return Renderer::Get().GetFrameTimings();
     }
 }

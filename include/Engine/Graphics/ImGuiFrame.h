@@ -1,8 +1,6 @@
 #pragma once
 #include <vector>
-
-struct ImDrawData;
-struct ImDrawList;
+#include <imgui.h>
 
 namespace Zero
 {
@@ -23,10 +21,10 @@ namespace Zero
     private:
         friend class VulkanDevice;
         friend class OpenGLDevice;
-        [[nodiscard]] ImDrawData* GetNativeDrawData() const noexcept { return m_DrawData; }
+        [[nodiscard]] ImDrawData* GetNativeDrawData() noexcept { return m_DrawData.Valid ? &m_DrawData : nullptr; }
 
     private:
-        ImDrawData* m_DrawData = nullptr;
+        ImDrawData m_DrawData{};
         std::vector<ImDrawList*> m_DrawListPool;
         size_t m_ActiveDrawLists = 0;
     };

@@ -4,6 +4,7 @@
 #include <Engine/Graphics/RenderResources.h>
 #include <Engine/Graphics/ImageDesc.h>
 #include <Engine/Graphics/PipelineDesc.h>
+#include <Engine/Graphics/RHITypes.h>
 
 namespace Zero
 {
@@ -84,6 +85,8 @@ namespace Zero
         [[nodiscard]] bool IsReady(PipelineHandle handle) const noexcept;
 
         [[nodiscard]] uint64_t GetBufferDeviceAddress(BufferHandle handle) const noexcept;
+
+        [[nodiscard]] RHI::FrameTimingStats GetFrameTimings() const;
 
     private:
         RenderInterface() = default;

@@ -20,6 +20,11 @@ import vulkan_hpp;
 #include "Graphics/backend/Vulkan/Sync/VulkanSyncObjects.h"
 #include "Graphics/backend/Vulkan/VMA/VulkanMemoryAllocator.h"
 
+#ifdef ZERO_ENABLE_PROFILING
+#include "Graphics/backend/Vulkan/Debug/VulkanGpuProfiler.h"
+#include <tracy/TracyVulkan.hpp>
+#endif
+
 namespace Zero
 {
     enum class PresentModePolicy;
@@ -58,11 +63,15 @@ namespace Zero
 
         virtual void FlushTransfers() override;
 
+#ifdef ZERO_ENABLE_PROFILING
+        virtual RHI::FrameTimingStats GetLastFrameTimings() const override { return m_lastFrameTimings; }
+#endif
+
         void recreateSwapChain();
 
         void recordCommandBuffer(uint32_t imageIndex, class FrameData* frame);
         void recordPendingTransfers(vk::raii::CommandBuffer& commandBuffer);
-        void executeComputeDispatches(vk::raii::CommandBuffer& commandBuffer, const std::vector<RHI::ComputeDispatch>& dispatches);
+        void executeComputeDispatches(vk::raii::CommandBuffer& commandBuffer, const std::vector<RHI::ComputeDispatch>& dispatches, const char* passPrefix);
         void emitComputeBarrier(vk::raii::CommandBuffer& commandBuffer, RHI::ComputeBarrier barrier);
         void transition_image_layout(
             uint32_t imageIndex,
@@ -136,6 +145,11 @@ namespace Zero
 
     private:
         uint32_t currentFrame = 0;
+#ifdef ZERO_ENABLE_PROFILING
+        VulkanGpuProfiler m_gpuProfiler;
+        TracyVkCtx m_tracyVkCtx = nullptr;
+        RHI::FrameTimingStats m_lastFrameTimings{};
+#endif
     private:
         Window* m_Window;
         bool m_SwapChainDirty = false;
