@@ -40,6 +40,7 @@ namespace Zero
 		m_threads = new Thread[threadCount];
 		m_count = threadCount;
 		m_running.store(true, std::memory_order_release);
+		m_acceptingJobs.store(true, std::memory_order_release);
 
 		for (uint32_t i = 0; i < threadCount; ++i)
 		{
@@ -63,10 +64,23 @@ namespace Zero
 		}
 	}
 
-	void BlockingThreadPool::Shutdown()
+    void BlockingThreadPool::StopAcceptingJobs()
+	{
+		m_acceptingJobs.store(false, std::memory_order_release);
+	}
+
+	bool BlockingThreadPool::IsAcceptingJobs() const noexcept
+	{
+		return m_acceptingJobs.load(std::memory_order_acquire);
+	}
+
+    void BlockingThreadPool::Shutdown()
 	{
 		if (!initialized.load(std::memory_order_acquire))
 			return;
+
+		StopAcceptingJobs();
+		wait_idle();
 
 		m_running.store(false, std::memory_order_release);
 
@@ -76,6 +90,12 @@ namespace Zero
 		delete[] m_threads;
 		m_threads = nullptr;
 		m_count = 0;
+
+		// Drain any unserviced jobs and reset in-flight counter
+		Job discarded;
+		while (m_queue.try_dequeue(discarded)) {}
+		m_inFlightJobs.store(0, std::memory_order_release);
+
 		initialized.store(false, std::memory_order_release);
 	}
 
@@ -87,31 +107,75 @@ namespace Zero
 
     void BlockingThreadPool::enqueue(Job job)
     {
-		m_queue.enqueue(get_producer_token(),job);
+		if (!m_running.load(std::memory_order_acquire) || !m_acceptingJobs.load(std::memory_order_acquire))
+		{
+			ZERO_CORE_ASSERT(false, "Cannot enqueue to inactive or sealed thread pool");
+			return;
+		}
+		m_inFlightJobs.fetch_add(1, std::memory_order_relaxed);
+		m_queue.enqueue(get_producer_token(), job);
     }
 
     void BlockingThreadPool::enqueue_bulk(std::span<const Job> jobs)
     {
+		if (jobs.empty())
+			return;
+
+		if (!m_running.load(std::memory_order_acquire) || !m_acceptingJobs.load(std::memory_order_acquire))
+		{
+			ZERO_CORE_ASSERT(false, "Cannot enqueue to inactive or sealed thread pool");
+			return;
+		}
+		m_inFlightJobs.fetch_add(static_cast<uint32_t>(jobs.size()), std::memory_order_relaxed);
 		m_queue.enqueue_bulk(get_producer_token(), jobs.data(), jobs.size());
     }
 
     void BlockingThreadPool::enqueue(Job job, JobCounter &counter)
     {
+		if (!m_running.load(std::memory_order_acquire) || !m_acceptingJobs.load(std::memory_order_acquire))
+		{
+			ZERO_CORE_ASSERT(false, "Cannot enqueue to inactive or sealed thread pool");
+			return;
+		}
         counter.pending.fetch_add(1, std::memory_order_relaxed);
+		m_inFlightJobs.fetch_add(1, std::memory_order_relaxed);
 		job.SetCounter(&counter);  // stamp before enqueue
 		m_queue.enqueue(get_producer_token(), job);
     }
 
     void BlockingThreadPool::enqueue_bulk(std::span<const Job> jobs, JobCounter &counter)
     {
+		if (jobs.empty())
+			return;
+
+		if (!m_running.load(std::memory_order_acquire) || !m_acceptingJobs.load(std::memory_order_acquire))
+		{
+			ZERO_CORE_ASSERT(false, "Cannot enqueue to inactive or sealed thread pool");
+			return;
+		}
         counter.pending.fetch_add(
-        static_cast<uint32_t>(jobs.size()), std::memory_order_relaxed);
+			static_cast<uint32_t>(jobs.size()), std::memory_order_relaxed);
+		m_inFlightJobs.fetch_add(
+			static_cast<uint32_t>(jobs.size()), std::memory_order_relaxed);
 
-		std::vector<Job> stamped(jobs.begin(), jobs.end());
-		for (auto& j : stamped)
-			j.SetCounter(&counter);
+		auto& token = get_producer_token();
+		constexpr size_t BATCH_SIZE = 64;
+		Job chunk[BATCH_SIZE];
 
-    	m_queue.enqueue_bulk(get_producer_token(), stamped.data(), stamped.size());
+		size_t remaining = jobs.size();
+		size_t offset = 0;
+		while (remaining > 0)
+		{
+			const size_t batch = std::min(remaining, BATCH_SIZE);
+			for (size_t i = 0; i < batch; ++i)
+			{
+				chunk[i] = jobs[offset + i];
+				chunk[i].SetCounter(&counter);
+			}
+			m_queue.enqueue_bulk(token, chunk, batch);
+			offset += batch;
+			remaining -= batch;
+		}
     }
 
     JobCounter &BlockingThreadPool::make_counter()
@@ -121,14 +185,14 @@ namespace Zero
 
     void BlockingThreadPool::wait_idle()
     {
-		while (m_queue.size_approx() > 0)
+		while (m_inFlightJobs.load(std::memory_order_acquire) > 0)
         	std::this_thread::yield();
     }
 
     void BlockingThreadPool::worker_loop(uint32_t threadID)
 	{
 		moodycamel::ConsumerToken token(m_queue);
-		while (m_running.load(std::memory_order_relaxed))
+		while (m_running.load(std::memory_order_relaxed) || m_inFlightJobs.load(std::memory_order_acquire) > 0)
 		{
 			Job buffer[64];
 			size_t count = m_queue.wait_dequeue_bulk_timed(token, buffer, 64, 250000); // 250ms
@@ -145,6 +209,8 @@ namespace Zero
 
 				if (JobCounter* c = job.GetCounter())
             		c->Decrement(); // wake waiter if this was the last job
+
+				m_inFlightJobs.fetch_sub(1, std::memory_order_release);
 			}
 		}
 	}

@@ -87,10 +87,16 @@ namespace Zero
     {
         FileWatcher::Get().Shutdown();
         Renderer::Get().WaitIdle();
+
+        // Seal -> Drain -> Join -> Destroy
+        BlockingThreadPool::Get().StopAcceptingJobs();
+        BlockingThreadPool::Get().wait_idle();
+        BlockingThreadPool::Get().Shutdown();
+
         m_LayerStack.reset();
+        m_ecsState.reset();
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
-        BlockingThreadPool::Get().Shutdown();
     }
 
     void Application::PushLayer(std::unique_ptr<Layer> layer)

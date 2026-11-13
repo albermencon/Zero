@@ -35,6 +35,11 @@ namespace Zero
         BlockingThreadPool::Get().Init(threadCount);
     }
 
+    void StopAcceptingJobs()
+    {
+        BlockingThreadPool::Get().StopAcceptingJobs();
+    }
+
     void ShutdownJobSystem()
     {
         BlockingThreadPool::Get().Shutdown();

@@ -15,6 +15,10 @@ namespace Zero
 		// Not NUMA aware
 		void Init(uint32_t threadCount = 1);
 
+		// Reject any newly submitted jobs immediately
+		void StopAcceptingJobs();
+		[[nodiscard]] bool IsAcceptingJobs() const noexcept;
+
 		void Shutdown();
 		static BlockingThreadPool& Get();
 
@@ -45,6 +49,8 @@ namespace Zero
 		Thread* m_threads = nullptr;
 		size_t m_count = 0;
 		std::atomic<bool> m_running{ false };
+		std::atomic<bool> m_acceptingJobs{ false };
+		std::atomic<uint32_t> m_inFlightJobs{ 0 };
 
 		moodycamel::BlockingConcurrentQueue<Job> m_queue;
 	};
