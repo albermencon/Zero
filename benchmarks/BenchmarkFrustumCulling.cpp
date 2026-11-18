@@ -4,6 +4,12 @@
 #include <vector>
 #include <immintrin.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define ZERO_TARGET_AVX2_FMA __attribute__((target("avx2,fma")))
+#else
+#define ZERO_TARGET_AVX2_FMA
+#endif
+
 namespace
 {
 	Zero::Frustum SetupBenchmarkFrustum()
@@ -157,7 +163,7 @@ namespace
 	BENCHMARK(BM_FrustumCull_SSE2_10k);
 
 	// 3. Explicit AVX2 + FMA3 (256-bit)
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	void BM_FrustumCull_AVX2_FMA_10k(benchmark::State& state)
 	{
 		Zero::Frustum frustum = SetupBenchmarkFrustum();

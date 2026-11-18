@@ -4,6 +4,12 @@
 #include <vector>
 #include <immintrin.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define ZERO_TARGET_AVX2_FMA __attribute__((target("avx2,fma")))
+#else
+#define ZERO_TARGET_AVX2_FMA
+#endif
+
 namespace
 {
 	Zero::Mat4 MultiplyScalar(const Zero::Mat4& a, const Zero::Mat4& b) noexcept
@@ -47,7 +53,7 @@ namespace
 		return result;
 	}
 
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	Zero::Mat4 MultiplyAVX2FMA(const Zero::Mat4& a, const Zero::Mat4& b) noexcept
 	{
 		Zero::Mat4 result;
@@ -69,7 +75,7 @@ namespace
 		return result;
 	}
 
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	void MultiplyBatchAVX2FMA(const Zero::Mat4& transform, const Zero::Mat4* in, Zero::Mat4* out, size_t count) noexcept
 	{
 		__m256 a0 = _mm256_broadcast_ps((const __m128*)&transform.m[0]);
@@ -132,7 +138,7 @@ namespace
 	}
 	BENCHMARK(BM_Mat4_Mul_SSE2);
 
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	void BM_Mat4_Mul_AVX2_FMA(benchmark::State& state)
 	{
 		Zero::Mat4 a = Zero::Mat4::Identity();
@@ -202,7 +208,7 @@ namespace
 	}
 	BENCHMARK(BM_Mat4_Batch1k_SSE2);
 
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	void BM_Mat4_Batch1k_AVX2_FMA(benchmark::State& state)
 	{
 		constexpr size_t N = 1000;
@@ -255,7 +261,7 @@ namespace
 		}
 	}
 
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	void TransformPointsAVX2_AoS(const Zero::Mat4& m, const Zero::Vec3* in, Zero::Vec3* out, size_t count) noexcept
 	{
 		const __m128 m0 = _mm_set1_ps(m.m[0]);
@@ -327,7 +333,7 @@ namespace
 	}
 	BENCHMARK(BM_TransformPoints_10k_Scalar);
 
-	__attribute__((target("avx2,fma")))
+	ZERO_TARGET_AVX2_FMA
 	void BM_TransformPoints_10k_AVX2(benchmark::State& state)
 	{
 		constexpr size_t N = 10000;
