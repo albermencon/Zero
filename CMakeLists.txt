@@ -10,6 +10,7 @@ endif()
 
 option(BUILD_SHARED "Build as shared library" OFF)
 option(ZERO_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
+option(ZERO_PROFILE_ON_DEMAND "Only collect Tracy captures when profiler connects (requires ZERO_ENABLE_PROFILING)" OFF)
 
 file(GLOB_RECURSE ZERO_SOURCES
     "src/*.cpp"
@@ -50,6 +51,10 @@ target_compile_definitions(Zero PUBLIC
     $<$<CONFIG:Debug>:ZERO_DEBUG>
 )
 
+target_compile_definitions(Zero PRIVATE
+    ZERO_BUILD_CONFIG_STR="$<CONFIG>"
+)
+
 target_include_directories(Zero
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -84,14 +89,35 @@ endif()
 
 if (ZERO_ENABLE_PROFILING)
 
-    target_link_libraries(Zero PUBLIC Tracy::TracyClient)
-
-    target_compile_definitions(Zero PUBLIC
-        ZERO_ENABLE_PROFILING
-        TRACY_ENABLE
-        TRACY_VK_USE_SYMBOL_TABLE
+    target_link_libraries(Zero PUBLIC
+        $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:Tracy::TracyClient>
     )
 
+    target_compile_definitions(Zero
+        PUBLIC
+            $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:ZERO_ENABLE_PROFILING TRACY_ENABLE>
+            $<$<AND:$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>,$<BOOL:${ZERO_PROFILE_ON_DEMAND}>>:TRACY_ON_DEMAND>
+        PRIVATE
+            $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:TRACY_VK_USE_SYMBOL_TABLE>
+    )
+
+endif()
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ZERO_IPO_SUPPORTED OUTPUT ZERO_IPO_ERROR)
+if (ZERO_IPO_SUPPORTED)
+    set_target_properties(Zero PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+        INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON
+    )
+    if (TARGET TracyClient)
+        set_target_properties(TracyClient PROPERTIES
+            INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+            INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON
+        )
+    endif()
+else()
+    message(STATUS "Zero IPO/LTO disabled (unsupported): ${ZERO_IPO_ERROR}")
 endif()
 
 # OpenGL system library (REQUIRED)
@@ -118,6 +144,10 @@ target_precompile_headers(Zero
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h
 )
+
+if(WIN32)
+    add_subdirectory(tools/CrashHandler)
+endif()
 
 # Testing
 option(ZERO_BUILD_TESTS "Build and include the testing suite" ON)
