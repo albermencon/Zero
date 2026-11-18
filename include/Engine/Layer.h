@@ -22,6 +22,7 @@ namespace Zero
         virtual void OnUpdate(float dt) {}
         virtual void OnEvent(Event& event) {}
         virtual void OnImGuiRender() {}
+        virtual void OnRender(FrameData* frame) {}
 
         const std::string& GetName() const noexcept
         {

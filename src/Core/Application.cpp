@@ -13,15 +13,27 @@
 #include "Engine/Layers/ImGuiLayer.h"
 #include "Platform/InputInternal.h"
 #include "Graphics/Renderer/Renderer.h"
-#include "Graphics/ShaderCompiler/ShaderCompiler.h"
 #include "JobSystem/BlockingThreadPool.h"
+#include <Engine/Thread/ScopedLock.h>
 #include <Engine/Profiler/Profiler.h>
+#include <Engine/Ecs/EcsRegistry.h>
+#include <Engine/Ecs/EcsCommandQueue.h>
+#include <Engine/Ecs/Scheduler.h>
 #include <cstdint>
 #include <thread>
 #include <chrono>
 
 namespace Zero
 {
+    // ECS registration state — pimpl'd so Application.h stays free of ECS
+    // headers. Populated by PushComponent/PushSystem commands on the game thread.
+    struct EcsState
+    {
+        std::vector<SystemDescriptor>       systemDescriptors;
+        std::vector<std::shared_ptr<void>>  systemHolders; // keeps system instances alive
+        bool                                systemDirty = false;
+    };
+
     Application* Application::s_Instance = nullptr;
 
     Application& Application::Get()
@@ -35,6 +47,8 @@ namespace Zero
         s_Instance = this;
 
         Zero::Log::Init();
+
+        m_ecsState = std::make_unique<EcsState>();
 
         m_LayerStack = std::make_unique<LayerStack>();
         
@@ -110,12 +124,55 @@ namespace Zero
         raw->OnAttach();
     }
 
+    void Application::EnqueueEcsCommand(std::function<void(EcsRegistry&)> cmd)
+    {
+        Zero::ScopedLock lock(m_ecsCommandMutex);
+        m_ecsCommands.push_back(std::move(cmd));
+    }
+
+    void Application::FlushEcsCommands(EcsRegistry& reg)
+    {
+        // Swap under the lock, execute outside it — producers (any thread)
+        // never block on command execution.
+        std::deque<std::function<void(EcsRegistry&)>> pending;
+        {
+            Zero::ScopedLock lock(m_ecsCommandMutex);
+            pending.swap(m_ecsCommands);
+        }
+
+        while (!pending.empty())
+        {
+            auto cmd = std::move(pending.front());
+            pending.pop_front();
+            cmd(reg);
+        }
+    }
+
+    void Application::RegisterEcsSystem(SystemDescriptor desc, std::shared_ptr<void> holder)
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        m_ecsState->systemDescriptors.push_back(std::move(desc));
+        m_ecsState->systemHolders.push_back(std::move(holder));
+        m_ecsState->systemDirty = true;
+    }
+
     void Application::Run()
     {
         ZERO_CORE_TRACE("Application started.");
         ZERO_PROFILE_THREAD("Main Thread");
 
         Time::Init();
+
+        // ECS runtime — owned by the engine. Game code populates it through
+        // PushComponent<T> / PushSystem<T>, which enqueue commands drained below.
+        EcsCommandQueue ecsQ;
+        EcsRegistry ecsReg;
+
+        // Execute anything queued during app construction / layer attach.
+        FlushEcsCommands(ecsReg);
+
+        // Execution graph from all systems registered so far.
+        std::vector<ExecutionLayer> layers = BuildExecutionLayers(m_ecsState->systemDescriptors);
 
         // Main loop
         uint64_t frameIndex = 0;
@@ -134,11 +191,24 @@ namespace Zero
 
             float dt = Time::GetDeltaTime();
 
+            // Execute ECS registration commands pushed since the last frame
+            // (PushComponent / PushSystem — safe from any thread).
+            FlushEcsCommands(ecsReg);
+            if (m_ecsState->systemDirty)
+            {
+                layers = BuildExecutionLayers(m_ecsState->systemDescriptors);
+                m_ecsState->systemDirty = false;
+            }
+
             // Game logic
             for (auto& layer : *m_LayerStack)
             {
                 layer->OnUpdate(dt);
             }
+
+            // ECS frame
+            ecsReg.FlushCommands(ecsQ, static_cast<uint32_t>(frameIndex));
+            DispatchFrame(layers, ecsReg, BlockingThreadPool::Get(), dt, static_cast<uint32_t>(frameIndex));
 
             m_ImGuiLayer->Begin();
 
@@ -153,6 +223,11 @@ namespace Zero
             Renderer::Get().RequestFrame(); // must add a timeout
 
             FrameData* frame = SceneManager::Get().BuildFrame(frameIndex, dt);
+
+            for (auto& layer : *m_LayerStack)
+            {
+                layer->OnRender(frame);
+            }
 
             m_ImGuiLayer->End(frame);
 
