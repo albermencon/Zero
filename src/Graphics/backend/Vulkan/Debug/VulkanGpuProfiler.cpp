@@ -93,9 +93,17 @@ namespace Zero
 
             uint64_t startTs = 0;
             uint64_t endTs = 0;
-            if (frame.queryPool.getResults(zone.startQuery, 1, sizeof(uint64_t), &startTs, sizeof(uint64_t), resultFlags) != vk::Result::eSuccess)
+            if (frame.queryPool.getDispatcher()->vkGetQueryPoolResults(
+                    static_cast<VkDevice>(frame.queryPool.getDevice()),
+                    static_cast<VkQueryPool>(*frame.queryPool),
+                    zone.startQuery, 1, sizeof(uint64_t), &startTs, sizeof(uint64_t),
+                    static_cast<VkQueryResultFlags>(resultFlags)) != VK_SUCCESS)
                 continue;
-            if (frame.queryPool.getResults(zone.endQuery, 1, sizeof(uint64_t), &endTs, sizeof(uint64_t), resultFlags) != vk::Result::eSuccess)
+            if (frame.queryPool.getDispatcher()->vkGetQueryPoolResults(
+                    static_cast<VkDevice>(frame.queryPool.getDevice()),
+                    static_cast<VkQueryPool>(*frame.queryPool),
+                    zone.endQuery, 1, sizeof(uint64_t), &endTs, sizeof(uint64_t),
+                    static_cast<VkQueryResultFlags>(resultFlags)) != VK_SUCCESS)
                 continue;
 
             const uint64_t deltaTicks = (endTs - startTs) & m_validMask;

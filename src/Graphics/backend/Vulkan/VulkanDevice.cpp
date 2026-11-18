@@ -684,8 +684,7 @@ namespace Zero
                                 *currentPipeline->GetPipelineLayout(),
                                 currentPipeline->GetPushConstantStages(),
                                 0,
-                                pushSize,
-                                &push
+                                vk::ArrayProxy<const uint8_t>(pushSize, reinterpret_cast<const uint8_t*>(&push))
                             );
                         }
 
@@ -1204,8 +1203,7 @@ namespace Zero
                         *currentPipeline->GetPipelineLayout(),
                         vk::ShaderStageFlagBits::eCompute,
                         0,
-                        dispatch.pushConstantSize,
-                        dispatch.pushConstants
+                        vk::ArrayProxy<const uint8_t>(dispatch.pushConstantSize, reinterpret_cast<const uint8_t*>(dispatch.pushConstants))
                     );
                 }
             }
