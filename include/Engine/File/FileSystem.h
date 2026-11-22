@@ -46,6 +46,9 @@ namespace Zero
         static void Close(FileHandle& file);
         static std::expected<size_t, std::error_code> Read(FileHandle& file, std::span<std::byte> destination, size_t offset);
         static std::expected<size_t, std::error_code> Write(FileHandle& file, std::span<const std::byte> source, size_t offset);
+        static std::expected<void, std::error_code> Sync(FileHandle& file);
+        static std::expected<void, std::error_code> AtomicRename(const std::filesystem::path& from, const std::filesystem::path& to);
+        static std::expected<void, std::error_code> SyncDirectory(const std::filesystem::path& dir_path);
 
         using DirectoryCallback = void(*)(const std::filesystem::directory_entry&, void*);
         static void IterateDirectory(const std::filesystem::path& path, DirectoryCallback callback, void* userData = nullptr);

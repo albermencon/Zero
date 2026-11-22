@@ -11,6 +11,8 @@
 #include <windows.h>
 #endif
 #ifndef PLATFORM_WINDOWS
+#include <cerrno>
+#include <cstdio>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -321,6 +323,71 @@ namespace Zero
         }
         
         return static_cast<size_t>(bytesWritten);
+#endif
+    }
+
+    std::expected<void, std::error_code> FileSystem::Sync(FileHandle &file)
+    {
+        if (!IsValidHandle(file))
+        {
+            return std::unexpected(std::make_error_code(std::errc::bad_file_descriptor));
+        }
+#ifdef PLATFORM_WINDOWS
+        if (!FlushFileBuffers(reinterpret_cast<HANDLE>(file.handle)))
+        {
+            return std::unexpected(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+        }
+        return {};
+#else
+        int fd = static_cast<int>(reinterpret_cast<intptr_t>(file.handle));
+#if defined(__APPLE__)
+        if (::fsync(fd) < 0)
+#else
+        if (::fdatasync(fd) < 0)
+#endif
+        {
+            return std::unexpected(std::error_code(errno, std::generic_category()));
+        }
+        return {};
+#endif
+    }
+
+    std::expected<void, std::error_code> FileSystem::AtomicRename(const std::filesystem::path &from, const std::filesystem::path &to)
+    {
+#ifdef PLATFORM_WINDOWS
+        if (!MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        {
+            return std::unexpected(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+        }
+        return {};
+#else
+        if (::rename(from.c_str(), to.c_str()) < 0)
+        {
+            return std::unexpected(std::error_code(errno, std::generic_category()));
+        }
+        return {};
+#endif
+    }
+
+    std::expected<void, std::error_code> FileSystem::SyncDirectory(const std::filesystem::path &dir_path)
+    {
+#ifdef PLATFORM_WINDOWS
+        (void)dir_path;
+        return {};
+#else
+        int dir_fd = ::open(dir_path.c_str(), O_RDONLY | O_DIRECTORY);
+        if (dir_fd < 0)
+        {
+            return std::unexpected(std::error_code(errno, std::generic_category()));
+        }
+        int rc = ::fsync(dir_fd);
+        int saved_errno = errno;
+        ::close(dir_fd);
+        if (rc < 0)
+        {
+            return std::unexpected(std::error_code(saved_errno, std::generic_category()));
+        }
+        return {};
 #endif
     }
 

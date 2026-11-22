@@ -94,7 +94,6 @@ namespace Zero
         BlockingThreadPool::Get().Shutdown();
 
         m_LayerStack.reset();
-        m_ecsState.reset();
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
     }
