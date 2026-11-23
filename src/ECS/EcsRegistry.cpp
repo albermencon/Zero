@@ -1,10 +1,69 @@
 #include "pch.h"
+#include <algorithm>
+#include <bit>
+#include <cstdio>
+#include <cstdlib>
 #include <Engine/Ecs/EcsRegistry.h>
 #include <Engine/Ecs/CachedView.h>
 #include "EntityAllocator.h"
 
 namespace Zero
 {
+    // -----------------------------------------------------------------------
+    // Static-init duplicate component ID guard (cross-TU, no RTTI)
+    // -----------------------------------------------------------------------
+    namespace Detail
+    {
+        const void* RegisterComponentIdToken(uint32_t id,
+                                             const void* typeToken,
+                                             const char* typeName) noexcept
+        {
+            static const void* s_tokens[EcsRegistry::MaxComponents]{};
+            static const char* s_names[EcsRegistry::MaxComponents]{};
+
+            if (id >= EcsRegistry::MaxComponents)
+            {
+                std::fprintf(stderr,
+                    "ECS Error: Component '%s' registered with out-of-range ID %u\n",
+                    typeName ? typeName : "<unknown>", id);
+                DEBUGBREAK();
+                std::abort();
+            }
+
+            if (s_tokens[id] != nullptr && s_tokens[id] != typeToken)
+            {
+                std::fprintf(stderr,
+                    "ECS Error: Duplicate Component ID %u claimed by '%s' (already claimed by '%s')\n",
+                    id,
+                    typeName ? typeName : "<unknown>",
+                    s_names[id] ? s_names[id] : "<unknown>");
+                DEBUGBREAK();
+                std::abort();
+            }
+
+            s_tokens[id] = typeToken;
+            s_names[id]  = typeName;
+            return typeToken;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // PoolBase destructor — detaches surviving CachedViews to prevent UAF if
+    // EcsRegistry is destroyed before a CachedView.
+    // -----------------------------------------------------------------------
+    PoolBase::~PoolBase()
+    {
+        for (CachedViewBase* view : dependentViews)
+        {
+            if (!view) continue;
+            auto& vp = view->pools;
+            vp.erase(std::remove(vp.begin(), vp.end(), this), vp.end());
+            if (view->primary == this)
+                view->primary = nullptr;
+        }
+        dependentViews.clear();
+    }
+
     // -----------------------------------------------------------------------
     // EcsRegistry — constructor / destructor
     // -----------------------------------------------------------------------
@@ -52,17 +111,32 @@ namespace Zero
     const ComponentMask& EcsRegistry::Mask(uint32_t entityIdx) const noexcept
     {
         ZERO_ASSERT(entityIdx < MaxEntities, "entityIdx out of range");
+        if (entityIdx >= MaxEntities)
+        {
+            static const ComponentMask s_emptyMask{};
+            return s_emptyMask;
+        }
         return m_componentMask[entityIdx];
     }
 
     // -----------------------------------------------------------------------
-    // Static file-local helper — calls CachedViewBase::Invalidate() without
-    // knowing T. Lives here because CachedView.h is fully included in this TU.
+    // Static file-local helpers
     // -----------------------------------------------------------------------
     static void InvalidateViews(PoolBase* base) noexcept
     {
         for (CachedViewBase* v : base->dependentViews)
-            v->Invalidate();
+        {
+            if (v) v->Invalidate();
+        }
+    }
+
+    static void FreeHeapPayload(const EcsCommand& cmd) noexcept
+    {
+        if ((cmd.flags & kEcsFlagHeapPayload) && cmd.heapPtr)
+        {
+            ::operator delete(const_cast<void*>(cmd.heapPtr),
+                              std::align_val_t{ cmd.heapAlign });
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -72,37 +146,52 @@ namespace Zero
     {
         // Generation check: a stale handle (entity destroyed and its slot
         // recycled since the command was enqueued) must be dropped, not applied
-        // to the recycled slot.
-        if (!m_allocator->IsAlive(cmd.entity)) return;
+        // to the recycled slot. Always free any heap-fallback payload first.
+        if (!m_allocator->IsAlive(cmd.entity))
+        {
+            FreeHeapPayload(cmd);
+            return;
+        }
 
         const uint32_t entityIdx = Index(cmd.entity);
         ZERO_CORE_ASSERT(entityIdx > 0 && entityIdx < MaxEntities,
             "DispatchAdd: invalid entity index");
+        if (entityIdx == 0 || entityIdx >= MaxEntities)
+        {
+            FreeHeapPayload(cmd);
+            return;
+        }
 
         const uint8_t cid = cmd.componentId;
         ZERO_ASSERT(cid < MaxComponents, "DispatchAdd: componentId out of range");
-        ZERO_ASSERT(m_pools[cid] != nullptr,
+        PoolBase* pool = (cid < MaxComponents) ? m_poolPtr[cid].load(std::memory_order_acquire) : nullptr;
+        ZERO_ASSERT(pool != nullptr,
             "DispatchAdd: pool does not exist — GetOrCreatePool<T> must be called first");
+        if (!pool)
+        {
+            FreeHeapPayload(cmd);
+            return;
+        }
 
-        PoolBase* pool = m_pools[cid].get();
-
-        const void* payload;
+        const void* payload = nullptr;
         if (cmd.flags & kEcsFlagSlabPayload)
-            payload = static_cast<const void*>(&q.slab.As<uint8_t>(cmd.slabOffset));
+            payload = static_cast<const void*>(q.slab.Data(cmd.slabOffset, cmd.slabSize));
         else if (cmd.flags & kEcsFlagHeapPayload)
             payload = cmd.heapPtr;
         else
             payload = static_cast<const void*>(cmd.inlineData);
 
+        if (!payload)
+        {
+            FreeHeapPayload(cmd);
+            return;
+        }
+
         pool->insertFn(pool, entityIdx, payload, currentFrame);
         m_componentMask[entityIdx].Set(cid);
 
         // Free heap-fallback payloads after they have been copied into the pool.
-        if (cmd.flags & kEcsFlagHeapPayload)
-        {
-            ::operator delete(const_cast<void*>(cmd.heapPtr),
-                              std::align_val_t{ cmd.heapAlign });
-        }
+        FreeHeapPayload(cmd);
     }
 
     // -----------------------------------------------------------------------
@@ -116,11 +205,13 @@ namespace Zero
         const uint32_t entityIdx = Index(cmd.entity);
         ZERO_ASSERT(entityIdx > 0 && entityIdx < MaxEntities,
             "DispatchRemove: invalid entity index");
+        if (entityIdx == 0 || entityIdx >= MaxEntities) return;
 
         const uint8_t cid = cmd.componentId;
-        if (cid >= MaxComponents || !m_pools[cid]) return;
+        PoolBase* pool = (cid < MaxComponents) ? m_poolPtr[cid].load(std::memory_order_acquire) : nullptr;
+        if (!pool) return;
 
-        m_pools[cid]->destroyEntityFn(m_pools[cid].get(), entityIdx);
+        pool->destroyEntityFn(pool, entityIdx);
         m_componentMask[entityIdx].Clear(cid);
     }
 
@@ -136,12 +227,26 @@ namespace Zero
         const uint32_t entityIdx = Index(e);
         ZERO_ASSERT(entityIdx > 0 && entityIdx < MaxEntities,
             "DispatchDestroy: invalid entity index");
+        if (entityIdx == 0 || entityIdx >= MaxEntities) return;
 
         const ComponentMask& mask = m_componentMask[entityIdx];
-        for (uint32_t id = 0; id < MaxComponents; ++id)
+
+        uint64_t lo = mask.lo;
+        while (lo != 0)
         {
-            if (!mask.Has(id) || !m_pools[id]) continue;
-            m_pools[id]->destroyEntityFn(m_pools[id].get(), entityIdx);
+            const uint32_t bit = static_cast<uint32_t>(std::countr_zero(lo));
+            if (PoolBase* pool = m_poolPtr[bit].load(std::memory_order_acquire))
+                pool->destroyEntityFn(pool, entityIdx);
+            lo &= (lo - 1u);
+        }
+
+        uint64_t hi = mask.hi;
+        while (hi != 0)
+        {
+            const uint32_t bit = 64u + static_cast<uint32_t>(std::countr_zero(hi));
+            if (PoolBase* pool = m_poolPtr[bit].load(std::memory_order_acquire))
+                pool->destroyEntityFn(pool, entityIdx);
+            hi &= (hi - 1u);
         }
 
         m_componentMask[entityIdx] = ComponentMask{};
@@ -152,7 +257,8 @@ namespace Zero
     // FlushCommands — main thread only
     //
     // 1. Dequeue and dispatch all pending EcsCommands.
-    // 2. Batched: iterate only dirty pools, call InvalidateViews once per pool.
+    // 2. Batched: invalidate dependent CachedViews on dirty pools, then
+    //    explicitly rebuild each stale view once while still single-threaded.
     // 3. Reset slab (Invariant 9: only after all commands consumed).
     // -----------------------------------------------------------------------
     void EcsRegistry::FlushCommands(EcsCommandQueue& q, uint32_t currentFrame)
@@ -175,13 +281,26 @@ namespace Zero
             }
         }
 
-        // Batched invalidation — O(MaxComponents = 128), once per frame.
-        // Invariant 7: Invalidate() only bumps a version counter, never rebuilds.
-        for (auto& poolPtr : m_pools)
+        // Pass 1: batched invalidation — O(MaxComponents = 128), once per frame.
+        for (uint32_t i = 0; i < MaxComponents; ++i)
         {
-            if (!poolPtr || !poolPtr->structurallyDirty) continue;
-            InvalidateViews(poolPtr.get());
-            poolPtr->structurallyDirty = false;
+            PoolBase* pool = m_poolPtr[i].load(std::memory_order_acquire);
+            if (!pool || !pool->structurallyDirty) continue;
+            InvalidateViews(pool);
+        }
+
+        // Pass 2: explicit single-threaded rebuild of stale CachedViews so
+        // concurrent Each() / Count() calls during the job window are pure reads.
+        for (uint32_t i = 0; i < MaxComponents; ++i)
+        {
+            PoolBase* pool = m_poolPtr[i].load(std::memory_order_acquire);
+            if (!pool || !pool->structurallyDirty) continue;
+            for (CachedViewBase* v : pool->dependentViews)
+            {
+                if (v && v->IsStale() && v->rebuildFn)
+                    v->rebuildFn(v);
+            }
+            pool->structurallyDirty = false;
         }
 
         // Invariant 9: slab reset only after every command payload has been read.

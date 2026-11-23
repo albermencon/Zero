@@ -7,6 +7,8 @@
 #include <atomic>
 #include <algorithm>
 #include <cstring>
+#include <tuple>
+#include <utility>
 #include <Engine/Core.h>
 #include <Engine/Ecs/Entity.h>
 #include <Engine/Ecs/ComponentTrait.h>
@@ -104,8 +106,13 @@ namespace Zero
         {
             constexpr uint32_t id = ComponentId<T>();
             PoolBase* p = m_poolPtr[id].load(std::memory_order_acquire);
-            ZERO_ASSERT(p != nullptr,
-                "ComponentPool not created — was AddComponent<T> ever flushed?");
+            if (!p)
+            {
+                ZERO_ASSERT(false,
+                    "ComponentPool not created — was AddComponent<T> ever flushed?");
+                static const ComponentPool<T> s_emptyPool{};
+                return s_emptyPool;
+            }
             return *static_cast<const ComponentPool<T>*>(p);
         }
 
@@ -172,6 +179,7 @@ namespace Zero
                 p->modifiedFrame.clear();
                 p->sparse.assign(p->sparse.size(), UINT32_MAX);
                 p->count = 0;
+                p->structurallyDirty = true;
             };
 #ifdef ECS_VALIDATE
             pool->validateFn = [](const PoolBase* base) {
@@ -179,10 +187,10 @@ namespace Zero
             };
 #endif
 
-            // Publish the fully-constructed pool (release) before taking
-            // ownership — readers that acquire it see a valid object.
-            m_poolPtr[id].store(pool, std::memory_order_release);
+            // Take ownership before publishing the atomic pointer so readers
+            // never observe a pool before m_pools[id] is populated.
             m_pools[id].reset(pool);
+            m_poolPtr[id].store(pool, std::memory_order_release);
             return *pool;
         }
 
@@ -208,38 +216,52 @@ namespace Zero
     // CachedView<Ts...> out-of-line method definitions
     // Must appear after the full EcsRegistry definition.
 
-    template<typename... Ts>
-    CachedView<Ts...>::CachedView(EcsRegistry& reg)
-        : m_reg(reg)
-        , m_required(MaskOf<Ts...>())
-        , m_base(std::make_unique<CachedViewBase>())
+    namespace Detail
     {
-        std::array<PoolBase*, sizeof...(Ts)> pools = { &reg.Pool<Ts>()... };
-        m_primary = *std::min_element(pools.begin(), pools.end(),
-            [](const PoolBase* a, const PoolBase* b) { return a->count < b->count; });
+        inline void RebuildCachedView(CachedViewBase* base)
+        {
+            if (!base || !base->reg || base->pools.empty())
+                return;
 
-        (m_registrations.emplace_back(*static_cast<PoolBase*>(&reg.Pool<Ts>()), *m_base), ...);
+            base->primary = *std::min_element(base->pools.begin(), base->pools.end(),
+                [](const PoolBase* a, const PoolBase* b) { return a->count < b->count; });
+
+            base->entities.clear();
+            const uint32_t n = base->primary->count;
+            base->entities.reserve(n);
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                const uint32_t entityIdx = base->primary->denseEntityAt(base->primary, i);
+                if (base->reg->Mask(entityIdx).Contains(base->required))
+                    base->entities.push_back(entityIdx);
+            }
+            base->MarkRebuilt();
+        }
     }
 
     template<typename... Ts>
-    void CachedView<Ts...>::Rebuild()
+    CachedView<Ts...>::CachedView(EcsRegistry& reg)
+        : m_base(std::make_unique<CachedViewBase>())
     {
-        m_base->entities.clear();
+        m_base->reg       = &reg;
+        m_base->required  = MaskOf<Ts...>();
+        m_base->rebuildFn = &Detail::RebuildCachedView;
 
-        const uint32_t n = m_primary->count;
-        m_base->entities.reserve(n);
+        auto attachPool = [this](PoolBase* p) {
+            if (std::find(m_base->pools.begin(), m_base->pools.end(), p) == m_base->pools.end())
+            {
+                m_base->pools.push_back(p);
+                p->dependentViews.push_back(m_base.get());
+            }
+        };
+        (attachPool(&reg.Pool<Ts>()), ...);
 
-        for (uint32_t i = 0; i < n; ++i)
-        {
-            const uint32_t entityIdx = m_primary->denseEntityAt(m_primary, i);
-            if (m_reg.Mask(entityIdx).Contains(m_required))
-                m_base->entities.push_back(entityIdx);
-        }
-        m_base->MarkRebuilt();
+        Detail::RebuildCachedView(m_base.get());
     }
 
     // ComponentView<Ts...> out-of-line method definitions
-    
+
     template<typename... Ts>
     ComponentView<Ts...>::ComponentView(EcsRegistry& reg)
         : m_reg(reg)
@@ -251,18 +273,65 @@ namespace Zero
     }
 
     template<typename... Ts>
+    template<size_t PrimaryIdx, typename Fn, size_t... Is>
+    void ComponentView<Ts...>::EachWithPrimary(Fn& fn, std::index_sequence<Is...>) const
+    {
+        using PrimaryT = std::tuple_element_t<PrimaryIdx, std::tuple<Ts...>>;
+        const auto* primaryPool   = static_cast<const ComponentPool<PrimaryT>*>(m_pools[PrimaryIdx]);
+        const uint32_t* denseEnts = primaryPool->dense_to_entity.data();
+        const uint32_t n          = primaryPool->count;
+
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            const uint32_t entityIdx = denseEnts[i];
+            if (!m_reg.Mask(entityIdx).Contains(m_required)) continue;
+
+            // Reconstruct full entity handle from index + live generation,
+            // indexing m_primary directly by dense slot i and reading cached m_pools.
+            fn(m_reg.CurrentGeneration(entityIdx),
+               ([&]() -> const Ts& {
+                   if constexpr (Is == PrimaryIdx)
+                       return primaryPool->data[i];
+                   else
+                       return *static_cast<const ComponentPool<Ts>*>(m_pools[Is])->Get(entityIdx);
+               }())...);
+        }
+    }
+
+    template<typename... Ts>
     template<typename Fn>
     void ComponentView<Ts...>::Each(Fn&& fn)
     {
-        const uint32_t n = m_primary->count;
+        [&]<size_t... Ps>(std::index_sequence<Ps...>) {
+            ((m_primary == m_pools[Ps]
+                ? (EachWithPrimary<Ps>(fn, std::index_sequence_for<Ts...>{}), true)
+                : false) || ...);
+        }(std::index_sequence_for<Ts...>{});
+    }
+
+    template<typename... Ts>
+    template<size_t PrimaryIdx, typename... Excludes, typename Fn, size_t... Is>
+    void ComponentView<Ts...>::EachExcludingWithPrimary(Fn& fn, ComponentMask excludeMask, std::index_sequence<Is...>) const
+    {
+        using PrimaryT = std::tuple_element_t<PrimaryIdx, std::tuple<Ts...>>;
+        const auto* primaryPool   = static_cast<const ComponentPool<PrimaryT>*>(m_pools[PrimaryIdx]);
+        const uint32_t* denseEnts = primaryPool->dense_to_entity.data();
+        const uint32_t n          = primaryPool->count;
+
         for (uint32_t i = 0; i < n; ++i)
         {
-            const uint32_t entityIdx = m_primary->denseEntityAt(m_primary, i);
-            if (!m_reg.Mask(entityIdx).Contains(m_required)) continue;
+            const uint32_t entityIdx = denseEnts[i];
+            const ComponentMask& em  = m_reg.Mask(entityIdx);
+            if (!em.Contains(m_required))    continue;
+            if (em.ContainsAny(excludeMask)) continue;
 
-            // Reconstruct full entity handle from index + live generation.
             fn(m_reg.CurrentGeneration(entityIdx),
-               *m_reg.Pool<Ts>().Get(entityIdx)...);
+               ([&]() -> const Ts& {
+                   if constexpr (Is == PrimaryIdx)
+                       return primaryPool->data[i];
+                   else
+                       return *static_cast<const ComponentPool<Ts>*>(m_pools[Is])->Get(entityIdx);
+               }())...);
         }
     }
 
@@ -271,23 +340,19 @@ namespace Zero
     void ComponentView<Ts...>::EachExcluding(Fn&& fn)
     {
         constexpr ComponentMask excludeMask = MaskOf<Excludes...>();
-        const uint32_t n = m_primary->count;
-
-        for (uint32_t i = 0; i < n; ++i)
-        {
-            const uint32_t entityIdx = m_primary->denseEntityAt(m_primary, i);
-            const ComponentMask& em  = m_reg.Mask(entityIdx);
-            if (!em.Contains(m_required))    continue;
-            if (em.ContainsAny(excludeMask)) continue;
-
-            fn(m_reg.CurrentGeneration(entityIdx),
-               *m_reg.Pool<Ts>().Get(entityIdx)...);
-        }
+        [&]<size_t... Ps>(std::index_sequence<Ps...>) {
+            ((m_primary == m_pools[Ps]
+                ? (EachExcludingWithPrimary<Ps, Excludes...>(fn, excludeMask, std::index_sequence_for<Ts...>{}), true)
+                : false) || ...);
+        }(std::index_sequence_for<Ts...>{});
     }
 
     template<typename... Ts>
     uint32_t ComponentView<Ts...>::Count() const noexcept
     {
+        if constexpr (sizeof...(Ts) == 1)
+            return m_primary->count;
+
         // Exact match count: walk the smallest pool and count entities whose
         // full mask contains every required component. m_primary->count alone
         // is only an upper bound when some primary-pool entities lack a

@@ -157,9 +157,27 @@ namespace Zero
         [[nodiscard]] DirtyRef GetMutable(uint32_t entityIdx, uint32_t currentFrame) noexcept
         {
             ZERO_CORE_ASSERT(entityIdx < sparse.size(), "entityIdx out of sparse bounds");
-            const uint32_t d = sparse[entityIdx];
-            ZERO_CORE_ASSERT(d != UINT32_MAX, "Entity does not have this component");
-            return DirtyRef{ data[d], modifiedFrame[d], currentFrame };
+            if (entityIdx < sparse.size())
+            {
+                const uint32_t d = sparse[entityIdx];
+                ZERO_CORE_ASSERT(d != UINT32_MAX, "Entity does not have this component");
+                if (d != UINT32_MAX && d < data.size())
+                    return DirtyRef{ data[d], modifiedFrame[d], currentFrame };
+            }
+
+            // Release-build safety fallback — prevent OOB / data[UINT32_MAX] dereference.
+            static thread_local uint32_t s_dummyFrame = 0;
+            if constexpr (std::is_default_constructible_v<T>)
+            {
+                static thread_local T s_dummyValue{};
+                return DirtyRef{ s_dummyValue, s_dummyFrame, currentFrame };
+            }
+            else
+            {
+                struct alignas(T) DummyStorage { unsigned char bytes[sizeof(T)]{}; };
+                static thread_local DummyStorage s_dummyStorage{};
+                return DirtyRef{ *reinterpret_cast<T*>(s_dummyStorage.bytes), s_dummyFrame, currentFrame };
+            }
         }
 
         [[nodiscard]] bool Has(uint32_t entityIdx) const noexcept
@@ -168,9 +186,6 @@ namespace Zero
         }
 
         [[nodiscard]] uint32_t Count() const noexcept { return count; }
-
-        // Declared here — defined in EcsRegistry.cpp where CachedViewBase is complete.
-        void InvalidateDependentViews();
 
 #ifdef ECS_VALIDATE
         void ValidateStructure() const
@@ -183,21 +198,12 @@ namespace Zero
             ZERO_CORE_ASSERT(count == static_cast<uint32_t>(data.size()),
                 "Pool count field out of sync with data.size()");
 
-            // Invariant 3: sparse <-> dense round-trip
+            // Invariant 2 & 3: sparse <-> dense round-trip (bijection guarantees no duplicates)
             for (uint32_t i = 0; i < static_cast<uint32_t>(data.size()); ++i)
             {
                 const uint32_t eidx = dense_to_entity[i];
                 ZERO_CORE_ASSERT(eidx < sparse.size(), "dense_to_entity entry out of sparse bounds");
                 ZERO_CORE_ASSERT(sparse[eidx] == i, "sparse/dense mapping broken");
-            }
-
-            // Invariant 2: no duplicate entity in dense array
-            // Uses a bitset over valid entity range — O(N), no heap allocation beyond stack.
-            // This is validation-only code; std::unordered_set is acceptable here.
-            for (uint32_t i = 0; i < static_cast<uint32_t>(dense_to_entity.size()); ++i)
-            {
-                const uint32_t eidx = dense_to_entity[i];
-                ZERO_CORE_ASSERT(sparse[eidx] == i, "duplicate entity index in dense array detected");
             }
         }
 #endif

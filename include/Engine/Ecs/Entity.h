@@ -9,7 +9,7 @@ namespace Zero
     static constexpr uint64_t GenBits   = 12;
     static constexpr uint64_t IndexMask = (1ULL << IndexBits) - 1;
     static constexpr uint64_t GenMask   = ((1ULL << GenBits) - 1) << IndexBits;
-    static constexpr Entity   Invalid   = ~Entity{0};
+    static constexpr Entity   Invalid   = 0;
 
     [[nodiscard]] inline constexpr uint32_t Index(Entity e) noexcept 
     {
@@ -23,6 +23,7 @@ namespace Zero
 
     [[nodiscard]] inline constexpr Entity Make(uint32_t idx, uint32_t gen) noexcept 
     {
-        return (static_cast<uint64_t>(gen) << IndexBits) | idx;
+        return ((static_cast<uint64_t>(gen) << IndexBits) & GenMask)
+             | (static_cast<uint64_t>(idx) & IndexMask);
     }
 }

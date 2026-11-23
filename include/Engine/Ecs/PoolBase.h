@@ -3,7 +3,6 @@
 #include <vector>
 #include <Engine/Core.h>
 
-// Forward declaration — defined in CachedView.h
 namespace Zero { struct CachedViewBase; }
 
 namespace Zero
@@ -14,6 +13,11 @@ namespace Zero
     // m_pools is a unique_ptr array that never reallocates.
     struct PoolBase
     {
+        // Virtual destructor required because EcsRegistry owns ComponentPool<T>
+        // instances via std::unique_ptr<PoolBase>. Defined in EcsRegistry.cpp
+        // to safely detach any surviving CachedViews on teardown.
+        virtual ~PoolBase();
+
         // Called during FlushCommands() to remove one entity from this pool.
         using DestroyEntityFn = void(*)(PoolBase*, uint32_t entityIdx);
         // Called on scene reset — wipes all data but keeps the pool object alive.

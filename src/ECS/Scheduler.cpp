@@ -1,4 +1,6 @@
 #include "pch.h"
+#include <algorithm>
+#include <cstring>
 #include <Engine/Ecs/Scheduler.h>
 #include <Engine/Ecs/EcsRegistry.h>
 #include "JobSystem/BlockingThreadPool.h"
@@ -8,52 +10,44 @@
 
 namespace Zero
 {
+    static bool HasAccessConflict(const SystemAccess& a, const SystemAccess& b) noexcept
+    {
+        return a.writes.ContainsAny(b.reads)  ||
+               a.writes.ContainsAny(b.writes) ||
+               a.reads.ContainsAny(b.writes);
+    }
+
     // BuildExecutionLayers
     //
-    // Greedy layer assignment.
-    // A system can join the current layer if its read/write mask doesn't conflict
-    // with any write mask already committed to that layer.
-    // Conflict definition:
-    //   layerWrites.ContainsAny(system.reads)  — someone writes what we read
-    //   layerWrites.ContainsAny(system.writes) — two writers to same component
-    //   system.writes.ContainsAny(layerWrites) — same, commutative check
+    // DAG longest-path layer assignment preserving registration order on any
+    // data-dependency edge (RAW / WAW / WAR).
+    // If i < j and HasAccessConflict(descs[i], descs[j]), then layerOf[j] >= layerOf[i] + 1,
+    // ensuring a later reader S2 is never scheduled into an earlier layer than a skipped writer S1.
     //
-    // O(N^2) in system count — acceptable for N < 64, runs once at startup.
+    // O(N^2) in system count — runs only on startup / system registration changes.
     std::vector<ExecutionLayer> BuildExecutionLayers(std::span<const SystemDescriptor> descs)
     {
-        std::vector<ExecutionLayer> layers;
-        std::vector<bool> assigned(descs.size(), false);
+        if (descs.empty())
+            return {};
 
-        while (true)
+        std::vector<uint32_t> layerOf(descs.size(), 0);
+        uint32_t maxLayer = 0;
+
+        for (size_t j = 0; j < descs.size(); ++j)
         {
-            ExecutionLayer layer;
-            ComponentMask  layerWrites;
-            ComponentMask  layerReads;
-
-            for (size_t i = 0; i < descs.size(); ++i)
+            uint32_t layer = 0;
+            for (size_t i = 0; i < j; ++i)
             {
-                if (assigned[i]) continue;
-                const auto& d = descs[i];
-
-                const bool conflict =
-                    layerWrites.ContainsAny(d.access.reads)   ||
-                    layerWrites.ContainsAny(d.access.writes)  ||
-                    layerReads.ContainsAny(d.access.writes);
-
-                if (!conflict)
-                {
-                    layer.systems.push_back(&d);
-                    layerWrites.lo |= d.access.writes.lo;
-                    layerWrites.hi |= d.access.writes.hi;
-                    layerReads.lo  |= d.access.reads.lo;
-                    layerReads.hi  |= d.access.reads.hi;
-                    assigned[i] = true;
-                }
+                if (HasAccessConflict(descs[i].access, descs[j].access))
+                    layer = std::max(layer, layerOf[i] + 1u);
             }
-
-            if (layer.systems.empty()) break;
-            layers.push_back(std::move(layer));
+            layerOf[j] = layer;
+            maxLayer = std::max(maxLayer, layer);
         }
+
+        std::vector<ExecutionLayer> layers(maxLayer + 1u);
+        for (size_t i = 0; i < descs.size(); ++i)
+            layers[layerOf[i]].systems.push_back(&descs[i]);
 
         return layers;
     }
@@ -84,6 +78,9 @@ namespace Zero
     {
         const FrameContext ctx{ &reg, dt, currentFrame };
 
+        // Persistent scratch buffer reused across all layers and frames — zero hot-path allocations.
+        static thread_local std::vector<Job> s_jobs;
+
         for (const auto& layer : layers)
         {
             if (layer.systems.empty()) continue;
@@ -96,8 +93,8 @@ namespace Zero
             // complete job N-1 (pending 1->0, semaphore released) while the
             // producer was still enqueuing job N — Wait() then returned early
             // and the next layer raced the still-running job.
-            std::vector<Job> jobs;
-            jobs.reserve(layer.systems.size());
+            s_jobs.clear();
+            s_jobs.reserve(layer.systems.size());
 
             for (const SystemDescriptor* sys : layer.systems)
             {
@@ -114,10 +111,10 @@ namespace Zero
                     c.sys->execute(*c.ctx->reg, c.ctx->dt, c.ctx->currentFrame);
                 };
 
-                jobs.push_back(job);
+                s_jobs.push_back(job);
             }
 
-            pool.enqueue_bulk(jobs, counter);
+            pool.enqueue_bulk(s_jobs, counter);
 
             counter.Wait();
             counter.Release();

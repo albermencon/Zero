@@ -28,6 +28,19 @@ namespace Zero
         {
         }
 
+        ~EcsCommandQueue()
+        {
+            EcsCommand cmd;
+            while (queue.try_dequeue(cmd))
+            {
+                if ((cmd.flags & kEcsFlagHeapPayload) && cmd.heapPtr)
+                {
+                    ::operator delete(const_cast<void*>(cmd.heapPtr),
+                                      std::align_val_t{ cmd.heapAlign });
+                }
+            }
+        }
+
         // Store a component command. Inline if sizeof(T) <= 44, slab otherwise.
         template<typename T>
         void EnqueueAdd(Entity entity, T value)

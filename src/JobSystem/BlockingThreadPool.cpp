@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/Thread/Thread.h"
+#include <Engine/Thread/Thread.h>
 #include "BlockingThreadPool.h"
 #include "JobCounterPool.h"
 #include <Engine/Log.h>
@@ -134,7 +134,9 @@ namespace Zero
     {
 		if (!m_running.load(std::memory_order_acquire) || !m_acceptingJobs.load(std::memory_order_acquire))
 		{
-			ZERO_CORE_ASSERT(false, "Cannot enqueue to inactive or sealed thread pool");
+			ZERO_CORE_WARN("Cannot enqueue job to inactive or sealed thread pool");
+			counter.pending.fetch_add(1, std::memory_order_relaxed);
+			counter.Decrement();
 			return;
 		}
         counter.pending.fetch_add(1, std::memory_order_relaxed);
@@ -146,11 +148,17 @@ namespace Zero
     void BlockingThreadPool::enqueue_bulk(std::span<const Job> jobs, JobCounter &counter)
     {
 		if (jobs.empty())
+		{
+			counter.pending.fetch_add(1, std::memory_order_relaxed);
+			counter.Decrement();
 			return;
+		}
 
 		if (!m_running.load(std::memory_order_acquire) || !m_acceptingJobs.load(std::memory_order_acquire))
 		{
-			ZERO_CORE_ASSERT(false, "Cannot enqueue to inactive or sealed thread pool");
+			ZERO_CORE_WARN("Cannot enqueue_bulk to inactive or sealed thread pool");
+			counter.pending.fetch_add(1, std::memory_order_relaxed);
+			counter.Decrement();
 			return;
 		}
         counter.pending.fetch_add(
@@ -190,13 +198,14 @@ namespace Zero
     }
 
     void BlockingThreadPool::worker_loop(uint32_t threadID)
-	{
-		moodycamel::ConsumerToken token(m_queue);
+ 	{
+  		constexpr size_t WorkerDequeueBatchSize = 1;
+		
+  		moodycamel::ConsumerToken token(m_queue);
 		while (m_running.load(std::memory_order_relaxed) || m_inFlightJobs.load(std::memory_order_acquire) > 0)
 		{
-			Job buffer[64];
-			size_t count = m_queue.wait_dequeue_bulk_timed(token, buffer, 64, 250000); // 250ms
-			
+			Job buffer[WorkerDequeueBatchSize];
+			size_t count = m_queue.wait_dequeue_bulk_timed(token, buffer, WorkerDequeueBatchSize, 250000); // 250ms
 			for (size_t i = 0; i < count; ++i)
 			{
 				ZERO_PROFILE_SCOPE("Job");

@@ -43,7 +43,20 @@
     #define ZR_ALIGNED_FREE(ptr)           _aligned_free(ptr)
 #else
     #include <cstdlib>
-    #define ZR_ALIGNED_MALLOC(size, align) std::aligned_alloc((align), (size))
+    #include <cstddef>
+    namespace Zero::Detail
+    {
+        inline void* AlignedMalloc(std::size_t size, std::size_t align) noexcept
+        {
+            if (align == 0 || (align & (align - 1)) != 0)
+                return nullptr;
+            if (align < sizeof(void*))
+                align = sizeof(void*);
+            const std::size_t alignedSize = (size + align - 1u) & ~(align - 1u);
+            return std::aligned_alloc(align, alignedSize ? alignedSize : align);
+        }
+    }
+    #define ZR_ALIGNED_MALLOC(size, align) ::Zero::Detail::AlignedMalloc((size), (align))
     #define ZR_ALIGNED_FREE(ptr)           std::free(ptr)
 #endif
 

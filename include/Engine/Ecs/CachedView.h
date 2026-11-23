@@ -18,10 +18,40 @@ namespace Zero
     //              OR stale (needsRebuild == true) — never partially rebuilt.
     struct CachedViewBase
     {
-        std::vector<uint32_t> entities;     // rebuilt lazily
-        uint64_t viewVersion  = 0;          // version at last successful Rebuild()
-        uint64_t poolVersion  = 1;          // incremented by pool on structural change
-        bool     needsRebuild = true;       // starts stale — forces first build
+        using RebuildFn = void(*)(CachedViewBase*);
+
+        std::vector<uint32_t>  entities;            // rebuilt on construction & FlushCommands()
+        uint64_t               viewVersion  = 0;    // version at last successful Rebuild()
+        uint64_t               poolVersion  = 1;    // incremented by pool on structural change
+        bool                   needsRebuild = true; // starts stale — forces first build
+
+        const class EcsRegistry* reg       = nullptr;
+        ComponentMask            required{};
+        PoolBase*                primary   = nullptr;
+        RebuildFn                rebuildFn = nullptr;
+        std::vector<PoolBase*>   pools;             // pools this view is registered with
+
+        CachedViewBase() = default;
+        ~CachedViewBase() { DetachAll(); }
+
+        CachedViewBase(const CachedViewBase&)            = delete;
+        CachedViewBase& operator=(const CachedViewBase&) = delete;
+        CachedViewBase(CachedViewBase&&)                 = delete;
+        CachedViewBase& operator=(CachedViewBase&&)      = delete;
+
+        void DetachAll() noexcept
+        {
+            for (PoolBase* p : pools)
+            {
+                if (!p) continue;
+                auto& v = p->dependentViews;
+                v.erase(std::remove(v.begin(), v.end(), this), v.end());
+            }
+            pools.clear();
+            primary   = nullptr;
+            reg       = nullptr;
+            rebuildFn = nullptr;
+        }
 
         void Invalidate() noexcept
         {
@@ -38,43 +68,6 @@ namespace Zero
         }
     };
 
-    // CachedViewRegistration
-    //
-    // RAII guard: pushes CachedViewBase* into pool.dependentViews on construction,
-    // erases it on destruction. CachedView<Ts...> owns one per involved pool.
-    // Move-constructible so it can live inside std::vector.
-    class CachedViewRegistration
-    {
-    public:
-        CachedViewRegistration(PoolBase& pool, CachedViewBase& base)
-            : m_pool(&pool), m_base(&base)
-        {
-            m_pool->dependentViews.push_back(m_base);
-        }
-
-        ~CachedViewRegistration()
-        {
-            if (!m_pool) return;
-            auto& v = m_pool->dependentViews;
-            v.erase(std::remove(v.begin(), v.end(), m_base), v.end());
-        }
-
-        CachedViewRegistration(CachedViewRegistration&& other) noexcept
-            : m_pool(other.m_pool), m_base(other.m_base)
-        {
-            other.m_pool = nullptr;
-            other.m_base = nullptr;
-        }
-
-        CachedViewRegistration& operator=(CachedViewRegistration&&) = delete;
-        CachedViewRegistration(const CachedViewRegistration&)       = delete;
-        CachedViewRegistration& operator=(const CachedViewRegistration&) = delete;
-
-    private:
-        PoolBase*       m_pool;
-        CachedViewBase* m_base;
-    };
-
     // Helper: extract first type from pack
     template<typename First, typename...>
     struct FirstOf { using type = First; };
@@ -82,37 +75,28 @@ namespace Zero
     // CachedView<Ts...>
     //
     // Heap-resident view that caches a filtered entity list across frames.
-    // Rebuild happens lazily on the first Each() call after a structural change.
-    //
-    // EcsRegistry must be a friend to access m_componentMask and Pool<T>().
+    // Built on construction and rebuilt explicitly during single-threaded
+    // EcsRegistry::FlushCommands() so concurrent Each() / Count() reads are race-free.
     template<typename... Ts>
     class CachedView
     {
     public:
         explicit CachedView(class EcsRegistry& reg);
 
-        // Iterate cached entity indices. Triggers a lazy rebuild if stale.
+        // Read-only iteration over cached entity indices — safe for concurrent workers.
         template<typename Fn>
-        void Each(Fn&& fn)
+        void Each(Fn&& fn) const
         {
-            if (m_base->IsStale()) Rebuild();
             for (const uint32_t idx : m_base->entities)
                 fn(idx);
         }
 
-        [[nodiscard]] uint32_t Count()
+        [[nodiscard]] uint32_t Count() const noexcept
         {
-            if (m_base->IsStale()) Rebuild();
             return static_cast<uint32_t>(m_base->entities.size());
         }
 
     private:
-        void Rebuild();
-
-        class EcsRegistry&                       m_reg;
-        ComponentMask                            m_required;
-        PoolBase*                                m_primary = nullptr;
-        std::unique_ptr<CachedViewBase>          m_base;
-        std::vector<CachedViewRegistration>      m_registrations;
+        std::unique_ptr<CachedViewBase> m_base;
     };
 }

@@ -1,6 +1,8 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <array>
+#include <utility>
 #include "PoolBase.h"
 #include "ComponentMask.h"
 #include "CachedView.h"   // FirstOf helper
@@ -35,9 +37,14 @@ namespace Zero
         // smallest pool (which can overcount when some entities in the primary
         // pool lack one of the required components).
         [[nodiscard]] uint32_t Count() const noexcept;
-        [[nodiscard]] uint32_t AproximateCount() const noexcept;
 
     private:
+        template<size_t PrimaryIdx, typename Fn, size_t... Is>
+        void EachWithPrimary(Fn& fn, std::index_sequence<Is...>) const;
+
+        template<size_t PrimaryIdx, typename... Excludes, typename Fn, size_t... Is>
+        void EachExcludingWithPrimary(Fn& fn, ComponentMask excludeMask, std::index_sequence<Is...>) const;
+
         class EcsRegistry&                         m_reg;
         const ComponentMask                        m_required;
         std::array<PoolBase*, sizeof...(Ts)>       m_pools;

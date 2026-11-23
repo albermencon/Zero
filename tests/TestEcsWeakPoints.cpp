@@ -488,3 +488,267 @@ TEST_CASE("ECS: concurrent enqueue from many threads applied by single flush")
         CHECK(c->v == static_cast<int>(i));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tier 1 Fix — Entity::Invalid == 0 and Make() bit masking
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: Entity::Invalid is 0 and Make masks index and generation")
+{
+    CHECK(Zero::Invalid == 0);
+    CHECK(Index(Zero::Invalid) == 0);
+    CHECK(Generation(Zero::Invalid) == 0);
+
+    EcsRegistry reg;
+    CHECK(reg.IsAlive(Zero::Invalid) == false);
+
+    // Overflowing bit widths in Make() must not bleed across fields
+    const Entity masked = Make((1u << 21) | 5u, (1u << 13) | 7u);
+    CHECK(Index(masked) == 5u);
+    CHECK(Generation(masked) == 7u);
+}
+
+// ---------------------------------------------------------------------------
+// Tier 1 Fix — Heap-fallback payload freed on dead entities & unflushed queue
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: Heap-fallback payload freed on dead entity and unflushed queue teardown")
+{
+    {
+        EcsRegistry reg;
+        EcsCommandQueue q(64); // forces heap fallback for HugeComp (256 B)
+
+        Entity e = reg.CreateEntity();
+        (void)reg.Pool<HugeComp>(); // ensure pool exists
+        reg.DestroyEntity(e, q);
+        reg.FlushCommands(q, 1);
+        REQUIRE(reg.IsAlive(e) == false);
+
+        // Enqueue oversized command for now-dead entity; DispatchAdd must free heapPtr.
+        HugeComp hc{};
+        hc.data[0] = 0xAB;
+        q.EnqueueSet(e, hc);
+        reg.FlushCommands(q, 2);
+        CHECK(reg.Pool<HugeComp>().Count() == 0);
+    }
+
+    {
+        // Unflushed EcsCommandQueue destruction must drain and free heap payloads.
+        EcsRegistry reg;
+        Entity e = reg.CreateEntity();
+        EcsCommandQueue q(64);
+        HugeComp hc{};
+        hc.data[0] = 0xCD;
+        q.EnqueueAdd(e, hc);
+        // Intentionally drop q without calling FlushCommands()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tier 1 Fix — FrameSlab capacity rounding & raw Data() + memcpy readback
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: FrameSlab rounds capacity to baseAlignment and Data supports memcpy")
+{
+    FrameSlab slab(100, 64);
+    CHECK(slab.Capacity() == 128);
+
+    BigComp src{};
+    for (size_t i = 0; i < sizeof(src.data); ++i)
+        src.data[i] = static_cast<uint8_t>(i ^ 0x5A);
+
+    const uint32_t off = slab.Store(src);
+    REQUIRE(off != UINT32_MAX);
+    const uint8_t* ptr = slab.Data(off, sizeof(BigComp));
+    REQUIRE(ptr != nullptr);
+
+    BigComp dst{};
+    std::memcpy(&dst, ptr, sizeof(BigComp));
+    for (size_t i = 0; i < sizeof(src.data); ++i)
+        CHECK(dst.data[i] == src.data[i]);
+}
+
+// ---------------------------------------------------------------------------
+// Tier 1 Fix — Scheduler DAG longest-path ordering prevents S2 jumping ahead of S1
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: Scheduler DAG ordering forbids later reader jumping ahead of skipped writer")
+{
+    // S0 writes A
+    // S1 reads A, writes B (conflicts with S0 -> Layer 1)
+    // S2 reads B (disjoint from S0, but depends on S1 -> must be Layer 2, NOT Layer 0!)
+    std::vector<int> trace;
+
+    SystemDescriptor s0{
+        "S0",
+        { ComponentMask{}, MaskOf<WeakCompA>() },
+        [&](EcsRegistry&, float, uint32_t) { trace.push_back(0); }
+    };
+    SystemDescriptor s1{
+        "S1",
+        { MaskOf<WeakCompA>(), MaskOf<WeakCompB>() },
+        [&](EcsRegistry&, float, uint32_t) { trace.push_back(1); }
+    };
+    SystemDescriptor s2{
+        "S2",
+        { MaskOf<WeakCompB>(), ComponentMask{} },
+        [&](EcsRegistry&, float, uint32_t) { trace.push_back(2); }
+    };
+
+    std::vector<SystemDescriptor> descs = { s0, s1, s2 };
+    auto layers = BuildExecutionLayers(descs);
+    REQUIRE(layers.size() == 3);
+    CHECK(layers[0].systems.size() == 1);
+    CHECK(layers[1].systems.size() == 1);
+    CHECK(layers[2].systems.size() == 1);
+    CHECK(layers[0].systems[0] == &descs[0]);
+    CHECK(layers[1].systems[0] == &descs[1]);
+    CHECK(layers[2].systems[0] == &descs[2]);
+
+    BlockingThreadPool& pool = BlockingThreadPool::Get();
+    pool.Init(4);
+    EcsRegistry reg;
+    DispatchFrame(layers, reg, pool, 0.016f, 1);
+    REQUIRE(trace.size() == 3);
+    CHECK(trace[0] == 0);
+    CHECK(trace[1] == 1);
+    CHECK(trace[2] == 2);
+}
+
+// ---------------------------------------------------------------------------
+// Tier 1 Fix — CachedView outliving EcsRegistry detaches safely (no UAF) &
+// concurrent Each()/Count() reads are race-free
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: CachedView detaches safely if EcsRegistry is destroyed first")
+{
+    auto reg = std::make_unique<EcsRegistry>();
+    EcsCommandQueue q;
+    Entity e = reg->CreateEntity();
+    reg->AddComponent(e, WeakCompA{ 42 }, q);
+    reg->FlushCommands(q, 1);
+
+    CachedView<WeakCompA> view(*reg);
+    CHECK(view.Count() == 1);
+
+    // Destroy registry BEFORE view goes out of scope
+    reg.reset();
+}
+
+TEST_CASE("ECS: CachedView rebuilt during FlushCommands is safe for concurrent reads")
+{
+    EcsRegistry reg;
+    EcsCommandQueue q;
+
+    for (int i = 0; i < 64; ++i)
+    {
+        Entity e = reg.CreateEntity();
+        reg.AddComponent(e, WeakCompA{ i }, q);
+    }
+    reg.FlushCommands(q, 1);
+
+    CachedView<WeakCompA> view(reg);
+    CHECK(view.Count() == 64);
+
+    // Add more and flush — view must already be rebuilt before Each/Count
+    for (int i = 0; i < 36; ++i)
+    {
+        Entity e = reg.CreateEntity();
+        reg.AddComponent(e, WeakCompA{ 64 + i }, q);
+    }
+    reg.FlushCommands(q, 2);
+
+    std::atomic<uint32_t> totalSeen{ 0 };
+    std::vector<std::thread> readers;
+    for (int t = 0; t < 4; ++t)
+    {
+        readers.emplace_back([&]() {
+            CHECK(view.Count() == 100);
+            uint32_t local = 0;
+            view.Each([&](uint32_t) { ++local; });
+            totalSeen.fetch_add(local, std::memory_order_relaxed);
+        });
+    }
+    for (auto& th : readers) th.join();
+    CHECK(totalSeen.load() == 400);
+}
+
+// ---------------------------------------------------------------------------
+// Tier 1 Fix — BlockingThreadPool sealed pool enqueue_bulk does not deadlock
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: DispatchFrame on sealed BlockingThreadPool does not deadlock")
+{
+    BlockingThreadPool& pool = BlockingThreadPool::Get();
+    pool.Init(4);
+
+    std::atomic<int> runs{ 0 };
+    SystemDescriptor s{
+        "SealedTest",
+        {},
+        [&](EcsRegistry&, float, uint32_t) { runs.fetch_add(1, std::memory_order_relaxed); }
+    };
+    std::vector<SystemDescriptor> descs = { s };
+    auto layers = BuildExecutionLayers(descs);
+
+    pool.StopAcceptingJobs();
+    EcsRegistry reg;
+    DispatchFrame(layers, reg, pool, 0.016f, 1);
+    CHECK(runs.load() == 0);
+
+    // Cleanly shut down the singleton pool so worker threads do not access
+    // m_queue during CRT atexit teardown.
+    pool.Shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// Tier 3 Optimization — ComponentView with non-first primary pool & EachExcluding
+// + DispatchDestroy bit-scan across lo & hi mask words
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: ComponentView non-first primary pool and DispatchDestroy bit-scan")
+{
+    EcsRegistry reg;
+    EcsCommandQueue q;
+
+    // 10 entities with WeakCompA (id 110, hi), 2 also with WeakCompB (id 111, hi),
+    // 1 of those also with WeakCompC (id 112, hi) and TransformComponent (id 0, lo).
+    std::vector<Entity> ents;
+    for (int i = 0; i < 10; ++i)
+    {
+        Entity e = reg.CreateEntity();
+        reg.AddComponent(e, WeakCompA{ i }, q);
+        if (i < 2)
+            reg.AddComponent(e, WeakCompB{ static_cast<float>(i * 10) }, q);
+        if (i == 0)
+        {
+            reg.AddComponent(e, WeakCompC{ 99.0 }, q);
+            reg.AddComponent(e, TransformComponent{}, q);
+        }
+        ents.push_back(e);
+    }
+    reg.FlushCommands(q, 1);
+
+    // WeakCompB is second in template pack but smaller (2 < 10) -> m_primary = WeakCompB
+    ComponentView<WeakCompA, WeakCompB> view(reg);
+    CHECK(view.Count() == 2);
+
+    int sumA = 0;
+    float sumB = 0.0f;
+    view.Each([&](Entity, const WeakCompA& a, const WeakCompB& b) {
+        sumA += a.v;
+        sumB += b.v;
+    });
+    CHECK(sumA == 1);      // 0 + 1
+    CHECK(sumB == 10.0f);  // 0 + 10
+
+    int exclCount = 0;
+    view.EachExcluding<WeakCompC>([&](Entity, const WeakCompA& a, const WeakCompB& b) {
+        CHECK(a.v == 1);
+        CHECK(b.v == 10.0f);
+        ++exclCount;
+    });
+    CHECK(exclCount == 1);
+
+    // Destroy entity 0 (has lo bit 0 and hi bits 110, 111, 112)
+    reg.DestroyEntity(ents[0], q);
+    reg.FlushCommands(q, 2);
+
+    CHECK(reg.Pool<TransformComponent>().Count() == 0);
+    CHECK(reg.Pool<WeakCompC>().Count() == 0);
+    CHECK(reg.Pool<WeakCompA>().Count() == 9);
+    CHECK(reg.Pool<WeakCompB>().Count() == 1);
+}
