@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <Engine/Export.h>
 #include <Engine/Graphics/ResourceHandle.h>
 #include <Engine/Ecs/ComponentMask.h>
 
@@ -16,12 +17,12 @@ namespace Zero
         BufferHandle   vertexBuffer;
         BufferHandle   indexBuffer;
         PipelineHandle pipeline;
-        uint32_t       indexCount   = 0;
-        uint32_t       firstIndex   = 0;
-        uint32_t       vertexOffset = 0;
-        uint16_t       pipelineId   = 0;
-        uint16_t       materialId   = 0;
-        bool           castsShadow  = true;
+        uint32_t       indexCount    = 0;
+        uint32_t       firstIndex    = 0;
+        uint32_t       vertexOffset  = 0;
+        uint16_t       pipelineId    = 0;
+        uint16_t       materialId    = 0;
+        bool           castsShadow   = true;
         bool           isTransparent = false;
     };
 
@@ -30,15 +31,20 @@ namespace Zero
     class RenderSyncSystem
     {
     public:
-        RenderSyncSystem(Scene& scene, EcsCommandQueue& q, MeshResolverFn resolver);
+        ZERO_API RenderSyncSystem(Scene& scene, MeshResolverFn resolver);
 
-        void Execute(EcsRegistry& reg, float dt, uint32_t currentFrame);
+        ZERO_API void Execute(EcsRegistry& reg,
+                              EcsCommandQueue& queue,
+                              float dt,
+                              uint64_t epoch);
 
-        SystemDescriptor Descriptor();
+        [[nodiscard]] ZERO_API SystemDescriptor Descriptor();
+
+        [[nodiscard]] uint64_t LastSyncedEpoch() const noexcept { return m_lastSyncedEpoch; }
 
     private:
-        Scene&           m_scene;
-        EcsCommandQueue& m_queue;
-        MeshResolverFn   m_resolver;
+        Scene&         m_scene;
+        MeshResolverFn m_resolver;
+        uint64_t       m_lastSyncedEpoch = 0;
     };
 }

@@ -128,6 +128,15 @@ namespace Zero
 			copy.Normalize();
 			return copy;
 		}
+
+		[[nodiscard]] static constexpr Vec3 Lerp(const Vec3& a, const Vec3& b, float t) noexcept
+		{
+			return {
+				a.x + (b.x - a.x) * t,
+				a.y + (b.y - a.y) * t,
+				a.z + (b.z - a.z) * t
+			};
+		}
 	};
 
 	constexpr Vec3 operator*(float scalar, const Vec3& v) noexcept

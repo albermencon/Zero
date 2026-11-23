@@ -74,6 +74,7 @@ namespace Zero
         // Resize once — all unique_ptrs default to nullptr.
         // Never reallocated: all PoolBase* references handed to views remain stable.
         m_pools.resize(MaxComponents);
+        m_destroyedEntities.reserve(256);
     }
 
     // unique_ptr members require a destructor definition here because EntityAllocator
@@ -142,7 +143,7 @@ namespace Zero
     // -----------------------------------------------------------------------
     // DispatchAdd
     // -----------------------------------------------------------------------
-    void EcsRegistry::DispatchAdd(const EcsCommand& cmd, EcsCommandQueue& q, uint32_t currentFrame)
+    void EcsRegistry::DispatchAdd(const EcsCommand& cmd, EcsCommandQueue& q, uint64_t epoch)
     {
         // Generation check: a stale handle (entity destroyed and its slot
         // recycled since the command was enqueued) must be dropped, not applied
@@ -187,7 +188,7 @@ namespace Zero
             return;
         }
 
-        pool->insertFn(pool, entityIdx, payload, currentFrame);
+        pool->insertFn(pool, entityIdx, payload, epoch, WriteSource::Command);
         m_componentMask[entityIdx].Set(cid);
 
         // Free heap-fallback payloads after they have been copied into the pool.
@@ -211,7 +212,9 @@ namespace Zero
         PoolBase* pool = (cid < MaxComponents) ? m_poolPtr[cid].load(std::memory_order_acquire) : nullptr;
         if (!pool) return;
 
-        pool->destroyEntityFn(pool, entityIdx);
+        // Pass the full Entity handle so the pool populates its typed tombstone
+        // before swap-and-pop removes the component value.
+        pool->destroyEntityFn(pool, cmd.entity);
         m_componentMask[entityIdx].Clear(cid);
     }
 
@@ -229,14 +232,18 @@ namespace Zero
             "DispatchDestroy: invalid entity index");
         if (entityIdx == 0 || entityIdx >= MaxEntities) return;
 
+        m_destroyedEntities.push_back(e);
+
         const ComponentMask& mask = m_componentMask[entityIdx];
 
+        // Remove from every owned pool BEFORE FinalizeDestroy increments the
+        // generation, capturing typed tombstones with component handle values.
         uint64_t lo = mask.lo;
         while (lo != 0)
         {
             const uint32_t bit = static_cast<uint32_t>(std::countr_zero(lo));
             if (PoolBase* pool = m_poolPtr[bit].load(std::memory_order_acquire))
-                pool->destroyEntityFn(pool, entityIdx);
+                pool->destroyEntityFn(pool, e);
             lo &= (lo - 1u);
         }
 
@@ -245,7 +252,7 @@ namespace Zero
         {
             const uint32_t bit = 64u + static_cast<uint32_t>(std::countr_zero(hi));
             if (PoolBase* pool = m_poolPtr[bit].load(std::memory_order_acquire))
-                pool->destroyEntityFn(pool, entityIdx);
+                pool->destroyEntityFn(pool, e);
             hi &= (hi - 1u);
         }
 
@@ -257,20 +264,25 @@ namespace Zero
     // FlushCommands — main thread only
     //
     // 1. Dequeue and dispatch all pending EcsCommands.
+    //    Tombstones accumulate across multiple flushes in a frame and are
+    //    cleared only by ClearTombstones() at end-of-frame.
     // 2. Batched: invalidate dependent CachedViews on dirty pools, then
     //    explicitly rebuild each stale view once while still single-threaded.
     // 3. Reset slab (Invariant 9: only after all commands consumed).
     // -----------------------------------------------------------------------
-    void EcsRegistry::FlushCommands(EcsCommandQueue& q, uint32_t currentFrame)
+    uint64_t EcsRegistry::FlushCommands(EcsCommandQueue& q)
     {
+        uint64_t flushEpoch = 0;
         EcsCommand cmd;
-        while (q.queue.try_dequeue(cmd))
+        while (q.TryDequeue(cmd))
         {
             switch (cmd.type)
             {
             case EcsCommandType::AddComponent:
             case EcsCommandType::SetComponent:
-                DispatchAdd(cmd, q, currentFrame);
+                if (flushEpoch == 0)
+                    flushEpoch = AdvanceEpoch();
+                DispatchAdd(cmd, q, flushEpoch);
                 break;
             case EcsCommandType::RemoveComponent:
                 DispatchRemove(cmd);
@@ -281,7 +293,7 @@ namespace Zero
             }
         }
 
-        // Pass 1: batched invalidation — O(MaxComponents = 128), once per frame.
+        // Pass 1: batched invalidation — O(MaxComponents = 128).
         for (uint32_t i = 0; i < MaxComponents; ++i)
         {
             PoolBase* pool = m_poolPtr[i].load(std::memory_order_acquire);
@@ -309,6 +321,24 @@ namespace Zero
 #ifdef ECS_VALIDATE
         ValidateAll();
 #endif
+
+        return (flushEpoch != 0) ? flushEpoch : CurrentEpoch();
+    }
+
+    // -----------------------------------------------------------------------
+    // ClearTombstones — main thread only, end-of-frame
+    // -----------------------------------------------------------------------
+    void EcsRegistry::ClearTombstones() noexcept
+    {
+        m_destroyedEntities.clear();
+
+        for (uint32_t i = 0; i < MaxComponents; ++i)
+        {
+            PoolBase* pool = m_poolPtr[i].load(std::memory_order_acquire);
+            if (!pool || !pool->hasTombstones) continue;
+            if (pool->clearTombstonesFn)
+                pool->clearTombstonesFn(pool);
+        }
     }
 
 #ifdef ECS_VALIDATE

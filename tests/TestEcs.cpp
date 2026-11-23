@@ -69,7 +69,7 @@ TEST_CASE("ECS: EntityAllocator (Liveness and Generation)")
     // Still alive until flush
     CHECK(reg.IsAlive(e1) == true);
 
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     // Dead after flush
     CHECK(reg.IsAlive(e1) == false);
@@ -88,7 +88,7 @@ TEST_CASE("ECS: Registry Add/Remove/Destroy")
     Entity e1 = reg.CreateEntity();
 
     reg.AddComponent(e1, TestCompA{42}, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     CHECK(reg.Mask(Index(e1)).Has(ComponentId<TestCompA>()) == true);
     auto& poolA = reg.Pool<TestCompA>();
@@ -96,7 +96,7 @@ TEST_CASE("ECS: Registry Add/Remove/Destroy")
     CHECK(poolA.Get(Index(e1))->val == 42);
 
     reg.RemoveComponent<TestCompA>(e1, q);
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     CHECK(reg.Mask(Index(e1)).Has(ComponentId<TestCompA>()) == false);
     CHECK(poolA.Count() == 0);
@@ -110,7 +110,7 @@ TEST_CASE("ECS: CachedView RAII & Batched invalidation")
 
     Entity e1 = reg.CreateEntity();
     reg.AddComponent(e1, TestCompA{1}, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     {
         CachedView<TestCompA> view(reg);
@@ -122,7 +122,7 @@ TEST_CASE("ECS: CachedView RAII & Batched invalidation")
         // Modify structure
         Entity e2 = reg.CreateEntity();
         reg.AddComponent(e2, TestCompA{2}, q);
-        reg.FlushCommands(q, 2);
+        reg.FlushCommands(q);
 
         count = 0;
         view.Each([&](uint32_t) { count++; });
@@ -132,7 +132,7 @@ TEST_CASE("ECS: CachedView RAII & Batched invalidation")
     // Should not crash when flushing after view is destroyed
     Entity e3 = reg.CreateEntity();
     reg.AddComponent(e3, TestCompA{3}, q);
-    reg.FlushCommands(q, 3);
+    reg.FlushCommands(q);
 }
 
 TEST_CASE("ECS: FrameSlab Alignment")
@@ -149,7 +149,7 @@ TEST_CASE("ECS: FrameSlab Alignment")
 
 TEST_CASE("ECS: Scheduler Execution Layers")
 {
-    using ExecFn = void(*)(EcsRegistry&, float, uint32_t);
+    using ExecFn = void(*)(EcsRegistry&, EcsCommandQueue&, float, uint64_t);
     SystemDescriptor sys1 { "Sys1", { MaskOf<TestCompA>(), MaskOf<TestCompB>() }, static_cast<ExecFn>(nullptr) };
     SystemDescriptor sys2 { "Sys2", { MaskOf<TestCompC>(), MaskOf<TestCompA>() }, static_cast<ExecFn>(nullptr) };
     SystemDescriptor sys3 { "Sys3", { MaskOf<TestCompB>(), MaskOf<TestCompC>() }, static_cast<ExecFn>(nullptr) };
@@ -201,7 +201,7 @@ TEST_CASE("ECS: Pool Pointer Stability & No Realloc")
     Entity e = reg.CreateEntity();
     
     reg.AddComponent(e, TestCompA{1}, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
     
     ComponentPool<TestCompA>& pool = reg.Pool<TestCompA>();
     const TestCompA* ptr = pool.Get(Index(e));
@@ -209,7 +209,7 @@ TEST_CASE("ECS: Pool Pointer Stability & No Realloc")
     // Simulating adding 100 more pools doesn't invalidate the pointer because m_pools is a fixed array of unique_ptr
     reg.AddComponent(e, TestCompB{2.0f}, q);
     reg.AddComponent(e, TestCompC{3.0}, q);
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
     
     CHECK(pool.Get(Index(e)) == ptr);
 }
@@ -221,19 +221,20 @@ TEST_CASE("ECS: GetMutable Dirty Marking")
     Entity e = reg.CreateEntity();
     
     reg.AddComponent(e, TestCompA{10}, q);
-    reg.FlushCommands(q, 1);
+    const uint64_t flushEpoch = reg.FlushCommands(q);
     
     auto& pool = reg.Pool<TestCompA>();
-    uint32_t denseIdx = pool.sparse[Index(e)];
+    CHECK(pool.ModifiedEpochOf(Index(e)) == flushEpoch);
+    CHECK(pool.ModifiedSourceOf(Index(e)) == WriteSource::Command);
     
-    CHECK(pool.modifiedFrame[denseIdx] == 1);
-    
+    const uint64_t nextEpoch = reg.AdvanceEpoch();
     {
-        auto mutableRef = pool.GetMutable(Index(e), 5);
+        auto mutableRef = pool.GetMutable(Index(e), nextEpoch, WriteSource::Gameplay);
         mutableRef->val = 20;
-    } // DirtyRef destructor sets modifiedFrame[denseIdx] = 5
+    } // DirtyRef destructor sets modifiedEpoch & modifiedSource
     
-    CHECK(pool.modifiedFrame[denseIdx] == 5);
+    CHECK(pool.ModifiedEpochOf(Index(e)) == nextEpoch);
+    CHECK(pool.ModifiedSourceOf(Index(e)) == WriteSource::Gameplay);
     CHECK(pool.Get(Index(e))->val == 20);
 }
 

@@ -15,6 +15,7 @@ namespace Zero
     class RenderSurfaceResize;
     class ImGuiLayer;
     class EcsRegistry;
+    struct EcsCommandQueue;
     struct SystemDescriptor;
     struct EcsState;
 
@@ -61,6 +62,19 @@ namespace Zero
         // backs its execute() lambda. Game thread only.
         void RegisterEcsSystem(SystemDescriptor desc, std::shared_ptr<void> holder);
 
+        // ECS runtime accessors — valid from Application construction until shutdown.
+        [[nodiscard]] EcsRegistry&           GetEcsRegistry();
+        [[nodiscard]] const EcsRegistry&     GetEcsRegistry() const;
+        [[nodiscard]] EcsCommandQueue&       GetEcsCommandQueue();
+        [[nodiscard]] const EcsCommandQueue& GetEcsCommandQueue() const;
+
+        // Fixed-timestep configuration for the FixedStep schedule phase.
+        void                   SetFixedTimestep(float dtSeconds) noexcept;
+        [[nodiscard]] float    GetFixedTimestep() const noexcept { return m_fixedTimestep; }
+        void                   SetMaxFixedSubsteps(uint32_t maxSubsteps) noexcept;
+        [[nodiscard]] uint32_t GetMaxFixedSubsteps() const noexcept { return m_maxFixedSubsteps; }
+        [[nodiscard]] float    GetInterpolationAlpha() const noexcept { return m_interpolationAlpha; }
+
         static Application& Get();
         ZERO_FORCE_INLINE Window& GetWindow() { return *m_Window; }
 
@@ -84,7 +98,11 @@ namespace Zero
         bool m_Running = true;
         bool m_Minimized = false;
 
-        // pimpl for ecs
+        float    m_fixedTimestep      = 1.0f / 60.0f;
+        uint32_t m_maxFixedSubsteps   = 4;
+        float    m_interpolationAlpha = 1.0f;
+
+        // pimpl for ecs (owns EcsCommandQueue, EcsRegistry, systems, and PhaseSchedule)
         std::unique_ptr<EcsState> m_ecsState;
         std::deque<std::function<void(EcsRegistry&)>> m_ecsCommands;
         Zero::Mutex m_ecsCommandMutex;

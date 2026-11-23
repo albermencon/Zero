@@ -15,9 +15,9 @@
 #include <Engine/Scene/Scene.h>
 
 #include "JobSystem/BlockingThreadPool.h"
-#include "ECS/Components/MeshComponent.h"
-#include "ECS/Components/TransformComponent.h"
-#include "ECS/Components/RenderableHandleComponent.h"
+#include <Engine/Ecs/Components/MeshComponent.h>
+#include <Engine/Ecs/Components/TransformComponent.h>
+#include <Engine/Ecs/Components/RenderableHandleComponent.h>
 
 #include <atomic>
 #include <thread>
@@ -83,18 +83,18 @@ TEST_CASE("ECS: RenderSyncSystem descriptor execute runs the system")
 
     EcsRegistry reg;
     EcsCommandQueue q;
-    RenderSyncSystem sys(*scene, q, resolver);
+    RenderSyncSystem sys(*scene, resolver);
     SystemDescriptor desc = sys.Descriptor();
 
     Entity e = reg.CreateEntity();
     reg.AddComponent(e, MeshComponent{ 1, 2 }, q);
     reg.AddComponent(e, TransformComponent{}, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     // The descriptor's execute is what the scheduler calls — it must be wired
     // to the real Execute(), not an empty lambda.
-    desc.execute(reg, 0.016f, 2);
-    reg.FlushCommands(q, 3);
+    desc.execute(reg, q, 0.016f, reg.AdvanceEpoch());
+    reg.FlushCommands(q);
 
     CHECK(reg.Mask(Index(e)).Has(ComponentId<RenderableHandleComponent>()) == true);
 }
@@ -114,32 +114,33 @@ TEST_CASE("ECS: Scheduler DispatchFrame runs all systems in a layer before retur
     SystemDescriptor sysA;
     sysA.name = "A";
     sysA.access = {};
-    sysA.execute = [](EcsRegistry&, float, uint32_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
+    sysA.execute = [](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
 
     SystemDescriptor sysB;
     sysB.name = "B";
     sysB.access = {};
-    sysB.execute = [](EcsRegistry&, float, uint32_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
+    sysB.execute = [](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
 
     SystemDescriptor sysC;
     sysC.name = "C";
     sysC.access = {};
-    sysC.execute = [](EcsRegistry&, float, uint32_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
+    sysC.execute = [](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
 
     SystemDescriptor sysD;
     sysD.name = "D";
     sysD.access = {};
-    sysD.execute = [](EcsRegistry&, float, uint32_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
+    sysD.execute = [](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { s_runCount.fetch_add(1, std::memory_order_relaxed); };
 
     std::vector<SystemDescriptor> descs = { sysA, sysB, sysC, sysD };
     auto layers = BuildExecutionLayers(descs);
     REQUIRE(layers.size() == 1); // empty masks -> one parallel layer
 
     EcsRegistry reg;
+    EcsCommandQueue q;
     for (int iter = 0; iter < 2000; ++iter)
     {
         s_runCount.store(0, std::memory_order_relaxed);
-        DispatchFrame(layers, reg, pool, 0.016f, static_cast<uint32_t>(iter));
+        DispatchFrame(layers, reg, q, pool, 0.016f);
         CHECK(s_runCount.load(std::memory_order_relaxed) == 4);
     }
 }
@@ -155,22 +156,22 @@ TEST_CASE("ECS: RemoveComponent with a stale handle is a no-op")
 
     Entity e1 = reg.CreateEntity();
     reg.AddComponent(e1, WeakCompA{ 1 }, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     reg.DestroyEntity(e1, q);
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     // e2 reuses e1's index with a bumped generation.
     Entity e2 = reg.CreateEntity();
     REQUIRE(Index(e2) == Index(e1));
     reg.AddComponent(e2, WeakCompA{ 2 }, q);
-    reg.FlushCommands(q, 3);
+    reg.FlushCommands(q);
 
     // Directly enqueue a stale remove command for the dead e1 handle
     // (bypassing reg.RemoveComponent's enqueue-time IsAlive check, which is
     // exactly what happens when the command is enqueued before destruction).
     q.EnqueueRemove(e1, static_cast<uint8_t>(ComponentId<WeakCompA>()));
-    reg.FlushCommands(q, 4);
+    reg.FlushCommands(q);
 
     // e2 must keep its component.
     const WeakCompA* c = reg.Pool<WeakCompA>().Get(Index(e2));
@@ -188,15 +189,15 @@ TEST_CASE("ECS: DestroyEntity with a stale handle is a no-op")
 
     Entity e1 = reg.CreateEntity();
     reg.DestroyEntity(e1, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     Entity e2 = reg.CreateEntity();
     REQUIRE(Index(e2) == Index(e1));
     reg.AddComponent(e2, WeakCompA{ 7 }, q);
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     q.EnqueueDestroy(e1); // stale handle
-    reg.FlushCommands(q, 3);
+    reg.FlushCommands(q);
 
     CHECK(reg.IsAlive(e2) == true);
     CHECK(reg.Pool<WeakCompA>().Get(Index(e2)) != nullptr);
@@ -249,7 +250,7 @@ TEST_CASE("ECS: concurrent first-use of a new component type is safe")
     }
     for (auto& th : threads) th.join();
 
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
     CHECK(reg.Pool<NewComp>().Count() == kThreads);
     for (uint32_t t = 0; t < kThreads; ++t)
         CHECK(reg.Pool<NewComp>().Get(Index(entities[t]))->v == static_cast<int>(t));
@@ -267,7 +268,7 @@ TEST_CASE("ECS: duplicate AddComponent is idempotent (last write wins)")
 
     reg.AddComponent(e, WeakCompA{ 1 }, q);
     reg.AddComponent(e, WeakCompA{ 2 }, q); // duplicate
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     CHECK(reg.Pool<WeakCompA>().Count() == 1);
     REQUIRE(reg.Pool<WeakCompA>().Get(Index(e)) != nullptr);
@@ -285,11 +286,11 @@ TEST_CASE("ECS: SetComponent overwrites existing and inserts missing")
     Entity e2 = reg.CreateEntity();
 
     reg.AddComponent(e1, WeakCompA{ 1 }, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     q.EnqueueSet(e1, WeakCompA{ 99 }); // overwrite
     q.EnqueueSet(e2, WeakCompA{ 42 }); // insert
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     CHECK(reg.Pool<WeakCompA>().Count() == 2);
     REQUIRE(reg.Pool<WeakCompA>().Get(Index(e1)) != nullptr);
@@ -326,7 +327,7 @@ TEST_CASE("ECS: ComponentView::Count matches exact match count")
         Entity e = reg.CreateEntity();
         reg.AddComponent(e, WeakCompB{ float(i) }, q);
     }
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     ComponentView<WeakCompA, WeakCompB> view(reg);
     CHECK(view.Count() == 3); // exact matches only
@@ -351,13 +352,13 @@ TEST_CASE("ECS: CachedView rebuilds correctly after removal (swap-and-pop)")
     reg.AddComponent(e1, WeakCompA{ 1 }, q);
     reg.AddComponent(e2, WeakCompA{ 2 }, q);
     reg.AddComponent(e3, WeakCompA{ 3 }, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     CachedView<WeakCompA> view(reg);
     CHECK(view.Count() == 3);
 
     reg.RemoveComponent<WeakCompA>(e2, q);
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     CHECK(view.Count() == 2);
     uint32_t seen = 0;
@@ -401,7 +402,7 @@ TEST_CASE("ECS: command queue heap-falls back when slab is exhausted")
     HugeComp hc{};
     for (size_t i = 0; i < sizeof(hc.data); ++i) hc.data[i] = static_cast<uint8_t>(i);
     reg.AddComponent(e, hc, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     const HugeComp* got = reg.Pool<HugeComp>().Get(Index(e));
     REQUIRE(got != nullptr);
@@ -421,7 +422,7 @@ TEST_CASE("ECS: oversized component round-trips through the FrameSlab")
     BigComp b{};
     for (size_t i = 0; i < sizeof(b.data); ++i) b.data[i] = static_cast<uint8_t>(i * 2 + 1);
     reg.AddComponent(e, b, q);
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     const BigComp* got = reg.Pool<BigComp>().Get(Index(e));
     REQUIRE(got != nullptr);
@@ -443,7 +444,7 @@ TEST_CASE("ECS: generation wrap retires slots — fresh entities stay alive")
     {
         Entity e = reg.CreateEntity();
         reg.DestroyEntity(e, q);
-        reg.FlushCommands(q, i + 1);
+        reg.FlushCommands(q);
     }
 
     Entity fresh = reg.CreateEntity();
@@ -479,7 +480,7 @@ TEST_CASE("ECS: concurrent enqueue from many threads applied by single flush")
     }
     for (auto& th : threads) th.join();
 
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
     CHECK(reg.Pool<WeakCompA>().Count() == kThreads * kPerThread);
     for (uint32_t i = 0; i < kThreads * kPerThread; ++i)
     {
@@ -519,14 +520,14 @@ TEST_CASE("ECS: Heap-fallback payload freed on dead entity and unflushed queue t
         Entity e = reg.CreateEntity();
         (void)reg.Pool<HugeComp>(); // ensure pool exists
         reg.DestroyEntity(e, q);
-        reg.FlushCommands(q, 1);
+        reg.FlushCommands(q);
         REQUIRE(reg.IsAlive(e) == false);
 
         // Enqueue oversized command for now-dead entity; DispatchAdd must free heapPtr.
         HugeComp hc{};
         hc.data[0] = 0xAB;
         q.EnqueueSet(e, hc);
-        reg.FlushCommands(q, 2);
+        reg.FlushCommands(q);
         CHECK(reg.Pool<HugeComp>().Count() == 0);
     }
 
@@ -578,17 +579,17 @@ TEST_CASE("ECS: Scheduler DAG ordering forbids later reader jumping ahead of ski
     SystemDescriptor s0{
         "S0",
         { ComponentMask{}, MaskOf<WeakCompA>() },
-        [&](EcsRegistry&, float, uint32_t) { trace.push_back(0); }
+        [&](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { trace.push_back(0); }
     };
     SystemDescriptor s1{
         "S1",
         { MaskOf<WeakCompA>(), MaskOf<WeakCompB>() },
-        [&](EcsRegistry&, float, uint32_t) { trace.push_back(1); }
+        [&](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { trace.push_back(1); }
     };
     SystemDescriptor s2{
         "S2",
         { MaskOf<WeakCompB>(), ComponentMask{} },
-        [&](EcsRegistry&, float, uint32_t) { trace.push_back(2); }
+        [&](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { trace.push_back(2); }
     };
 
     std::vector<SystemDescriptor> descs = { s0, s1, s2 };
@@ -604,7 +605,8 @@ TEST_CASE("ECS: Scheduler DAG ordering forbids later reader jumping ahead of ski
     BlockingThreadPool& pool = BlockingThreadPool::Get();
     pool.Init(4);
     EcsRegistry reg;
-    DispatchFrame(layers, reg, pool, 0.016f, 1);
+    EcsCommandQueue q;
+    DispatchFrame(layers, reg, q, pool, 0.016f);
     REQUIRE(trace.size() == 3);
     CHECK(trace[0] == 0);
     CHECK(trace[1] == 1);
@@ -621,7 +623,7 @@ TEST_CASE("ECS: CachedView detaches safely if EcsRegistry is destroyed first")
     EcsCommandQueue q;
     Entity e = reg->CreateEntity();
     reg->AddComponent(e, WeakCompA{ 42 }, q);
-    reg->FlushCommands(q, 1);
+    reg->FlushCommands(q);
 
     CachedView<WeakCompA> view(*reg);
     CHECK(view.Count() == 1);
@@ -640,7 +642,7 @@ TEST_CASE("ECS: CachedView rebuilt during FlushCommands is safe for concurrent r
         Entity e = reg.CreateEntity();
         reg.AddComponent(e, WeakCompA{ i }, q);
     }
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     CachedView<WeakCompA> view(reg);
     CHECK(view.Count() == 64);
@@ -651,7 +653,7 @@ TEST_CASE("ECS: CachedView rebuilt during FlushCommands is safe for concurrent r
         Entity e = reg.CreateEntity();
         reg.AddComponent(e, WeakCompA{ 64 + i }, q);
     }
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     std::atomic<uint32_t> totalSeen{ 0 };
     std::vector<std::thread> readers;
@@ -680,14 +682,15 @@ TEST_CASE("ECS: DispatchFrame on sealed BlockingThreadPool does not deadlock")
     SystemDescriptor s{
         "SealedTest",
         {},
-        [&](EcsRegistry&, float, uint32_t) { runs.fetch_add(1, std::memory_order_relaxed); }
+        [&](EcsRegistry&, EcsCommandQueue&, float, uint64_t) { runs.fetch_add(1, std::memory_order_relaxed); }
     };
     std::vector<SystemDescriptor> descs = { s };
     auto layers = BuildExecutionLayers(descs);
 
     pool.StopAcceptingJobs();
     EcsRegistry reg;
-    DispatchFrame(layers, reg, pool, 0.016f, 1);
+    EcsCommandQueue q;
+    DispatchFrame(layers, reg, q, pool, 0.016f);
     CHECK(runs.load() == 0);
 
     // Cleanly shut down the singleton pool so worker threads do not access
@@ -720,7 +723,7 @@ TEST_CASE("ECS: ComponentView non-first primary pool and DispatchDestroy bit-sca
         }
         ents.push_back(e);
     }
-    reg.FlushCommands(q, 1);
+    reg.FlushCommands(q);
 
     // WeakCompB is second in template pack but smaller (2 < 10) -> m_primary = WeakCompB
     ComponentView<WeakCompA, WeakCompB> view(reg);
@@ -745,7 +748,7 @@ TEST_CASE("ECS: ComponentView non-first primary pool and DispatchDestroy bit-sca
 
     // Destroy entity 0 (has lo bit 0 and hi bits 110, 111, 112)
     reg.DestroyEntity(ents[0], q);
-    reg.FlushCommands(q, 2);
+    reg.FlushCommands(q);
 
     CHECK(reg.Pool<TransformComponent>().Count() == 0);
     CHECK(reg.Pool<WeakCompC>().Count() == 0);

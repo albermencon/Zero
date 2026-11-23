@@ -19,18 +19,23 @@
 #include <Engine/Ecs/EcsRegistry.h>
 #include <Engine/Ecs/EcsCommandQueue.h>
 #include <Engine/Ecs/Scheduler.h>
+#include <algorithm>
 #include <cstdint>
 #include <thread>
 #include <chrono>
 
 namespace Zero
 {
-    // ECS registration state — pimpl'd so Application.h stays free of ECS
-    // headers. Populated by PushComponent/PushSystem commands on the game thread.
+    // ECS runtime & registration state — pimpl'd so Application.h stays free of
+    // heavy ECS headers. Declared in RAII order: systemHolders destroy first
+    // (detaching any CachedViews), then registry, then commandQueue.
     struct EcsState
     {
+        EcsCommandQueue                     commandQueue;
+        EcsRegistry                         registry;
         std::vector<SystemDescriptor>       systemDescriptors;
         std::vector<std::shared_ptr<void>>  systemHolders; // keeps system instances alive
+        PhaseSchedule                       schedule;
         bool                                systemDirty = false;
     };
 
@@ -108,6 +113,7 @@ namespace Zero
         BlockingThreadPool::Get().Shutdown();
 
         m_LayerStack.reset();
+        m_ecsState.reset();
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
     }
@@ -156,6 +162,41 @@ namespace Zero
         m_ecsState->systemDirty = true;
     }
 
+    EcsRegistry& Application::GetEcsRegistry()
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        return m_ecsState->registry;
+    }
+
+    const EcsRegistry& Application::GetEcsRegistry() const
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        return m_ecsState->registry;
+    }
+
+    EcsCommandQueue& Application::GetEcsCommandQueue()
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        return m_ecsState->commandQueue;
+    }
+
+    const EcsCommandQueue& Application::GetEcsCommandQueue() const
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        return m_ecsState->commandQueue;
+    }
+
+    void Application::SetFixedTimestep(float dtSeconds) noexcept
+    {
+        if (dtSeconds > 0.0f)
+            m_fixedTimestep = dtSeconds;
+    }
+
+    void Application::SetMaxFixedSubsteps(uint32_t maxSubsteps) noexcept
+    {
+        m_maxFixedSubsteps = std::max(1u, maxSubsteps);
+    }
+
     void Application::Run()
     {
         ZERO_CORE_TRACE("Application started.");
@@ -163,19 +204,19 @@ namespace Zero
 
         Time::Init();
 
-        // ECS runtime — owned by the engine. Game code populates it through
-        // PushComponent<T> / PushSystem<T>, which enqueue commands drained below.
-        EcsCommandQueue ecsQ;
-        EcsRegistry ecsReg;
+        EcsRegistry&     ecsReg = m_ecsState->registry;
+        EcsCommandQueue& ecsQ   = m_ecsState->commandQueue;
 
         // Execute anything queued during app construction / layer attach.
         FlushEcsCommands(ecsReg);
-
-        // Execution graph from all systems registered so far.
-        std::vector<ExecutionLayer> layers = BuildExecutionLayers(m_ecsState->systemDescriptors);
+        m_ecsState->schedule    = BuildPhaseSchedule(m_ecsState->systemDescriptors);
+        m_ecsState->systemDirty = false;
+        ecsReg.FlushCommands(ecsQ);
 
         // Main loop
-        uint64_t frameIndex = 0;
+        uint64_t frameIndex      = 0;
+        float    fixedAccumulator = 0.0f;
+
         while (m_Running)
         {
             m_Window->PollEvents(); // Poll OS events
@@ -189,26 +230,65 @@ namespace Zero
                 continue;
             }
 
-            float dt = Time::GetDeltaTime();
+            const float rawDt = Time::GetDeltaTime();
+            const float maxFrameDt = m_fixedTimestep * static_cast<float>(m_maxFixedSubsteps);
+            const float dt = std::clamp(rawDt, 0.0f, maxFrameDt);
 
             // Execute ECS registration commands pushed since the last frame
             // (PushComponent / PushSystem — safe from any thread).
             FlushEcsCommands(ecsReg);
             if (m_ecsState->systemDirty)
             {
-                layers = BuildExecutionLayers(m_ecsState->systemDescriptors);
+                m_ecsState->schedule    = BuildPhaseSchedule(m_ecsState->systemDescriptors);
                 m_ecsState->systemDirty = false;
             }
 
-            // Game logic
+            // Game layer updates
             for (auto& layer : *m_LayerStack)
             {
                 layer->OnUpdate(dt);
             }
 
-            // ECS frame
-            ecsReg.FlushCommands(ecsQ, static_cast<uint32_t>(frameIndex));
-            DispatchFrame(layers, ecsReg, BlockingThreadPool::Get(), dt, static_cast<uint32_t>(frameIndex));
+            // Commit structural commands enqueued by layers before PrePhysics.
+            ecsReg.FlushCommands(ecsQ);
+
+            // Phase 1: PrePhysics (variable dt — gameplay, AI, kinematic intent)
+            DispatchPhase(m_ecsState->schedule, SchedulePhase::PrePhysics,
+                          ecsReg, ecsQ, BlockingThreadPool::Get(), dt);
+            ecsReg.FlushCommands(ecsQ);
+
+            // Phase 2: FixedStep (fixed-dt accumulator — physics pre-sync, step, write-back)
+            fixedAccumulator += dt;
+            uint32_t substeps = 0;
+            while (fixedAccumulator >= m_fixedTimestep && substeps < m_maxFixedSubsteps)
+            {
+                DispatchPhase(m_ecsState->schedule, SchedulePhase::FixedStep,
+                              ecsReg, ecsQ, BlockingThreadPool::Get(), m_fixedTimestep);
+                ecsReg.FlushCommands(ecsQ);
+                fixedAccumulator -= m_fixedTimestep;
+                ++substeps;
+            }
+            if (substeps == m_maxFixedSubsteps && fixedAccumulator >= m_fixedTimestep)
+                fixedAccumulator = 0.0f;
+
+            const float alpha = (m_fixedTimestep > 0.0f)
+                ? std::clamp(fixedAccumulator / m_fixedTimestep, 0.0f, 1.0f)
+                : 1.0f;
+            m_interpolationAlpha = alpha;
+            ecsReg.SetInterpolationAlpha(alpha);
+
+            // Phase 3: PostPhysics (variable dt — camera follow, post-sim gameplay)
+            DispatchPhase(m_ecsState->schedule, SchedulePhase::PostPhysics,
+                          ecsReg, ecsQ, BlockingThreadPool::Get(), dt);
+            ecsReg.FlushCommands(ecsQ);
+
+            // Phase 4: RenderSync (main-thread Scene synchronization)
+            DispatchPhase(m_ecsState->schedule, SchedulePhase::RenderSync,
+                          ecsReg, ecsQ, BlockingThreadPool::Get(), dt);
+            ecsReg.FlushCommands(ecsQ);
+
+            // End-of-frame tombstone clear — preserves pool capacity (zero allocations).
+            ecsReg.ClearTombstones();
 
             m_ImGuiLayer->Begin();
 

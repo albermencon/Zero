@@ -14,8 +14,9 @@ namespace Zero
 
     Scene::~Scene() { delete m_impl; }
 
-    std::string_view Scene::GetName() const noexcept { return m_impl->name; }
-    SceneId          Scene::GetId()   const noexcept { return m_impl->id; }
+    std::string_view Scene::GetName()            const noexcept { return m_impl->name; }
+    SceneId          Scene::GetId()              const noexcept { return m_impl->id; }
+    uint32_t         Scene::GetRenderableCount() const noexcept { return m_impl->renderables.Count(); }
 
     RenderableHandle Scene::AddRenderable(const RenderableDesc& desc)
     {

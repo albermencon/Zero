@@ -121,6 +121,8 @@ namespace Zero
         // Insert — returns assigned slot id (= RenderableHandle.id)
         uint32_t Insert(uint32_t slotId, const RenderableDescPOD& d)
         {
+            if (slotId >= slotToIndex.size())
+                slotToIndex.resize(slotId + 1, UINT32_MAX);
             uint32_t idx = Count();
             slotToIndex[slotId] = idx;
             indexToSlot.push_back(slotId);
@@ -158,7 +160,9 @@ namespace Zero
         // Swap-and-pop removal — O(1), keeps arrays dense
         void Remove(uint32_t slot)
         {
+            if (slot >= slotToIndex.size()) return;
             uint32_t idx = slotToIndex[slot];
+            if (idx == UINT32_MAX || Count() == 0) return;
             uint32_t last = Count() - 1;
 
             if (idx != last)
@@ -204,13 +208,17 @@ namespace Zero
 
         void UpdateTransform(uint32_t slot, const Mat4& t)
         {
+            if (slot >= slotToIndex.size()) return;
             uint32_t idx = slotToIndex[slot];
+            if (idx == UINT32_MAX) return;
             transforms[idx] = t;
         }
 
         void UpdateBounds(uint32_t slot, const Vec3& mn, const Vec3& mx)
         {
+            if (slot >= slotToIndex.size()) return;
             uint32_t idx = slotToIndex[slot];
+            if (idx == UINT32_MAX) return;
             boundsMinX[idx] = mn.x; boundsMinY[idx] = mn.y; boundsMinZ[idx] = mn.z;
             boundsMaxX[idx] = mx.x; boundsMaxY[idx] = mx.y; boundsMaxZ[idx] = mx.z;
         }

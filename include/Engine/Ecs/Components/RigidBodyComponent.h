@@ -1,19 +1,19 @@
 #pragma once
 #include <Engine/Ecs/ComponentTrait.h>
 #include <Engine/Math/Vec3.h>
+#include <Engine/Physics/PhysicsSystemAPI.h>
 #include <type_traits>
 
 namespace Zero
 {
     // Hot path — written every physics tick.
-    // Padding to reach a cache-friendly size without spilling into a second line
-    // when packed with adjacent dense-array entries.
+    // Keeps Jolt decoupled from ECS via the opaque BodyID handle.
     struct RigidBodyComponent
     {
-        Vec3  linearVelocity;
-        float invMass;
-        Vec3  angularVelocity;
-        float _pad;                 // explicit — sizeof = 32 bytes
+        Vec3   linearVelocity  = { 0.0f, 0.0f, 0.0f };
+        float  invMass         = 0.0f;
+        Vec3   angularVelocity = { 0.0f, 0.0f, 0.0f };
+        BodyID bodyId          = kInvalidBodyID;      // opaque handle — sizeof = 32 bytes
     };
     static_assert(std::is_trivially_copyable_v<RigidBodyComponent>);
     static_assert(sizeof(RigidBodyComponent) == 32);

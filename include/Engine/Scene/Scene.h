@@ -48,10 +48,11 @@ namespace Zero
 
         void SetGPUBatch(const GPUDrivenBatch& batch);
 
-        // Query 
+        // Query
 
-        [[nodiscard]] std::string_view GetName() const noexcept;
-        [[nodiscard]] SceneId          GetId()   const noexcept;
+        [[nodiscard]] std::string_view GetName()            const noexcept;
+        [[nodiscard]] SceneId          GetId()              const noexcept;
+        [[nodiscard]] uint32_t         GetRenderableCount() const noexcept;
 
     private:
         friend class SceneManager;

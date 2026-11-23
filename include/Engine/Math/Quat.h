@@ -96,6 +96,62 @@ namespace Zero
 			return Identity();
 		}
 
+		[[nodiscard]] static constexpr float Dot(const Quat& a, const Quat& b) noexcept
+		{
+			return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+		}
+
+		[[nodiscard]] static Quat Nlerp(const Quat& a, const Quat& b, float t) noexcept
+		{
+			float sign = (Dot(a, b) < 0.0f) ? -1.0f : 1.0f;
+			const float oneMinusT = 1.0f - t;
+			Quat res{
+				a.x * oneMinusT + (b.x * sign) * t,
+				a.y * oneMinusT + (b.y * sign) * t,
+				a.z * oneMinusT + (b.z * sign) * t,
+				a.w * oneMinusT + (b.w * sign) * t
+			};
+			res.Normalize();
+			return res;
+		}
+
+		[[nodiscard]] static Quat Slerp(const Quat& a, const Quat& b, float t) noexcept
+		{
+			float cosTheta = Dot(a, b);
+			Quat target = b;
+			if (cosTheta < 0.0f)
+			{
+				cosTheta = -cosTheta;
+				target = { -b.x, -b.y, -b.z, -b.w };
+			}
+
+			if (cosTheta > 0.9995f)
+			{
+				const float oneMinusT = 1.0f - t;
+				Quat res{
+					a.x * oneMinusT + target.x * t,
+					a.y * oneMinusT + target.y * t,
+					a.z * oneMinusT + target.z * t,
+					a.w * oneMinusT + target.w * t
+				};
+				res.Normalize();
+				return res;
+			}
+
+			if (cosTheta > 1.0f) cosTheta = 1.0f;
+			const float theta = std::acos(cosTheta);
+			const float invSinTheta = 1.0f / std::sin(theta);
+			const float w0 = std::sin((1.0f - t) * theta) * invSinTheta;
+			const float w1 = std::sin(t * theta) * invSinTheta;
+
+			return {
+				a.x * w0 + target.x * w1,
+				a.y * w0 + target.y * w1,
+				a.z * w0 + target.z * w1,
+				a.w * w0 + target.w * w1
+			};
+		}
+
 		[[nodiscard]] Mat4 ToMat4() const noexcept
 		{
 			Mat4 res = Mat4::Identity();

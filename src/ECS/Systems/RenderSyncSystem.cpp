@@ -1,29 +1,84 @@
 #include "pch.h"
+#include <algorithm>
 #include <Engine/Ecs/Systems/RenderSyncSystem.h>
 #include <Engine/Ecs/EcsRegistry.h>
+#include <Engine/Ecs/EcsCommandQueue.h>
 #include <Engine/Ecs/Scheduler.h>
+#include <Engine/Ecs/Components/TransformComponent.h>
+#include <Engine/Ecs/Components/PreviousTransformComponent.h>
+#include <Engine/Ecs/Components/MeshComponent.h>
+#include <Engine/Ecs/Components/BoundsComponent.h>
+#include <Engine/Ecs/Components/RenderableHandleComponent.h>
 #include <Engine/Scene/Scene.h>
 #include <Engine/Scene/SceneTypes.h>
-#include "ECS/Components/TransformComponent.h"
-#include "ECS/Components/MeshComponent.h"
-#include "ECS/Components/BoundsComponent.h"
-#include "ECS/Components/RenderableHandleComponent.h"
 
 namespace Zero
 {
-    RenderSyncSystem::RenderSyncSystem(Scene& scene, EcsCommandQueue& q, MeshResolverFn resolver)
+    RenderSyncSystem::RenderSyncSystem(Scene& scene, MeshResolverFn resolver)
         : m_scene(scene)
-        , m_queue(q)
         , m_resolver(std::move(resolver))
     {
     }
 
-    void RenderSyncSystem::Execute(EcsRegistry& reg, float /*dt*/, uint32_t currentFrame)
+    void RenderSyncSystem::Execute(EcsRegistry& reg,
+                                   EcsCommandQueue& queue,
+                                   float /*dt*/,
+                                   uint64_t epoch)
     {
+        auto& handlePool = reg.Pool<RenderableHandleComponent>();
+        const auto& prevPool   = reg.Pool<PreviousTransformComponent>();
+        const auto& boundsPool = reg.Pool<BoundsComponent>();
+        const float alpha      = reg.InterpolationAlpha();
+
         // ---------------------------------------------------------------
-        // Pass A — Additions
+        // Pass A — Removals (tombstones + mesh-stripped live entities)
+        //
+        // 1. Drain RenderableHandleComponent tombstones populated during
+        //    FlushCommands() when entities are destroyed or handles are
+        //    explicitly removed. This prevents destroyed entities from
+        //    leaking Scene renderables.
+        // 2. For live entities whose MeshComponent was removed while they
+        //    still carry a RenderableHandleComponent, remove from Scene,
+        //    zero the handle in-place (preventing double-remove on the
+        //    subsequent tombstone), and enqueue handle component removal.
+        // ---------------------------------------------------------------
+        {
+            for (const auto& removed : handlePool.Removed())
+            {
+                if (removed.value.id == 0) continue;
+
+                RenderableHandle h;
+                h.id = removed.value.id;
+                m_scene.RemoveRenderable(h);
+            }
+
+            auto handleWrite = handlePool.WriteView(epoch, WriteSource::System);
+            const uint32_t hCount = handleWrite.Count();
+            for (uint32_t i = 0; i < hCount; ++i)
+            {
+                const uint32_t entityIdx = handleWrite.entities[i];
+                if (reg.Mask(entityIdx).Has(ComponentId<MeshComponent>())) continue;
+
+                if (handleWrite.data[i].id != 0)
+                {
+                    RenderableHandle h;
+                    h.id = handleWrite.data[i].id;
+                    m_scene.RemoveRenderable(h);
+
+                    // Clear id before enqueueing removal so the resulting tombstone is a no-op.
+                    handleWrite.data[i].id = 0;
+                    handleWrite.MarkDirty(i);
+                }
+
+                Entity e = reg.CurrentGeneration(entityIdx);
+                reg.RemoveComponent<RenderableHandleComponent>(e, queue);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Pass B — Additions
         // Entities with MeshComponent + TransformComponent but no
-        // RenderableHandleComponent → need a Scene renderable created.
+        // RenderableHandleComponent -> create Scene renderable.
         // ---------------------------------------------------------------
         {
             ComponentView<MeshComponent, TransformComponent> view(reg);
@@ -34,10 +89,16 @@ namespace Zero
                 if (!m_resolver(mesh.meshId, mesh.materialId, resolved))
                     return;
 
+                const uint32_t entityIdx = Index(e);
+                const PreviousTransformComponent* prev = prevPool.Get(entityIdx);
+                const Mat4 worldMat = prev
+                    ? prev->InterpolateTo(tf, alpha).ToMat4()
+                    : tf.ToMat4();
+
                 RenderableDesc desc;
                 desc.boundsMin     = {};
                 desc.boundsMax     = {};
-                desc.transform     = tf.localToWorld;
+                desc.transform     = worldMat;
                 desc.vertexBuffer  = resolved.vertexBuffer;
                 desc.indexBuffer   = resolved.indexBuffer;
                 desc.pipeline      = resolved.pipeline;
@@ -49,97 +110,84 @@ namespace Zero
                 desc.castsShadow   = resolved.castsShadow;
                 desc.isTransparent = resolved.isTransparent;
 
-                const uint32_t entityIdx = Index(e);
-
-                const BoundsComponent* bounds = reg.Pool<BoundsComponent>().Get(entityIdx);
-                if (bounds)
+                if (const BoundsComponent* bounds = boundsPool.Get(entityIdx))
                 {
                     desc.boundsMin = bounds->min;
                     desc.boundsMax = bounds->max;
                 }
 
                 RenderableHandle handle = m_scene.AddRenderable(desc);
-                reg.AddComponent(e, RenderableHandleComponent{ handle.id }, m_queue);
+                reg.AddComponent(e, RenderableHandleComponent{ handle.id }, queue);
             });
         }
 
         // ---------------------------------------------------------------
-        // Pass B — Dirty updates
-        // Walk TransformComponent and BoundsComponent dense arrays.
-        // Only emit Scene updates for slots written this frame.
+        // Pass C — Dirty updates (monotonic epoch + TRS interpolation)
+        // Walk TransformComponent and BoundsComponent via bulk-span ReadView.
+        // Emit Scene updates when modifiedEpoch > m_lastSyncedEpoch, or
+        // when an interpolated dynamic entity has prev != curr.
         // ---------------------------------------------------------------
         {
-            auto& handlePool = reg.Pool<RenderableHandleComponent>();
-            auto& tfPool     = reg.Pool<TransformComponent>();
-
-            const uint32_t tfCount = tfPool.Count();
+            const auto tfView = reg.Pool<TransformComponent>().ReadView();
+            const uint32_t tfCount = tfView.Count();
             for (uint32_t i = 0; i < tfCount; ++i)
             {
-                if (tfPool.modifiedFrame[i] != currentFrame) continue;
-
-                const uint32_t entityIdx = tfPool.dense_to_entity[i];
+                const uint32_t entityIdx = tfView.entities[i];
                 const RenderableHandleComponent* rh = handlePool.Get(entityIdx);
-                if (!rh) continue;
+                if (!rh || rh->id == 0) continue;
+
+                const PreviousTransformComponent* prev = prevPool.Get(entityIdx);
+                const bool epochDirty   = tfView.IsDirtySince(i, m_lastSyncedEpoch);
+                const bool interpActive = prev != nullptr && prev->DiffersFrom(tfView.data[i]);
+
+                if (!epochDirty && !interpActive) continue;
+
+                const Mat4 worldMat = prev
+                    ? prev->InterpolateTo(tfView.data[i], alpha).ToMat4()
+                    : tfView.data[i].ToMat4();
 
                 RenderableHandle h;
                 h.id = rh->id;
-                m_scene.UpdateTransform(h, tfPool.data[i].localToWorld);
+                m_scene.UpdateTransform(h, worldMat);
             }
         }
 
         {
-            auto& handlePool = reg.Pool<RenderableHandleComponent>();
-            auto& boundsPool = reg.Pool<BoundsComponent>();
-
-            const uint32_t bCount = boundsPool.Count();
+            const auto boundsView = boundsPool.ReadView();
+            const uint32_t bCount = boundsView.Count();
             for (uint32_t i = 0; i < bCount; ++i)
             {
-                if (boundsPool.modifiedFrame[i] != currentFrame) continue;
+                if (!boundsView.IsDirtySince(i, m_lastSyncedEpoch)) continue;
 
-                const uint32_t entityIdx = boundsPool.dense_to_entity[i];
+                const uint32_t entityIdx = boundsView.entities[i];
                 const RenderableHandleComponent* rh = handlePool.Get(entityIdx);
-                if (!rh) continue;
+                if (!rh || rh->id == 0) continue;
 
                 RenderableHandle h;
                 h.id = rh->id;
-                m_scene.UpdateBounds(h, boundsPool.data[i].min, boundsPool.data[i].max);
+                m_scene.UpdateBounds(h, boundsView.data[i].min, boundsView.data[i].max);
             }
         }
 
-        // ---------------------------------------------------------------
-        // Pass C — Removals
-        // Entities with RenderableHandleComponent but no MeshComponent
-        // → the mesh was removed, so remove from Scene.
-        // ---------------------------------------------------------------
-        {
-            auto& handlePool = reg.Pool<RenderableHandleComponent>();
-            const uint32_t hCount = handlePool.Count();
-
-            for (uint32_t i = 0; i < hCount; ++i)
-            {
-                const uint32_t entityIdx = handlePool.dense_to_entity[i];
-                if (reg.Mask(entityIdx).Has(ComponentId<MeshComponent>())) continue;
-
-                RenderableHandle h;
-                h.id = handlePool.data[i].id;
-                m_scene.RemoveRenderable(h);
-
-                Entity e = reg.CurrentGeneration(entityIdx);
-                reg.RemoveComponent<RenderableHandleComponent>(e, m_queue);
-            }
-        }
+        m_lastSyncedEpoch = std::max(m_lastSyncedEpoch, reg.CurrentEpoch());
     }
 
     SystemDescriptor RenderSyncSystem::Descriptor()
     {
         SystemDescriptor desc;
-        desc.name = "RenderSyncSystem";
-        desc.access.reads  = MaskOf<TransformComponent, BoundsComponent, MeshComponent, RenderableHandleComponent>();
-        desc.access.writes = MaskOf<RenderableHandleComponent>();
-        // Wire the descriptor to the real system — previously this was a no-op
-        // stub, so the scheduler dispatched a system that did nothing.
-        desc.execute = [this](EcsRegistry& reg, float dt, uint32_t currentFrame) {
-            Execute(reg, dt, currentFrame);
+        desc.name     = "RenderSyncSystem";
+        desc.phase    = SchedulePhase::RenderSync;
+        desc.affinity = ThreadAffinity::MainThread;
+        desc.access.reads = MaskOf<
+            TransformComponent,
+            PreviousTransformComponent,
+            BoundsComponent,
+            MeshComponent,
+            RenderableHandleComponent>();
+        desc.access.writes         = MaskOf<RenderableHandleComponent>();
+        desc.access.resourceWrites = ResourceBit::Scene;
+        desc.execute = [this](EcsRegistry& reg, EcsCommandQueue& queue, float dt, uint64_t epoch) {
+            Execute(reg, queue, dt, epoch);
         };
         return desc;
     }

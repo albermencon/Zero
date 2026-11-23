@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <array>
 #include <vector>
+#include <span>
 #include <memory>
 #include <mutex>
 #include <atomic>
@@ -10,6 +11,7 @@
 #include <tuple>
 #include <utility>
 #include <Engine/Core.h>
+#include <Engine/Export.h>
 #include <Engine/Ecs/Entity.h>
 #include <Engine/Ecs/ComponentTrait.h>
 #include <Engine/Ecs/ComponentMask.h>
@@ -33,26 +35,25 @@ namespace Zero
     //   - EntityAllocator (MPMC free list + atomic generation table) — opaque
     //   - ComponentMask per entity slot — heap-allocated (16 MiB, not on stack)
     //   - ComponentPool<T> table (128 slots, never reallocated)
+    //   - Monotonic 64-bit dirty epoch counter (replaces frame-equality checks)
+    //   - Entity & per-pool removal tombstones (accumulated across flushes,
+    //     drained by subsystems, cleared at end-of-frame via ClearTombstones())
     //
     // Thread safety contract:
-    //   FlushCommands()                  — main thread only
-    //   CreateEntity() / DestroyEntity() — any thread (enqueues command)
-    //   AddComponent / RemoveComponent   — any thread (enqueues command)
-    //   Pool<T>() read access            — job window (topology immutable)
-    //   GetMutable()                     — job threads with declared write access
-    //
-    // Pool creation is guarded by a mutex AND an atomic pointer mirror so the
-    // first concurrent AddComponent for a new component type is safe to call
-    // from any thread.
+    //   FlushCommands() / ClearTombstones() — main thread only
+    //   CreateEntity() / DestroyEntity()    — any thread (enqueues command)
+    //   AddComponent / RemoveComponent      — any thread (enqueues command)
+    //   Pool<T>() read access               — job window (topology immutable)
+    //   GetMutable() / WriteView()          — job threads with declared write access
     class EcsRegistry
     {
     public:
-        static constexpr uint32_t MaxComponents         = 128;
-        static constexpr uint32_t MaxEntities           = 1u << 20; // mirrors EntityAllocator::MaxEntities
+        static constexpr uint32_t MaxComponents            = 128;
+        static constexpr uint32_t MaxEntities              = 1u << 20; // mirrors EntityAllocator::MaxEntities
         static constexpr uint32_t DefaultComponentCapacity = 4096;
 
-        EcsRegistry();
-        ~EcsRegistry();
+        ZERO_API EcsRegistry();
+        ZERO_API ~EcsRegistry();
 
         // Non-copyable, non-movable — pools hand out stable raw references.
         EcsRegistry(const EcsRegistry&)            = delete;
@@ -63,17 +64,34 @@ namespace Zero
         // Entity lifecycle
 
         // Any thread. Returns a live handle immediately.
-        [[nodiscard]] Entity CreateEntity() noexcept;
+        [[nodiscard]] ZERO_API Entity CreateEntity() noexcept;
 
         // Any thread. Enqueues destruction — executed during FlushCommands().
-        void DestroyEntity(Entity e, EcsCommandQueue& q);
+        ZERO_API void DestroyEntity(Entity e, EcsCommandQueue& q);
 
         // Any thread.
-        [[nodiscard]] bool IsAlive(Entity e) const noexcept;
+        [[nodiscard]] ZERO_API bool IsAlive(Entity e) const noexcept;
 
         // Any thread. Returns the full entity handle for a given index.
         // Used by ComponentView / CachedView to reconstruct handles during iteration.
-        [[nodiscard]] Entity CurrentGeneration(uint32_t entityIdx) const noexcept;
+        [[nodiscard]] ZERO_API Entity CurrentGeneration(uint32_t entityIdx) const noexcept;
+
+        // Monotonic dirty epoch
+        // Starts at 0; every AdvanceEpoch() returns a strictly larger value (>= 1).
+        [[nodiscard]] uint64_t CurrentEpoch() const noexcept
+        {
+            return m_epoch.load(std::memory_order_acquire);
+        }
+
+        uint64_t AdvanceEpoch() noexcept
+        {
+            return m_epoch.fetch_add(1u, std::memory_order_acq_rel) + 1u;
+        }
+
+        // Fixed-timestep render interpolation factor in [0, 1].
+        // Updated by Application::Run() after FixedStep and read by RenderSyncSystem.
+        void SetInterpolationAlpha(float alpha) noexcept { m_interpolationAlpha = alpha; }
+        [[nodiscard]] float InterpolationAlpha() const noexcept { return m_interpolationAlpha; }
 
         // Component commands (any thread — enqueued, flushed on main thread)
         template<typename T>
@@ -82,6 +100,14 @@ namespace Zero
             ZERO_CORE_ASSERT(IsAlive(e), "AddComponent called on dead entity");
             GetOrCreatePool<T>();
             q.EnqueueAdd(e, std::move(value));
+        }
+
+        template<typename T>
+        void SetComponent(Entity e, T value, EcsCommandQueue& q)
+        {
+            ZERO_CORE_ASSERT(IsAlive(e), "SetComponent called on dead entity");
+            GetOrCreatePool<T>();
+            q.EnqueueSet(e, std::move(value));
         }
 
         template<typename T>
@@ -116,17 +142,32 @@ namespace Zero
             return *static_cast<const ComponentPool<T>*>(p);
         }
 
-        [[nodiscard]] const ComponentMask& Mask(uint32_t entityIdx) const noexcept;
+        [[nodiscard]] ZERO_API const ComponentMask& Mask(uint32_t entityIdx) const noexcept;
 
-        // Frame flush — main thread only
-        void FlushCommands(EcsCommandQueue& q, uint32_t currentFrame);
+        // Read-only span of all entities destroyed since the last ClearTombstones().
+        // For component-specific handle values (e.g., RenderableHandleComponent,
+        // RigidBodyComponent), inspect reg.Pool<T>().Removed().
+        [[nodiscard]] std::span<const Entity> DestroyedEntities() const noexcept
+        {
+            return { m_destroyedEntities.data(), m_destroyedEntities.size() };
+        }
+
+        // Structural flush — main thread only.
+        // Populates per-pool and entity destruction tombstones (does NOT clear them).
+        // Returns the registry epoch stamped on any Add/Set commands (or CurrentEpoch()).
+        ZERO_API uint64_t FlushCommands(EcsCommandQueue& q);
+
+        // End-of-frame tombstone clear — main thread only.
+        // Clears m_destroyedEntities and all pools' removedEntities buffers while
+        // preserving capacity (zero steady-state heap allocations).
+        ZERO_API void ClearTombstones() noexcept;
 
 #ifdef ECS_VALIDATE
-        void ValidateAll() const;
+        ZERO_API void ValidateAll() const;
 #endif
 
     private:
-        void DispatchAdd(const EcsCommand& cmd, EcsCommandQueue& q, uint32_t currentFrame);
+        void DispatchAdd(const EcsCommand& cmd, EcsCommandQueue& q, uint64_t epoch);
         void DispatchRemove(const EcsCommand& cmd);
         void DispatchDestroy(Entity e);
 
@@ -145,18 +186,17 @@ namespace Zero
             pool->componentId = id;
             pool->Reserve(MaxEntities, DefaultComponentCapacity);
 
-            pool->destroyEntityFn = [](PoolBase* base, uint32_t entityIdx) {
-                static_cast<ComponentPool<T>*>(base)->Remove(entityIdx);
+            pool->destroyEntityFn = [](PoolBase* base, Entity entity) {
+                static_cast<ComponentPool<T>*>(base)->Remove(entity);
             };
             pool->denseEntityAt = [](const PoolBase* base, uint32_t denseIdx) {
                 return static_cast<const ComponentPool<T>*>(base)->dense_to_entity[denseIdx];
             };
             // Upsert semantics: AddComponent/SetComponent on an entity that
             // already has this component overwrites the value instead of
-            // asserting / corrupting the sparse set. (SetComponent & duplicate
-            // AddComponent both land here.)
+            // asserting / corrupting the sparse set.
             pool->insertFn = [](PoolBase* base, uint32_t entityIdx,
-                                const void* payload, uint32_t frame)
+                                const void* payload, uint64_t epoch, WriteSource source)
             {
                 auto* p = static_cast<ComponentPool<T>*>(base);
                 if (p->Has(entityIdx))
@@ -164,22 +204,29 @@ namespace Zero
                     const uint32_t d = p->sparse[entityIdx];
                     T value;
                     std::memcpy(&value, payload, sizeof(T));
-                    p->data[d] = value;
-                    p->modifiedFrame[d] = frame;
+                    p->data[d]           = value;
+                    p->modifiedEpoch[d]  = epoch;
+                    p->modifiedSource[d] = source;
                     return;
                 }
                 T value;
                 std::memcpy(&value, payload, sizeof(T));
-                p->Insert(entityIdx, value, frame);
+                p->Insert(entityIdx, value, epoch, source);
             };
             pool->resetFn = [](PoolBase* base) {
                 auto* p = static_cast<ComponentPool<T>*>(base);
                 p->data.clear();
                 p->dense_to_entity.clear();
-                p->modifiedFrame.clear();
+                p->modifiedEpoch.clear();
+                p->modifiedSource.clear();
+                p->removedEntities.clear();
                 p->sparse.assign(p->sparse.size(), UINT32_MAX);
-                p->count = 0;
+                p->count             = 0;
                 p->structurallyDirty = true;
+                p->hasTombstones     = false;
+            };
+            pool->clearTombstonesFn = [](PoolBase* base) {
+                static_cast<ComponentPool<T>*>(base)->ClearTombstones();
             };
 #ifdef ECS_VALIDATE
             pool->validateFn = [](const PoolBase* base) {
@@ -197,17 +244,21 @@ namespace Zero
         std::mutex m_poolMutex;
 
         // Internal allocator
-        std::unique_ptr<EntityAllocator>            m_allocator;
+        std::unique_ptr<EntityAllocator>                  m_allocator;
 
         // 1M * 16 bytes = 16 MiB
-        std::unique_ptr<ComponentMask[]>            m_componentMask;
+        std::unique_ptr<ComponentMask[]>                  m_componentMask;
 
         // Pool table — 128 slots, sized once at construction, never reallocated.
-        // All PoolBase* / ComponentPool<T>& references handed to views are stable.
-        // m_pools owns the objects; m_poolPtr is the lock-free read mirror so
-        // concurrent first-use AddComponent does not data-race on the unique_ptr.
-        std::vector<std::unique_ptr<PoolBase>>      m_pools;
+        std::vector<std::unique_ptr<PoolBase>>            m_pools;
         std::array<std::atomic<PoolBase*>, MaxComponents> m_poolPtr{};
+
+        // Monotonic dirty tracking epoch and fixed-step interpolation alpha.
+        std::atomic<uint64_t>                             m_epoch{ 0 };
+        float                                             m_interpolationAlpha = 1.0f;
+
+        // Registry-level entity destruction tombstones (cleared in ClearTombstones()).
+        std::vector<Entity>                               m_destroyedEntities;
 
         template<typename...> friend class CachedView;
         template<typename...> friend class ComponentView;
@@ -286,8 +337,6 @@ namespace Zero
             const uint32_t entityIdx = denseEnts[i];
             if (!m_reg.Mask(entityIdx).Contains(m_required)) continue;
 
-            // Reconstruct full entity handle from index + live generation,
-            // indexing m_primary directly by dense slot i and reading cached m_pools.
             fn(m_reg.CurrentGeneration(entityIdx),
                ([&]() -> const Ts& {
                    if constexpr (Is == PrimaryIdx)
@@ -353,10 +402,6 @@ namespace Zero
         if constexpr (sizeof...(Ts) == 1)
             return m_primary->count;
 
-        // Exact match count: walk the smallest pool and count entities whose
-        // full mask contains every required component. m_primary->count alone
-        // is only an upper bound when some primary-pool entities lack a
-        // non-primary required component.
         uint32_t matches = 0;
         const uint32_t n = m_primary->count;
         for (uint32_t i = 0; i < n; ++i)

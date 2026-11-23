@@ -1,8 +1,9 @@
 #pragma once
-#include <concurrentqueue.h>
 #include <cstring>
+#include <memory>
 #include <new>
 #include <type_traits>
+#include <Engine/Export.h>
 #include <Engine/Ecs/EcsCommand.h>
 #include <Engine/Ecs/FrameSlab.h>
 #include <Engine/Ecs/ComponentTrait.h>
@@ -12,36 +13,27 @@ namespace Zero
 {
     // EcsCommandQueue
     //
-    // Bundles the MPMC command queue with the FrameSlab for oversized payloads.
+    // Bundles the MPMC command queue (Pimpl'd so moodycamel remains a PRIVATE
+    // dependency of Zero) with the FrameSlab for oversized payloads.
     // Both live together so FlushCommands() takes a single argument.
     //
     // Thread safety:
-    //   EnqueueAdd / EnqueueRemove / EnqueueDestroy — any thread
-    //   FlushCommands reads and slab.Reset()         — main thread only (Invariant 9)
-    struct EcsCommandQueue
+    //   EnqueueAdd / EnqueueSet / EnqueueRemove / EnqueueDestroy — any thread
+    //   TryDequeue / slab reads / slab.Reset()                   — main thread only (Invariant 9)
+    struct ZERO_API EcsCommandQueue
     {
-        moodycamel::ConcurrentQueue<EcsCommand> queue;
-        FrameSlab slab{ 4u * 1024u * 1024u };  // 4 MiB default — tune per project
+        FrameSlab slab;
 
-        explicit EcsCommandQueue(uint32_t slabBytes = 4u * 1024u * 1024u)
-            : slab(slabBytes)
-        {
-        }
+        explicit EcsCommandQueue(uint32_t slabBytes = 4u * 1024u * 1024u);
+        ~EcsCommandQueue();
 
-        ~EcsCommandQueue()
-        {
-            EcsCommand cmd;
-            while (queue.try_dequeue(cmd))
-            {
-                if ((cmd.flags & kEcsFlagHeapPayload) && cmd.heapPtr)
-                {
-                    ::operator delete(const_cast<void*>(cmd.heapPtr),
-                                      std::align_val_t{ cmd.heapAlign });
-                }
-            }
-        }
+        EcsCommandQueue(const EcsCommandQueue&)            = delete;
+        EcsCommandQueue& operator=(const EcsCommandQueue&) = delete;
+        EcsCommandQueue(EcsCommandQueue&&)                 = delete;
+        EcsCommandQueue& operator=(EcsCommandQueue&&)      = delete;
 
-        // Store a component command. Inline if sizeof(T) <= 44, slab otherwise.
+        // Store a component command. Inline if sizeof(T) <= 44, slab otherwise
+        // (with aligned heap fallback if the slab is exhausted).
         template<typename T>
         void EnqueueAdd(Entity entity, T value)
         {
@@ -55,24 +47,15 @@ namespace Zero
             EnqueueTyped(EcsCommandType::SetComponent, entity, value);
         }
 
-        void EnqueueRemove(Entity entity, uint8_t componentId)
-        {
-            EcsCommand cmd{};
-            cmd.type        = EcsCommandType::RemoveComponent;
-            cmd.componentId = componentId;
-            cmd.entity      = entity;
-            queue.enqueue(cmd);
-        }
+        void EnqueueRemove(Entity entity, uint8_t componentId);
+        void EnqueueDestroy(Entity entity);
 
-        void EnqueueDestroy(Entity entity)
-        {
-            EcsCommand cmd{};
-            cmd.type   = EcsCommandType::DestroyEntity;
-            cmd.entity = entity;
-            queue.enqueue(cmd);
-        }
+        // Main-thread consumer API used by EcsRegistry::FlushCommands().
+        [[nodiscard]] bool TryDequeue(EcsCommand& outCmd);
 
     private:
+        void EnqueueCommand(const EcsCommand& cmd);
+
         template<typename T>
         void EnqueueTyped(EcsCommandType type, Entity entity, T value)
         {
@@ -104,7 +87,7 @@ namespace Zero
                 else
                 {
                     // Slab exhausted — fall back to a heap-allocated payload.
-                    void* mem = ::operator new(sizeof(T), std::align_val_t{alignof(T)});
+                    void* mem = ::operator new(sizeof(T), std::align_val_t{ alignof(T) });
                     std::memcpy(mem, &value, sizeof(T));
                     cmd.flags      = kEcsFlagHeapPayload;
                     cmd.heapPtr    = mem;
@@ -113,7 +96,10 @@ namespace Zero
                 }
             }
 
-            queue.enqueue(cmd);
+            EnqueueCommand(cmd);
         }
+
+        struct Impl;
+        std::unique_ptr<Impl> m_impl;
     };
 }
