@@ -27,7 +27,7 @@ The engine utilizes a work-stealing job system, ensuring that heavy computations
 | Module | Library |
 | :--- | :--- |
 | **Windowing/OS** | GLFW |
-| **Graphics API** | Vulkan / OpenGL (Glad) |
+| **Graphics API** | Vulkan |
 | **Shader compiler** | Slang |
 | **Physics Service** | JoltPhysics |
 | **SIMD Abstraction** | Google Highway |
