@@ -45,8 +45,6 @@ namespace Zero
             }, targetTask);
         }
 
-
-
         ~Thread();
 
         Thread(Thread&& other) noexcept
@@ -100,8 +98,8 @@ namespace Zero
 
     namespace this_thread
     {
-        static void SetName(std::string_view name);
-        static void SetPriority(ThreadPriority priority);
-        static void SetAffinity(uint64_t mask);
+        void SetName(std::string_view name);
+        void SetPriority(ThreadPriority priority);
+        void SetAffinity(uint64_t mask);
     }
 }
