@@ -30,7 +30,6 @@ namespace Zero
         const auto& boundsPool = reg.Pool<BoundsComponent>();
         const float alpha      = reg.InterpolationAlpha();
 
-        // ---------------------------------------------------------------
         // Pass A — Removals (tombstones + mesh-stripped live entities)
         //
         // 1. Drain RenderableHandleComponent tombstones populated during
@@ -41,7 +40,6 @@ namespace Zero
         //    still carry a RenderableHandleComponent, remove from Scene,
         //    zero the handle in-place (preventing double-remove on the
         //    subsequent tombstone), and enqueue handle component removal.
-        // ---------------------------------------------------------------
         {
             for (const auto& removed : handlePool.Removed())
             {
@@ -75,11 +73,9 @@ namespace Zero
             }
         }
 
-        // ---------------------------------------------------------------
         // Pass B — Additions
         // Entities with MeshComponent + TransformComponent but no
         // RenderableHandleComponent -> create Scene renderable.
-        // ---------------------------------------------------------------
         {
             ComponentView<MeshComponent, TransformComponent> view(reg);
             view.template EachExcluding<RenderableHandleComponent>(
@@ -121,12 +117,10 @@ namespace Zero
             });
         }
 
-        // ---------------------------------------------------------------
         // Pass C — Dirty updates (monotonic epoch + TRS interpolation)
         // Walk TransformComponent and BoundsComponent via bulk-span ReadView.
         // Emit Scene updates when modifiedEpoch > m_lastSyncedEpoch, or
         // when an interpolated dynamic entity has prev != curr.
-        // ---------------------------------------------------------------
         {
             const auto tfView = reg.Pool<TransformComponent>().ReadView();
             const uint32_t tfCount = tfView.Count();

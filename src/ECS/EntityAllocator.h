@@ -109,8 +109,8 @@ namespace Zero
         // Generation table. Zero-initialized — every slot starts at gen 0.
         // Using uint32_t per slot (not uint16_t) to avoid narrowing when embedded
         // in a 64-bit Entity via Make(). The 12-bit mask in GenMask handles truncation.
-        std::atomic<uint32_t>             m_generations[MaxEntities]{};
-        std::atomic<uint32_t>             m_nextIndex{ 1 };
+        std::atomic<uint32_t>                 m_generations[MaxEntities]{};
+        std::atomic<uint32_t>                 m_nextIndex{ 1 };
         moodycamel::ConcurrentQueue<uint32_t> m_freeList;
     };
 }

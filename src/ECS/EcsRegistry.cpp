@@ -9,9 +9,7 @@
 
 namespace Zero
 {
-    // -----------------------------------------------------------------------
     // Static-init duplicate component ID guard (cross-TU, no RTTI)
-    // -----------------------------------------------------------------------
     namespace Detail
     {
         const void* RegisterComponentIdToken(uint32_t id,
@@ -47,10 +45,8 @@ namespace Zero
         }
     }
 
-    // -----------------------------------------------------------------------
     // PoolBase destructor — detaches surviving CachedViews to prevent UAF if
     // EcsRegistry is destroyed before a CachedView.
-    // -----------------------------------------------------------------------
     PoolBase::~PoolBase()
     {
         for (CachedViewBase* view : dependentViews)
@@ -64,9 +60,7 @@ namespace Zero
         dependentViews.clear();
     }
 
-    // -----------------------------------------------------------------------
     // EcsRegistry — constructor / destructor
-    // -----------------------------------------------------------------------
     EcsRegistry::EcsRegistry()
         : m_allocator(std::make_unique<EntityAllocator>())
         , m_componentMask(std::make_unique<ComponentMask[]>(MaxEntities))
@@ -81,9 +75,7 @@ namespace Zero
     // is an incomplete type in the public header.
     EcsRegistry::~EcsRegistry() = default;
 
-    // -----------------------------------------------------------------------
     // Entity lifecycle
-    // -----------------------------------------------------------------------
     Entity EcsRegistry::CreateEntity() noexcept
     {
         return m_allocator->MintEntity();
@@ -106,9 +98,7 @@ namespace Zero
         return Make(entityIdx, gen);
     }
 
-    // -----------------------------------------------------------------------
     // Mask access
-    // -----------------------------------------------------------------------
     const ComponentMask& EcsRegistry::Mask(uint32_t entityIdx) const noexcept
     {
         ZERO_ASSERT(entityIdx < MaxEntities, "entityIdx out of range");
@@ -120,9 +110,7 @@ namespace Zero
         return m_componentMask[entityIdx];
     }
 
-    // -----------------------------------------------------------------------
     // Static file-local helpers
-    // -----------------------------------------------------------------------
     static void InvalidateViews(PoolBase* base) noexcept
     {
         for (CachedViewBase* v : base->dependentViews)
@@ -140,9 +128,7 @@ namespace Zero
         }
     }
 
-    // -----------------------------------------------------------------------
     // DispatchAdd
-    // -----------------------------------------------------------------------
     void EcsRegistry::DispatchAdd(const EcsCommand& cmd, EcsCommandQueue& q, uint64_t epoch)
     {
         // Generation check: a stale handle (entity destroyed and its slot
@@ -195,9 +181,7 @@ namespace Zero
         FreeHeapPayload(cmd);
     }
 
-    // -----------------------------------------------------------------------
     // DispatchRemove
-    // -----------------------------------------------------------------------
     void EcsRegistry::DispatchRemove(const EcsCommand& cmd)
     {
         // Generation check — never touch a recycled slot for a dead handle.
@@ -218,9 +202,7 @@ namespace Zero
         m_componentMask[entityIdx].Clear(cid);
     }
 
-    // -----------------------------------------------------------------------
     // DispatchDestroy
-    // -----------------------------------------------------------------------
     void EcsRegistry::DispatchDestroy(Entity e)
     {
         // Generation check — a stale destroy must never destroy the recycled
@@ -260,7 +242,6 @@ namespace Zero
         m_allocator->FinalizeDestroy(entityIdx);
     }
 
-    // -----------------------------------------------------------------------
     // FlushCommands — main thread only
     //
     // 1. Dequeue and dispatch all pending EcsCommands.
@@ -269,7 +250,6 @@ namespace Zero
     // 2. Batched: invalidate dependent CachedViews on dirty pools, then
     //    explicitly rebuild each stale view once while still single-threaded.
     // 3. Reset slab (Invariant 9: only after all commands consumed).
-    // -----------------------------------------------------------------------
     uint64_t EcsRegistry::FlushCommands(EcsCommandQueue& q)
     {
         uint64_t flushEpoch = 0;

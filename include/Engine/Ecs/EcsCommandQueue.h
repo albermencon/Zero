@@ -11,10 +11,7 @@
 
 namespace Zero
 {
-    // EcsCommandQueue
-    //
-    // Bundles the MPMC command queue (Pimpl'd so moodycamel remains a PRIVATE
-    // dependency of Zero) with the FrameSlab for oversized payloads.
+    // Bundles the MPMC command queue with the FrameSlab for oversized payloads.
     // Both live together so FlushCommands() takes a single argument.
     //
     // Thread safety:

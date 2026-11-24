@@ -9,14 +9,12 @@
 
 namespace Zero
 {
-    // FrameSlab — CAS-based aligned bump allocator.
-    //
     // Thread-safe: multiple job threads may Allocate() concurrently.
     // Reset() must be called ONLY after FlushCommands() fully completes
     // payload data is read during flush.
     //
     // alignment must be a power of two and <= the base alignment passed to
-    // the constructor (default: 64, matching a cache line).
+    // the constructor (default: 64)
     class FrameSlab
     {
     public:

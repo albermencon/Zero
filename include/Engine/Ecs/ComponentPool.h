@@ -100,8 +100,7 @@ namespace Zero
             T& operator*()  noexcept { return value; }
         };
 
-        // Bulk read-only span view — decouples subsystems (RenderSyncSystem,
-        // PhysicsSyncSystem) from internal ComponentPool storage vectors.
+        // Bulk read-only span view.
         struct ConstBulkView
         {
             std::span<const T>           data;
@@ -209,8 +208,8 @@ namespace Zero
 #endif
 
         // Insert — main thread only, inside FlushCommands().
-        // Invariant 1: all dense arrays grow atomically.
-        // Invariant 2: entity must not already be present.
+        // All dense arrays grow atomically.
+        // Entity must not already be present.
         void Insert(uint32_t entityIdx,
                     T value,
                     uint64_t epoch,
@@ -269,7 +268,6 @@ namespace Zero
         }
 
         // Clears accumulated tombstones while preserving reserved capacity
-        // (zero steady-state heap allocations).
         void ClearTombstones() noexcept
         {
             removedEntities.clear();
@@ -292,7 +290,7 @@ namespace Zero
         }
 
         // Returns a DirtyRef — destructor stamps modifiedEpoch and modifiedSource
-        // on scope exit. Invariant 8: only call with declared write access.
+        // on scope exit. Only call with declared write access.
         [[nodiscard]] DirtyRef GetMutable(uint32_t entityIdx,
                                           uint64_t epoch,
                                           WriteSource source = WriteSource::Gameplay) noexcept
@@ -421,7 +419,6 @@ namespace Zero
 #ifdef ECS_VALIDATE
         void ValidateStructure() const
         {
-            // Invariant 1
             ZERO_CORE_ASSERT(data.size() == dense_to_entity.size(),
                 "Pool parallel array size mismatch (data vs dense_to_entity)");
             ZERO_CORE_ASSERT(data.size() == modifiedEpoch.size(),
@@ -431,7 +428,7 @@ namespace Zero
             ZERO_CORE_ASSERT(count == static_cast<uint32_t>(data.size()),
                 "Pool count field out of sync with data.size()");
 
-            // Invariant 2 & 3: sparse <-> dense round-trip (bijection guarantees no duplicates)
+            // Sparse <-> dense round-trip (bijection guarantees no duplicates)
             for (uint32_t i = 0; i < static_cast<uint32_t>(data.size()); ++i)
             {
                 const uint32_t eidx = dense_to_entity[i];

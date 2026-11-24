@@ -7,13 +7,11 @@
 
 namespace Zero
 {
-    // -----------------------------------------------------------------------
     // EcsIntegration<T> — the ECS module's hook into Application.
     //
     // Application::PushComponent<T>() / PushSystem<T>() route here. This
     // template is only instantiated in the consumer's TU, so the engine core
     // header (Application.h) never has to include ECS headers.
-    // -----------------------------------------------------------------------
     template<typename T>
     struct EcsIntegration
     {

@@ -7,9 +7,7 @@
 
 namespace Zero
 {
-    // TRS transform component — avoids Mat4 decomposition/recomposition during
-    // Jolt physics sync. Pair with PreviousTransformComponent for fixed-timestep
-    // render interpolation.
+    // TRS transform component
     struct alignas(16) TransformComponent
     {
         Vec3 position = { 0.0f, 0.0f, 0.0f };   // offset 0  (12 bytes + 4 bytes align pad)

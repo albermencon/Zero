@@ -6,8 +6,6 @@
 
 namespace Zero
 {
-    // EcsCommand — exactly one cache line (64 bytes).
-    //
     // Inline payload: components <= 44 bytes are stored directly.
     // Oversized components spill into FrameSlab; the command stores an offset.
     // If the slab is exhausted the payload is heap-allocated (kEcsFlagHeapPayload).

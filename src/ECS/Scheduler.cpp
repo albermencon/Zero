@@ -96,7 +96,7 @@ namespace Zero
 
     // DispatchFrame / DispatchPhase
     //
-    // Flat loop over pre-built layers. Zero hot-path heap allocations.
+    // Flat loop over pre-built layers.
     struct FrameContext
     {
         EcsRegistry*     reg;

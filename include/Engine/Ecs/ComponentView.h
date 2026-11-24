@@ -9,8 +9,6 @@
 
 namespace Zero
 {
-    // ComponentView<Ts...>
-    //
     // Lightweight, stack-allocated view. Not cached — rebuilds iteration on
     // every Each() call by walking the smallest pool's dense array.
     //

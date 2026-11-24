@@ -23,14 +23,11 @@
 #include <Engine/Ecs/ComponentView.h>
 #include <Engine/Ecs/EcsCommandQueue.h>
 
-// EntityAllocator is an internal type. Forward-declared here so EcsRegistry can
-// hold it by unique_ptr without exposing its definition to public consumers.
+// EntityAllocator is an internal type. Forward-declared here
 namespace Zero { class EntityAllocator; }
 
 namespace Zero
 {
-    // EcsRegistry
-    //
     // Central aggregator. Owns:
     //   - EntityAllocator (MPMC free list + atomic generation table) — opaque
     //   - ComponentMask per entity slot — heap-allocated (16 MiB, not on stack)
@@ -60,8 +57,6 @@ namespace Zero
         EcsRegistry& operator=(const EcsRegistry&) = delete;
         EcsRegistry(EcsRegistry&&)                 = delete;
         EcsRegistry& operator=(EcsRegistry&&)      = delete;
-
-        // Entity lifecycle
 
         // Any thread. Returns a live handle immediately.
         [[nodiscard]] ZERO_API Entity CreateEntity() noexcept;

@@ -8,14 +8,9 @@
 
 namespace Zero
 {
-    // CachedViewBase
-    //
     // Stable heap object owned by CachedView<Ts...>.
     // Pools hold CachedViewBase* — not raw version counters.
     // This lets the pool call Invalidate() without knowing the view's type.
-    //
-    // Invariant 7: a view is EITHER current (viewVersion == poolVersion)
-    //              OR stale (needsRebuild == true) — never partially rebuilt.
     struct CachedViewBase
     {
         using RebuildFn = void(*)(CachedViewBase*);
@@ -72,8 +67,6 @@ namespace Zero
     template<typename First, typename...>
     struct FirstOf { using type = First; };
 
-    // CachedView<Ts...>
-    //
     // Heap-resident view that caches a filtered entity list across frames.
     // Built on construction and rebuilt explicitly during single-threaded
     // EcsRegistry::FlushCommands() so concurrent Each() / Count() reads are race-free.

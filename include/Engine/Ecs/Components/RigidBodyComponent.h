@@ -7,7 +7,6 @@
 namespace Zero
 {
     // Hot path — written every physics tick.
-    // Keeps Jolt decoupled from ECS via the opaque BodyID handle.
     struct RigidBodyComponent
     {
         Vec3   linearVelocity  = { 0.0f, 0.0f, 0.0f };
