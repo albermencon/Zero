@@ -2,6 +2,8 @@
 #include <Engine/Math/Vec2.h>
 #include <Engine/Math/Vec3.h>
 #include <Engine/Math/Vec4.h>
+#include <Engine/Math/DVec3.h>
+#include <Engine/Math/Real.h>
 #include <Engine/Math/IVec.h>
 #include <Engine/Math/Mat4.h>
 #include <Engine/Math/Quat.h>
@@ -572,5 +574,47 @@ TEST_CASE("Quat Operations")
 		CHECK(ApproxEqual(q.Length(), 1.0f));
 		CHECK(q == norm);
 	}
+}
+
+TEST_CASE("DVec3 and Real/RVec3 Operations")
+{
+	static_assert(sizeof(DVec3) == 24);
+	static_assert(std::is_trivially_copyable_v<DVec3>);
+
+#ifdef ZERO_DOUBLE_PRECISION
+	static_assert(std::is_same_v<Real, double>);
+	static_assert(std::is_same_v<RVec3, DVec3>);
+#else
+	static_assert(std::is_same_v<Real, float>);
+	static_assert(std::is_same_v<RVec3, Vec3>);
+#endif
+
+	DVec3 a(100000.0, 2.0, -3.0);
+	DVec3 b(100000.0, 5.0, 1.0);
+	DVec3 diff = b - a;
+	CHECK(diff.x == 0.0);
+	CHECK(diff.y == 3.0);
+	CHECK(diff.z == 4.0);
+	CHECK(diff.LengthSq() == 25.0);
+	CHECK(diff.Length() == 5.0);
+	CHECK(DVec3::Distance(a, b) == 5.0);
+
+	DVec3 sum = a + DVec3(1.0, 2.0, 3.0);
+	CHECK(sum == DVec3(100001.0, 4.0, 0.0));
+
+	DVec3 mid = DVec3::Lerp(a, b, 0.5);
+	CHECK(mid == DVec3(100000.0, 3.5, -1.0));
+
+	CHECK(DVec3::Dot(DVec3(1.0, 2.0, 3.0), DVec3(4.0, 5.0, 6.0)) == 32.0);
+
+	const Vec3 vf(1.5f, -2.5f, 3.5f);
+	const DVec3 vd(vf);
+	CHECK(vd.x == 1.5);
+	CHECK(vd.y == -2.5);
+	CHECK(vd.z == 3.5);
+	CHECK(vd.ToVec3() == vf);
+
+	const RVec3 rv = ToRVec3(vf);
+	CHECK(ToVec3(rv) == vf);
 }
 

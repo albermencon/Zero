@@ -105,9 +105,14 @@ namespace Zero
 			return std::sqrt(LengthSquared());
 		}
 
-		[[nodiscard]] constexpr float LengthSquared() const noexcept
+		[[nodiscard]] constexpr float LengthSq() const noexcept
 		{
 			return x * x + y * y + z * z;
+		}
+
+		[[nodiscard]] constexpr float LengthSquared() const noexcept
+		{
+			return LengthSq();
 		}
 
 		void Normalize() noexcept
@@ -136,6 +141,16 @@ namespace Zero
 				a.y + (b.y - a.y) * t,
 				a.z + (b.z - a.z) * t
 			};
+		}
+
+		[[nodiscard]] static float Distance(const Vec3& a, const Vec3& b) noexcept
+		{
+			return (a - b).Length();
+		}
+
+		[[nodiscard]] float Distance(const Vec3& other) const noexcept
+		{
+			return Distance(*this, other);
 		}
 	};
 
