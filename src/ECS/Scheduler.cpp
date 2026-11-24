@@ -11,6 +11,33 @@
 
 namespace Zero
 {
+#ifdef ZERO_ENABLE_ASSERTS
+    namespace Detail
+    {
+        static thread_local const SystemAccessView* t_activeSystemAccess = nullptr;
+
+        const SystemAccessView* GetActiveSystemAccess() noexcept
+        {
+            return t_activeSystemAccess;
+        }
+
+        void SetActiveSystemAccess(const SystemAccessView* access) noexcept
+        {
+            t_activeSystemAccess = access;
+        }
+
+        static SystemAccessView ToAccessView(const SystemAccess& access) noexcept
+        {
+            return SystemAccessView{
+                access.reads.lo,
+                access.reads.hi,
+                access.writes.lo,
+                access.writes.hi
+            };
+        }
+    }
+#endif
+
     static bool HasAccessConflict(const SystemAccess& a, const SystemAccess& b) noexcept
     {
         const bool componentConflict =
@@ -152,6 +179,10 @@ namespace Zero
                     {
                         JobCapture c;
                         std::memcpy(&c, raw, sizeof(c));
+#ifdef ZERO_ENABLE_ASSERTS
+                        const Detail::SystemAccessView accessView = Detail::ToAccessView(c.sys->access);
+                        Detail::ScopedSystemAccess scope(&accessView);
+#endif
                         c.sys->execute(*c.ctx->reg, *c.ctx->queue, c.ctx->dt, c.ctx->epoch);
                     };
 
@@ -170,6 +201,10 @@ namespace Zero
             // (all systems within a layer are conflict-free).
             for (const SystemDescriptor* sys : s_mainSystems)
             {
+#ifdef ZERO_ENABLE_ASSERTS
+                const Detail::SystemAccessView accessView = Detail::ToAccessView(sys->access);
+                Detail::ScopedSystemAccess scope(&accessView);
+#endif
                 sys->execute(reg, queue, dt, layerEpoch);
             }
 

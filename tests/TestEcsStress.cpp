@@ -478,3 +478,41 @@ TEST_CASE("ECS Stress: Parallel PhaseSchedule dispatch across 50k entities")
     CHECK(tagRead.data[0].flags == kFrames);
     CHECK(tagRead.data[kEntityCount - 1].flags == kFrames);
 }
+
+TEST_CASE("ECS: TryPool returns nullptr before pool creation and valid pointer afterward")
+{
+    auto reg = std::make_unique<EcsRegistry>();
+    const EcsRegistry& constReg = *reg;
+
+    CHECK(reg->TryPool<StressCounter>() == nullptr);
+    CHECK(constReg.TryPool<StressCounter>() == nullptr);
+
+    EcsCommandQueue q;
+    Entity e = reg->CreateEntity();
+    reg->AddComponent(e, StressCounter{ 42u }, q);
+
+    // Pool is created on AddComponent (before FlushCommands), initially empty
+    REQUIRE(reg->TryPool<StressCounter>() != nullptr);
+    REQUIRE(constReg.TryPool<StressCounter>() != nullptr);
+    CHECK(constReg.TryPool<StressCounter>()->Count() == 0);
+
+    reg->FlushCommands(q);
+    CHECK(constReg.TryPool<StressCounter>()->Count() == 1);
+    CHECK(constReg.TryPool<StressCounter>()->Get(Index(e))->ticks == 42u);
+
+#ifdef ZERO_ENABLE_ASSERTS
+    // Verify SystemAccessView masks for read/write validation (including high bit >= 64)
+    Detail::SystemAccessView access{};
+    access.readLo  = MaskOf<StressPos>().lo;
+    access.readHi  = MaskOf<StressPos>().hi;
+    access.writeLo = MaskOf<StressCounter>().lo;
+    access.writeHi = MaskOf<StressCounter>().hi;
+
+    CHECK(access.CanRead(ComponentId<StressPos>()) == true);
+    CHECK(access.CanWrite(ComponentId<StressPos>()) == false);
+    CHECK(access.CanRead(ComponentId<StressCounter>()) == true);
+    CHECK(access.CanWrite(ComponentId<StressCounter>()) == true);
+    CHECK(access.CanRead(ComponentId<StressVel>()) == false);
+    CHECK(access.CanWrite(ComponentId<StressVel>()) == false);
+#endif
+}

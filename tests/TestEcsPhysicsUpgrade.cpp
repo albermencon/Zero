@@ -382,10 +382,11 @@ TEST_CASE("ECS Pass 2: Scheduler phases, MainThread affinity, ResourceMask confl
     };
 
     SystemDescriptor postPhysSys;
-    postPhysSys.name     = "PostPhys";
-    postPhysSys.phase    = SchedulePhase::PostPhysics;
-    postPhysSys.affinity = ThreadAffinity::AnyThread;
-    postPhysSys.execute  = [&](EcsRegistry& r, EcsCommandQueue&, float, uint64_t) {
+    postPhysSys.name         = "PostPhys";
+    postPhysSys.phase        = SchedulePhase::PostPhysics;
+    postPhysSys.affinity     = ThreadAffinity::AnyThread;
+    postPhysSys.access.reads = MaskOf<TransformComponent>();
+    postPhysSys.execute      = [&](EcsRegistry& r, EcsCommandQueue&, float, uint64_t) {
         // Entity spawned in PrePhysics must be visible after FlushCommands()
         CHECK(r.Pool<TransformComponent>().Count() == 1);
         phaseTrace.push_back(2);

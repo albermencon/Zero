@@ -284,6 +284,16 @@ namespace Zero
 
         [[nodiscard]] T* GetRaw(uint32_t entityIdx) noexcept
         {
+#ifdef ZERO_ENABLE_ASSERTS
+            if (componentId < 128u)
+            {
+                if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+                {
+                    ZERO_CORE_ASSERT(access->CanWrite(componentId),
+                        "ECS SystemAccess violation: GetRaw() called without declaring T in writes");
+                }
+            }
+#endif
             if (entityIdx >= sparse.size()) return nullptr;
             const uint32_t d = sparse[entityIdx];
             return d == UINT32_MAX ? nullptr : &data[d];
@@ -295,6 +305,16 @@ namespace Zero
                                           uint64_t epoch,
                                           WriteSource source = WriteSource::Gameplay) noexcept
         {
+#ifdef ZERO_ENABLE_ASSERTS
+            if (componentId < 128u)
+            {
+                if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+                {
+                    ZERO_CORE_ASSERT(access->CanWrite(componentId),
+                        "ECS SystemAccess violation: GetMutable() called without declaring T in writes");
+                }
+            }
+#endif
             ZERO_CORE_ASSERT(entityIdx < sparse.size(), "entityIdx out of sparse bounds");
             if (entityIdx < sparse.size())
             {
@@ -322,6 +342,16 @@ namespace Zero
 
         void MarkDirty(uint32_t entityIdx, uint64_t epoch, WriteSource source = WriteSource::Gameplay) noexcept
         {
+#ifdef ZERO_ENABLE_ASSERTS
+            if (componentId < 128u)
+            {
+                if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+                {
+                    ZERO_CORE_ASSERT(access->CanWrite(componentId),
+                        "ECS SystemAccess violation: MarkDirty() called without declaring T in writes");
+                }
+            }
+#endif
             if (entityIdx >= sparse.size()) return;
             const uint32_t d = sparse[entityIdx];
             if (d == UINT32_MAX || d >= data.size()) return;
@@ -368,6 +398,16 @@ namespace Zero
         [[nodiscard]] MutableBulkView WriteView(uint64_t epoch,
                                                 WriteSource source = WriteSource::Gameplay) noexcept
         {
+#ifdef ZERO_ENABLE_ASSERTS
+            if (componentId < 128u)
+            {
+                if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+                {
+                    ZERO_CORE_ASSERT(access->CanWrite(componentId),
+                        "ECS SystemAccess violation: WriteView() called without declaring T in writes");
+                }
+            }
+#endif
             return MutableBulkView{
                 std::span<T>{ data.data(), data.size() },
                 std::span<const uint32_t>{ dense_to_entity.data(), dense_to_entity.size() },
@@ -385,6 +425,16 @@ namespace Zero
 
         [[nodiscard]] std::span<T> MutableDataSpan() noexcept
         {
+#ifdef ZERO_ENABLE_ASSERTS
+            if (componentId < 128u)
+            {
+                if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+                {
+                    ZERO_CORE_ASSERT(access->CanWrite(componentId),
+                        "ECS SystemAccess violation: MutableDataSpan() called without declaring T in writes");
+                }
+            }
+#endif
             return { data.data(), data.size() };
         }
 

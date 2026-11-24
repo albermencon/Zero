@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include <Engine/Core.h>
+#include <Engine/Export.h>
 #include <Engine/Ecs/Entity.h>
 
 namespace Zero { struct CachedViewBase; }
@@ -82,4 +83,57 @@ namespace Zero
         // RAII-managed by CachedViewBase — never touched directly.
         std::vector<CachedViewBase*> dependentViews;
     };
+
+#ifdef ZERO_ENABLE_ASSERTS
+    namespace Detail
+    {
+        struct SystemAccessView
+        {
+            uint64_t readLo  = 0;
+            uint64_t readHi  = 0;
+            uint64_t writeLo = 0;
+            uint64_t writeHi = 0;
+
+            [[nodiscard]] bool CanRead(uint32_t cid) const noexcept
+            {
+                if (cid >= 128u) return false;
+                const uint64_t bit = 1ULL << (cid & 63u);
+                return cid < 64u
+                    ? ((readLo | writeLo) & bit) != 0
+                    : ((readHi | writeHi) & bit) != 0;
+            }
+
+            [[nodiscard]] bool CanWrite(uint32_t cid) const noexcept
+            {
+                if (cid >= 128u) return false;
+                const uint64_t bit = 1ULL << (cid & 63u);
+                return cid < 64u
+                    ? (writeLo & bit) != 0
+                    : (writeHi & bit) != 0;
+            }
+        };
+
+        [[nodiscard]] ZERO_API const SystemAccessView* GetActiveSystemAccess() noexcept;
+        ZERO_API void SetActiveSystemAccess(const SystemAccessView* access) noexcept;
+
+        struct ScopedSystemAccess
+        {
+            const SystemAccessView* prev = nullptr;
+
+            explicit ScopedSystemAccess(const SystemAccessView* next) noexcept
+                : prev(GetActiveSystemAccess())
+            {
+                SetActiveSystemAccess(next);
+            }
+
+            ~ScopedSystemAccess()
+            {
+                SetActiveSystemAccess(prev);
+            }
+
+            ScopedSystemAccess(const ScopedSystemAccess&)            = delete;
+            ScopedSystemAccess& operator=(const ScopedSystemAccess&) = delete;
+        };
+    }
+#endif
 }

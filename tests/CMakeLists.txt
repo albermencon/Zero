@@ -50,8 +50,8 @@ if(ZERO_ENABLE_TSAN)
 endif()
 
 if(ZERO_ENABLE_UBSAN)
-    target_compile_options(ZeroTests PRIVATE -fsanitize=undefined)
-    target_link_options(ZeroTests PRIVATE -fsanitize=undefined)
+    target_compile_options(ZeroTests PRIVATE -fsanitize=undefined -fsanitize-trap=undefined)
+    target_link_options(ZeroTests PRIVATE -fsanitize=undefined -fsanitize-trap=undefined)
 endif()
 
 # Register the test executables with CTest

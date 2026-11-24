@@ -117,6 +117,13 @@ namespace Zero
         [[nodiscard]] ComponentPool<T>& Pool()
         {
             constexpr uint32_t id = ComponentId<T>();
+#ifdef ZERO_ENABLE_ASSERTS
+            if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+            {
+                ZERO_CORE_ASSERT(access->CanRead(id),
+                    "ECS SystemAccess violation: system accessed Pool<T>() without declaring T in reads or writes");
+            }
+#endif
             if (PoolBase* p = m_poolPtr[id].load(std::memory_order_acquire))
                 return *static_cast<ComponentPool<T>*>(p);
             return GetOrCreatePool<T>();
@@ -126,6 +133,13 @@ namespace Zero
         [[nodiscard]] const ComponentPool<T>& Pool() const
         {
             constexpr uint32_t id = ComponentId<T>();
+#ifdef ZERO_ENABLE_ASSERTS
+            if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+            {
+                ZERO_CORE_ASSERT(access->CanRead(id),
+                    "ECS SystemAccess violation: system accessed Pool<T>() const without declaring T in reads or writes");
+            }
+#endif
             PoolBase* p = m_poolPtr[id].load(std::memory_order_acquire);
             if (!p)
             {
@@ -135,6 +149,36 @@ namespace Zero
                 return s_emptyPool;
             }
             return *static_cast<const ComponentPool<T>*>(p);
+        }
+
+        // Non-allocating, non-asserting nullable pool lookups — safe for systems
+        // running before any entity has ever added component T.
+        template<typename T>
+        [[nodiscard]] ComponentPool<T>* TryPool() noexcept
+        {
+            constexpr uint32_t id = ComponentId<T>();
+#ifdef ZERO_ENABLE_ASSERTS
+            if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+            {
+                ZERO_CORE_ASSERT(access->CanRead(id),
+                    "ECS SystemAccess violation: system accessed TryPool<T>() without declaring T in reads or writes");
+            }
+#endif
+            return static_cast<ComponentPool<T>*>(m_poolPtr[id].load(std::memory_order_acquire));
+        }
+
+        template<typename T>
+        [[nodiscard]] const ComponentPool<T>* TryPool() const noexcept
+        {
+            constexpr uint32_t id = ComponentId<T>();
+#ifdef ZERO_ENABLE_ASSERTS
+            if (const Detail::SystemAccessView* access = Detail::GetActiveSystemAccess())
+            {
+                ZERO_CORE_ASSERT(access->CanRead(id),
+                    "ECS SystemAccess violation: system accessed TryPool<T>() const without declaring T in reads or writes");
+            }
+#endif
+            return static_cast<const ComponentPool<T>*>(m_poolPtr[id].load(std::memory_order_acquire));
         }
 
         [[nodiscard]] ZERO_API const ComponentMask& Mask(uint32_t entityIdx) const noexcept;
