@@ -15,6 +15,7 @@ namespace Zero
     class RenderSurfaceResize;
     class ImGuiLayer;
     class EcsRegistry;
+    class PhysicsWorld;
     struct EcsCommandQueue;
     struct SystemDescriptor;
     struct EcsState;
@@ -62,11 +63,13 @@ namespace Zero
         // backs its execute() lambda. Game thread only.
         void RegisterEcsSystem(SystemDescriptor desc, std::shared_ptr<void> holder);
 
-        // ECS runtime accessors — valid from Application construction until shutdown.
+        // ECS & Physics runtime accessors — valid from Application construction until shutdown.
         [[nodiscard]] EcsRegistry&           GetEcsRegistry();
         [[nodiscard]] const EcsRegistry&     GetEcsRegistry() const;
         [[nodiscard]] EcsCommandQueue&       GetEcsCommandQueue();
         [[nodiscard]] const EcsCommandQueue& GetEcsCommandQueue() const;
+        [[nodiscard]] PhysicsWorld&          GetPhysicsWorld();
+        [[nodiscard]] const PhysicsWorld&    GetPhysicsWorld() const;
 
         // Fixed-timestep configuration for the FixedStep schedule phase.
         void                   SetFixedTimestep(float dtSeconds) noexcept;

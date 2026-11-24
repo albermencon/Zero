@@ -12,7 +12,7 @@ option(BUILD_SHARED "Build as shared library" OFF)
 option(ZERO_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
 option(ZERO_PROFILE_ON_DEMAND "Only collect Tracy captures when profiler connects (requires ZERO_ENABLE_PROFILING)" OFF)
 
-file(GLOB_RECURSE ZERO_SOURCES
+file(GLOB_RECURSE ZERO_SOURCES CONFIGURE_DEPENDS
     "src/*.cpp"
 )
 

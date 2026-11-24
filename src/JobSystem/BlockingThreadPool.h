@@ -18,6 +18,8 @@ namespace Zero
 		// Reject any newly submitted jobs immediately
 		void StopAcceptingJobs();
 		[[nodiscard]] bool IsAcceptingJobs() const noexcept;
+		[[nodiscard]] bool IsRunning() const noexcept { return m_running.load(std::memory_order_acquire); }
+		[[nodiscard]] size_t GetThreadCount() const noexcept { return m_count; }
 
 		void Shutdown();
 		static BlockingThreadPool& Get();

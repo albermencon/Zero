@@ -19,6 +19,8 @@
 #include <Engine/Ecs/EcsRegistry.h>
 #include <Engine/Ecs/EcsCommandQueue.h>
 #include <Engine/Ecs/Scheduler.h>
+#include <Engine/Ecs/Systems/PhysicsSyncSystem.h>
+#include <Engine/Physics/PhysicsSystemAPI.h>
 #include <algorithm>
 #include <cstdint>
 #include <thread>
@@ -31,6 +33,7 @@ namespace Zero
     // (detaching any CachedViews), then registry, then commandQueue.
     struct EcsState
     {
+        PhysicsWorld                        physicsWorld;
         EcsCommandQueue                     commandQueue;
         EcsRegistry                         registry;
         std::vector<SystemDescriptor>       systemDescriptors;
@@ -97,6 +100,9 @@ namespace Zero
         BlockingThreadPool::Get().Init(NumWorkers);
         FileWatcher::Get().Init();
 
+        m_ecsState->physicsWorld.Init(PhysicsWorldConfig::Default());
+        EcsIntegration<PhysicsSyncSystem>::PushSystem(*this, m_ecsState->physicsWorld);
+
         auto imGuiLayer = std::make_unique<ImGuiLayer>();
         m_ImGuiLayer = imGuiLayer.get();
         PushOverlay(std::move(imGuiLayer));
@@ -107,12 +113,18 @@ namespace Zero
         FileWatcher::Get().Shutdown();
         Renderer::Get().WaitIdle();
 
+        m_LayerStack.reset();
+
+        // Tear down PhysicsWorld BEFORE stopping BlockingThreadPool so JoltJobSystemAdapter
+        // cannot have any jobs in-flight during pool teardown.
+        if (m_ecsState)
+            m_ecsState->physicsWorld.Shutdown();
+
         // Seal -> Drain -> Join -> Destroy
         BlockingThreadPool::Get().StopAcceptingJobs();
         BlockingThreadPool::Get().wait_idle();
         BlockingThreadPool::Get().Shutdown();
 
-        m_LayerStack.reset();
         m_ecsState.reset();
         Renderer::Get().Shutdown();
         SceneManager::Get().Shutdown();
@@ -184,6 +196,18 @@ namespace Zero
     {
         ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
         return m_ecsState->commandQueue;
+    }
+
+    PhysicsWorld& Application::GetPhysicsWorld()
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        return m_ecsState->physicsWorld;
+    }
+
+    const PhysicsWorld& Application::GetPhysicsWorld() const
+    {
+        ZERO_CORE_ASSERT(m_ecsState, "Application ECS state not allocated");
+        return m_ecsState->physicsWorld;
     }
 
     void Application::SetFixedTimestep(float dtSeconds) noexcept
@@ -258,6 +282,9 @@ namespace Zero
             ecsReg.FlushCommands(ecsQ);
 
             // Phase 2: FixedStep (fixed-dt accumulator — physics pre-sync, step, write-back)
+            // Clear frame-scoped contact events once per frame before substeps so
+            // PostPhysics sees collisions from ALL substeps in this frame.
+            m_ecsState->physicsWorld.ClearContactEvents();
             fixedAccumulator += dt;
             uint32_t substeps = 0;
             while (fixedAccumulator >= m_fixedTimestep && substeps < m_maxFixedSubsteps)
