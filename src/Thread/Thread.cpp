@@ -1,6 +1,7 @@
 #include "pch.h"
 #include <Engine/Thread/Thread.h>
 #include "PlatformThread.h"
+#include <string_view>
 
 namespace Zero
 {
@@ -33,5 +34,23 @@ namespace Zero
     void* Thread::NativeHandle()
     {
         return m_handle;
+    }
+
+    namespace this_thread
+    {
+        void SetName(std::string_view name)
+        {
+            PlatformThread::SetName(PlatformThread::GetCurrentThreadHandle(), name);
+        }
+
+        void SetPriority(ThreadPriority priority)
+        {
+            PlatformThread::SetPriority(PlatformThread::GetCurrentThreadHandle(), priority);
+        }
+
+        void SetAffinity(uint64_t mask)
+        {
+            PlatformThread::SetAffinity(PlatformThread::GetCurrentThreadHandle(), mask);
+        }
     }
 }

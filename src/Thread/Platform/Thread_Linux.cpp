@@ -19,6 +19,11 @@
 
 namespace Zero::PlatformThread
 {
+    void* GetCurrentThreadHandle()
+    {
+        return reinterpret_cast<void*>(pthread_self());
+    }
+
     void SetName(void* nativeHandle, std::string_view name)
     {
         pthread_t handle = reinterpret_cast<pthread_t>(nativeHandle);

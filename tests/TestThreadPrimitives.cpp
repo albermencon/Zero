@@ -263,6 +263,13 @@ TEST_CASE("ThreadPrimitives: Deadlock Prevention / Lock Ordering")
     CHECK(counter.load() == 10000);
 }
 
+TEST_CASE("ThreadPrimitives: this_thread functions")
+{
+    this_thread::SetName("TestWorker");
+    this_thread::SetPriority(ThreadPriority::Normal);
+    this_thread::SetAffinity(0x1);
+}
+
 #if defined(ZERO_ENABLE_PROFILING)
 #include <tracy/Tracy.hpp>
 #include <mutex>

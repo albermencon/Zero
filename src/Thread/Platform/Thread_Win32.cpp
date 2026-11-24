@@ -58,9 +58,14 @@ static void SetNameLegacySEH(DWORD threadId, const char* name)
 
 namespace Zero::PlatformThread
 {
+    void* GetCurrentThreadHandle()
+    {
+        return static_cast<void*>(::GetCurrentThread());
+    }
+
     void SetName(void* nativeHandle, std::string_view name)
     {
-        HANDLE handle = static_cast<HANDLE>(nativeHandle);
+        HANDLE handle = nativeHandle ? static_cast<HANDLE>(nativeHandle) : ::GetCurrentThread();
 
         if (s_SetThreadDescription)
         {
@@ -85,7 +90,7 @@ namespace Zero::PlatformThread
 
     void SetPriority(void* nativeHandle, ThreadPriority priority)
     {
-        HANDLE handle = static_cast<HANDLE>(nativeHandle);
+        HANDLE handle = nativeHandle ? static_cast<HANDLE>(nativeHandle) : ::GetCurrentThread();
         int winPriority;
         switch (priority)
         {
@@ -100,8 +105,8 @@ namespace Zero::PlatformThread
 
     void SetAffinity(void* nativeHandle, uint64_t mask)
     {
-        SetThreadAffinityMask(static_cast<HANDLE>(nativeHandle),
-            static_cast<DWORD_PTR>(mask));
+        HANDLE handle = nativeHandle ? static_cast<HANDLE>(nativeHandle) : ::GetCurrentThread();
+        SetThreadAffinityMask(handle, static_cast<DWORD_PTR>(mask));
     }
 
     void Sleep(uint32_t ms)

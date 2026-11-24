@@ -18,6 +18,11 @@
 
 namespace Zero::PlatformThread
 {
+    void* GetCurrentThreadHandle()
+    {
+        return nullptr;
+    }
+
     void SetName(void*, std::string_view) {} // no portable API
     void SetPriority(void*, ThreadPriority) {} // no-op
     void SetAffinity(void*, uint64_t) {} // no-op

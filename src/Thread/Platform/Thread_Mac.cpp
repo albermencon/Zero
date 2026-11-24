@@ -17,6 +17,11 @@
 
 namespace Zero::PlatformThread
 {
+    void* GetCurrentThreadHandle()
+    {
+        return reinterpret_cast<void*>(pthread_self());
+    }
+
     void SetName(void* /*nativeHandle*/, std::string_view name)
     {
         // macOS: pthread_setname_np only sets name for the *calling* thread
@@ -31,8 +36,10 @@ namespace Zero::PlatformThread
     void SetPriority(void* nativeHandle, ThreadPriority priority)
     {
         // macOS uses Mach thread scheduling
-        mach_port_t mach_thread = pthread_mach_thread_np(
-            reinterpret_cast<pthread_t>(nativeHandle));
+        pthread_t pthreadHandle = nativeHandle
+            ? reinterpret_cast<pthread_t>(nativeHandle)
+            : pthread_self();
+        mach_port_t mach_thread = pthread_mach_thread_np(pthreadHandle);
 
         thread_precedence_policy_data_t policy{};
         switch (priority)
