@@ -53,7 +53,7 @@ namespace
         BodyDesc floorDesc;
         floorDesc.motion   = MotionType::Static;
         floorDesc.shape    = floorShape;
-        floorDesc.position = Vec3{ 0.0f, -1.0f, 0.0f };
+        floorDesc.position = RVec3{ 0.0f, -1.0f, 0.0f };
         floorDesc.layer    = PhysicsLayer::Static;
         (void)world.CreateBody(floorDesc);
 
@@ -65,10 +65,10 @@ namespace
             const uint32_t gz = i / 64;
             descs[i].motion        = MotionType::Dynamic;
             descs[i].shape         = boxShape;
-            descs[i].position      = Vec3{
-                (static_cast<float>(gx) - 32.0f) * 1.5f,
-                5.0f + static_cast<float>(i % 8) * 1.1f,
-                (static_cast<float>(gz) - 32.0f) * 1.5f
+            descs[i].position      = RVec3{
+                (static_cast<Real>(gx) - Real(32.0)) * Real(1.5),
+                Real(5.0) + static_cast<Real>(i % 8) * Real(1.1),
+                (static_cast<Real>(gz) - Real(32.0)) * Real(1.5)
             };
             descs[i].layer         = PhysicsLayer::Dynamic;
             descs[i].allowSleeping = false;
@@ -119,7 +119,7 @@ namespace
 
         Entity floorEnt = reg.CreateEntity();
         reg.AddComponent(floorEnt, TransformComponent{
-            Vec3{ 0.0f, -1.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+            RVec3{ 0.0f, -1.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
         }, q);
         reg.AddComponent(floorEnt, RigidBodyComponent{ Vec3{}, 0.0f, Vec3{}, InvalidBodyID }, q);
         reg.AddComponent(floorEnt, ColliderComponent::FromShape(
@@ -131,10 +131,10 @@ namespace
             const uint32_t gz = i / 64;
             Entity e = reg.CreateEntity();
             reg.AddComponent(e, TransformComponent{
-                Vec3{
-                    (static_cast<float>(gx) - 32.0f) * 1.5f,
-                    2.0f + static_cast<float>(i % 4) * 1.2f,
-                    (static_cast<float>(gz) - 32.0f) * 1.5f
+                RVec3{
+                    (static_cast<Real>(gx) - Real(32.0)) * Real(1.5),
+                    Real(2.0) + static_cast<Real>(i % 4) * Real(1.2),
+                    (static_cast<Real>(gz) - Real(32.0)) * Real(1.5)
                 },
                 Quat::Identity(),
                 Vec3{ 1.0f, 1.0f, 1.0f }
@@ -192,7 +192,7 @@ namespace
         {
             Entity e = reg.CreateEntity();
             reg.AddComponent(e, TransformComponent{
-                Vec3{ static_cast<float>(i % 64) * 3.0f, 0.0f, static_cast<float>(i / 64) * 3.0f },
+                RVec3{ static_cast<Real>(i % 64) * Real(3.0), Real(0.0), static_cast<Real>(i / 64) * Real(3.0) },
                 Quat::Identity(),
                 Vec3{ 1.0f, 1.0f, 1.0f }
             }, q);
@@ -207,7 +207,7 @@ namespace
         {
             Entity e = reg.CreateEntity();
             reg.AddComponent(e, TransformComponent{
-                Vec3{ static_cast<float>(i) * 4.0f, 20.0f, 0.0f },
+                RVec3{ static_cast<Real>(i) * Real(4.0), Real(20.0), Real(0.0) },
                 Quat::Identity(),
                 Vec3{ 1.0f, 1.0f, 1.0f }
             }, q);
@@ -252,10 +252,10 @@ namespace
             descs[i].motion   = MotionType::Static;
             descs[i].shape    = boxShape;
             descs[i].layer    = PhysicsLayer::Static;
-            descs[i].position = Vec3{
-                static_cast<float>(i % 10) * 3.0f,
-                static_cast<float>((i / 10) % 10) * 3.0f,
-                static_cast<float>(i / 100) * 3.0f + 5.0f
+            descs[i].position = RVec3{
+                static_cast<Real>(i % 10) * Real(3.0),
+                static_cast<Real>((i / 10) % 10) * Real(3.0),
+                static_cast<Real>(i / 100) * Real(3.0) + Real(5.0)
             };
         }
         world.CreateBodies(descs, ids);
@@ -265,9 +265,9 @@ namespace
         uint32_t qIdx = 0;
         for (auto _ : state)
         {
-            const float x = static_cast<float>(qIdx % 10) * 3.0f;
-            const float y = static_cast<float>((qIdx / 10) % 10) * 3.0f;
-            bool ok = world.Raycast(Vec3{ x, y, 0.0f }, Vec3{ 0.0f, 0.0f, 1.0f }, 100.0f, kAllLayersMask, hit);
+            const Real x = static_cast<Real>(qIdx % 10) * Real(3.0);
+            const Real y = static_cast<Real>((qIdx / 10) % 10) * Real(3.0);
+            bool ok = world.Raycast(RVec3{ x, y, Real(0.0) }, Vec3{ 0.0f, 0.0f, 1.0f }, 100.0f, kAllLayersMask, hit);
             benchmark::DoNotOptimize(ok);
             benchmark::DoNotOptimize(hit);
             ++qIdx;
@@ -291,10 +291,10 @@ namespace
             descs[i].motion   = MotionType::Static;
             descs[i].shape    = boxShape;
             descs[i].layer    = PhysicsLayer::Static;
-            descs[i].position = Vec3{
-                static_cast<float>(i % 10) * 3.0f,
-                static_cast<float>((i / 10) % 10) * 3.0f,
-                static_cast<float>(i / 100) * 3.0f + 5.0f
+            descs[i].position = RVec3{
+                static_cast<Real>(i % 10) * Real(3.0),
+                static_cast<Real>((i / 10) % 10) * Real(3.0),
+                static_cast<Real>(i / 100) * Real(3.0) + Real(5.0)
             };
         }
         world.CreateBodies(descs, ids);
@@ -304,9 +304,9 @@ namespace
         uint32_t qIdx = 0;
         for (auto _ : state)
         {
-            const float x = static_cast<float>(qIdx % 10) * 3.0f;
-            const float y = static_cast<float>((qIdx / 10) % 10) * 3.0f;
-            uint32_t n = world.RaycastAll(Vec3{ x, y, 0.0f }, Vec3{ 0.0f, 0.0f, 1.0f }, 100.0f, kAllLayersMask, hits);
+            const Real x = static_cast<Real>(qIdx % 10) * Real(3.0);
+            const Real y = static_cast<Real>((qIdx / 10) % 10) * Real(3.0);
+            uint32_t n = world.RaycastAll(RVec3{ x, y, Real(0.0) }, Vec3{ 0.0f, 0.0f, 1.0f }, 100.0f, kAllLayersMask, hits);
             benchmark::DoNotOptimize(n);
             benchmark::DoNotOptimize(hits.data());
             ++qIdx;
@@ -330,10 +330,10 @@ namespace
             descs[i].motion   = MotionType::Static;
             descs[i].shape    = boxShape;
             descs[i].layer    = PhysicsLayer::Static;
-            descs[i].position = Vec3{
-                static_cast<float>(i % 10) * 3.0f,
-                static_cast<float>((i / 10) % 10) * 3.0f,
-                static_cast<float>(i / 100) * 3.0f + 5.0f
+            descs[i].position = RVec3{
+                static_cast<Real>(i % 10) * Real(3.0),
+                static_cast<Real>((i / 10) % 10) * Real(3.0),
+                static_cast<Real>(i / 100) * Real(3.0) + Real(5.0)
             };
         }
         world.CreateBodies(descs, ids);
@@ -342,7 +342,7 @@ namespace
         std::array<BodyID, 64> outBodies{};
         for (auto _ : state)
         {
-            uint32_t n = world.OverlapSphere(Vec3{ 13.5f, 13.5f, 18.5f }, 5.0f, kAllLayersMask, outBodies);
+            uint32_t n = world.OverlapSphere(RVec3{ Real(13.5), Real(13.5), Real(18.5) }, 5.0f, kAllLayersMask, outBodies);
             benchmark::DoNotOptimize(n);
             benchmark::DoNotOptimize(outBodies.data());
         }
@@ -370,7 +370,7 @@ namespace
             descs[i].motion   = MotionType::Static;
             descs[i].shape    = boxShape;
             descs[i].layer    = PhysicsLayer::Static;
-            descs[i].position = Vec3{ static_cast<float>(i) * 2.0f, 0.0f, 0.0f };
+            descs[i].position = RVec3{ static_cast<Real>(i) * Real(2.0), Real(0.0), Real(0.0) };
         }
 
         uint32_t iter = 0;

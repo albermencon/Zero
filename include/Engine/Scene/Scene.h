@@ -4,6 +4,7 @@
 #include <Engine/Core.h>
 #include <Engine/Math/Mat4.h>
 #include <Engine/Math/Vec3.h>
+#include <Engine/Math/Real.h>
 #include <Engine/Scene/SceneTypes.h>
 
 namespace Zero
@@ -12,7 +13,7 @@ namespace Zero
     {
         Mat4  view;
         Mat4  proj;
-        Vec3  position;
+        RVec3 position{};
         float nearPlane = 0.1f;
         float farPlane = 1000.f;
     };
@@ -40,9 +41,10 @@ namespace Zero
         void RemoveLight(LightHandle handle);
         void UpdatePointLightPosition(LightHandle handle, const Vec3& position);
 
-        // Camera 
+        // Camera
 
         void SetCamera(const CameraDesc& desc);
+        [[nodiscard]] RVec3 GetCameraPosition() const noexcept;
 
         // GPU-Driven Batch
 

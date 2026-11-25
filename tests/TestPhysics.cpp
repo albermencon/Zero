@@ -16,7 +16,7 @@
 #include <cmath>
 #include <vector>
 
-#if defined(JPH_NAMESPACE_BEGIN) || defined(JPH_VERSION_ID)
+#if defined(JPH_NAMESPACE_BEGIN) || defined(JPH_VERSION_ID) || defined(JPH_DOUBLE_PRECISION)
     #error "Public physics headers leaked Jolt macros!"
 #endif
 
@@ -24,7 +24,7 @@ using namespace Zero;
 
 namespace
 {
-    bool ApproxEq(float a, float b, float eps = 1e-3f)
+    bool ApproxEq(double a, double b, double eps = 1e-3)
     {
         return std::fabs(a - b) <= eps;
     }
@@ -66,7 +66,7 @@ TEST_CASE("Physics: Dynamic body falls under gravity and collides with static fl
     // Static floor at y = -0.5, half-extents (20, 0.5, 20) -> top surface at y = 0.0
     Entity floorEnt = reg.CreateEntity();
     reg.AddComponent(floorEnt, TransformComponent{
-        Vec3{ 0.0f, -0.5f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, -0.5f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(floorEnt, RigidBodyComponent{
         Vec3{ 0.0f, 0.0f, 0.0f }, 0.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
@@ -78,7 +78,7 @@ TEST_CASE("Physics: Dynamic body falls under gravity and collides with static fl
     // Dynamic box falling from y = 3.0, half-extents (0.5, 0.5, 0.5) -> rests around y = 0.5
     Entity boxEnt = reg.CreateEntity();
     reg.AddComponent(boxEnt, TransformComponent{
-        Vec3{ 0.0f, 3.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, 3.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(boxEnt, RigidBodyComponent{
         Vec3{ 0.0f, 0.0f, 0.0f }, 1.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
@@ -137,7 +137,7 @@ TEST_CASE("Physics: Kinematic body moves via Gameplay transform and pushes dynam
     // Kinematic pusher starting at x = -2.0
     Entity kinEnt = reg.CreateEntity();
     reg.AddComponent(kinEnt, TransformComponent{
-        Vec3{ -2.0f, 0.5f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ -2.0f, 0.5f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(kinEnt, RigidBodyComponent{
         Vec3{ 0.0f, 0.0f, 0.0f }, 0.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
@@ -149,7 +149,7 @@ TEST_CASE("Physics: Kinematic body moves via Gameplay transform and pushes dynam
     // Dynamic target at x = 0.0 (zero gravity so it sits in place until struck)
     Entity dynEnt = reg.CreateEntity();
     reg.AddComponent(dynEnt, TransformComponent{
-        Vec3{ 0.0f, 0.5f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, 0.5f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(dynEnt, RigidBodyComponent{
         Vec3{ 0.0f, 0.0f, 0.0f }, 1.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
@@ -201,7 +201,7 @@ TEST_CASE("Physics: Gameplay teleport pushes to Jolt once with no dirty feedback
 
     Entity e = reg.CreateEntity();
     reg.AddComponent(e, TransformComponent{
-        Vec3{ 0.0f, 0.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, 0.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(e, RigidBodyComponent{
         Vec3{ 1.0f, 0.0f, 0.0f }, 1.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
@@ -220,13 +220,13 @@ TEST_CASE("Physics: Gameplay teleport pushes to Jolt once with no dirty feedback
     {
         const uint64_t gpEpoch = reg.AdvanceEpoch();
         auto tfRef = reg.Pool<TransformComponent>().GetMutable(Index(e), gpEpoch, WriteSource::Gameplay);
-        tfRef->position = Vec3{ 100.0f, 5.0f, 0.0f };
+        tfRef->position = RVec3{ 100.0f, 5.0f, 0.0f };
     }
 
     // Substep 1: Gameplay teleport is pushed to Jolt; body simulates forward from 100.0
     physSync.Execute(reg, q, kDt, reg.AdvanceEpoch());
-    const float posAfterSubstep1 = world.GetPosition(bodyId).x;
-    CHECK(posAfterSubstep1 > 100.0f);
+    const Real posAfterSubstep1 = world.GetPosition(bodyId).x;
+    CHECK(posAfterSubstep1 > Real(100.0));
     CHECK(reg.Pool<TransformComponent>().ModifiedSourceOf(Index(e)) == WriteSource::Physics);
 
     // Substep 2: No gameplay write happened. TransformComponent was written by Physics,
@@ -235,9 +235,9 @@ TEST_CASE("Physics: Gameplay teleport pushes to Jolt once with no dirty feedback
     CHECK(reg.Pool<TransformComponent>().ModifiedEpochOf(Index(e)) <= prevSyncedEpoch);
 
     physSync.Execute(reg, q, kDt, reg.AdvanceEpoch());
-    const float posAfterSubstep2 = world.GetPosition(bodyId).x;
+    const Real posAfterSubstep2 = world.GetPosition(bodyId).x;
     CHECK(posAfterSubstep2 > posAfterSubstep1);
-    CHECK(ApproxEq(reg.Pool<TransformComponent>().Get(Index(e))->position.x, posAfterSubstep2, 1e-4f));
+    CHECK(ApproxEq(reg.Pool<TransformComponent>().Get(Index(e))->position.x, posAfterSubstep2, 1e-4));
 }
 
 // ---------------------------------------------------------------------------
@@ -309,18 +309,18 @@ TEST_CASE("Physics: Zero-allocation Raycast, RaycastAll, OverlapSphere, and Over
     BodyDesc d1;
     d1.motion   = MotionType::Static;
     d1.shape    = boxShape;
-    d1.position = Vec3{ 0.0f, 0.0f, 5.0f };
+    d1.position = RVec3{ 0.0f, 0.0f, 5.0f };
     d1.layer    = PhysicsLayer::Static;
     d1.userData = Entity{ 1001 };
 
     BodyDesc d2 = d1;
-    d2.position = Vec3{ 0.0f, 0.0f, 10.0f };
+    d2.position = RVec3{ 0.0f, 0.0f, 10.0f };
     d2.userData = Entity{ 1002 };
 
     BodyDesc d3 = d1;
     d3.motion   = MotionType::Dynamic;
     d3.layer    = PhysicsLayer::Dynamic;
-    d3.position = Vec3{ 0.0f, 0.0f, 15.0f };
+    d3.position = RVec3{ 0.0f, 0.0f, 15.0f };
     d3.userData = Entity{ 1003 };
 
     const BodyID b1 = world.CreateBody(d1);
@@ -331,7 +331,7 @@ TEST_CASE("Physics: Zero-allocation Raycast, RaycastAll, OverlapSphere, and Over
     // Raycast single closest hit
     HitResult hit{};
     const bool didHit = world.Raycast(
-        Vec3{ 0.0f, 0.0f, 0.0f },
+        RVec3{ 0.0f, 0.0f, 0.0f },
         Vec3{ 0.0f, 0.0f, 1.0f },
         50.0f,
         kAllLayersMask,
@@ -344,7 +344,7 @@ TEST_CASE("Physics: Zero-allocation Raycast, RaycastAll, OverlapSphere, and Over
     // RaycastAll into stack-allocated array span (all layers)
     std::array<HitResult, 8> allHits{};
     const uint32_t allCount = world.RaycastAll(
-        Vec3{ 0.0f, 0.0f, 0.0f },
+        RVec3{ 0.0f, 0.0f, 0.0f },
         Vec3{ 0.0f, 0.0f, 1.0f },
         50.0f,
         kAllLayersMask,
@@ -356,7 +356,7 @@ TEST_CASE("Physics: Zero-allocation Raycast, RaycastAll, OverlapSphere, and Over
 
     // RaycastAll filtered to Dynamic layer only
     const uint32_t dynCount = world.RaycastAll(
-        Vec3{ 0.0f, 0.0f, 0.0f },
+        RVec3{ 0.0f, 0.0f, 0.0f },
         Vec3{ 0.0f, 0.0f, 1.0f },
         50.0f,
         MakeMask(PhysicsLayer::Dynamic),
@@ -367,7 +367,7 @@ TEST_CASE("Physics: Zero-allocation Raycast, RaycastAll, OverlapSphere, and Over
     // OverlapSphere into stack span
     std::array<BodyID, 8> overlapBuf{};
     const uint32_t sphereCount = world.OverlapSphere(
-        Vec3{ 0.0f, 0.0f, 7.5f },
+        RVec3{ 0.0f, 0.0f, 7.5f },
         3.5f,
         kAllLayersMask,
         overlapBuf);
@@ -375,7 +375,7 @@ TEST_CASE("Physics: Zero-allocation Raycast, RaycastAll, OverlapSphere, and Over
 
     // OverlapBox into stack span
     const uint32_t boxCount = world.OverlapBox(
-        Vec3{ 0.0f, 0.0f, 15.0f },
+        RVec3{ 0.0f, 0.0f, 15.0f },
         Vec3{ 1.0f, 1.0f, 1.0f },
         Quat::Identity(),
         MakeMask(PhysicsLayer::Dynamic),
@@ -404,10 +404,10 @@ TEST_CASE("Physics: PreviousTransformComponent snapshots before each FixedStep f
 
     Entity e = reg.CreateEntity();
     reg.AddComponent(e, TransformComponent{
-        Vec3{ 0.0f, 0.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, 0.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(e, PreviousTransformComponent{
-        Vec3{ 0.0f, 0.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, 0.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     // Moving at +6.0 units/sec in X (0.1 units per 1/60s step)
     reg.AddComponent(e, RigidBodyComponent{
@@ -422,21 +422,21 @@ TEST_CASE("Physics: PreviousTransformComponent snapshots before each FixedStep f
 
     // Substep 1: prev = 0.0, curr ~= 0.1
     physSync.Execute(reg, q, kDt, reg.AdvanceEpoch());
-    const float prev1 = reg.Pool<PreviousTransformComponent>().Get(Index(e))->position.x;
-    const float curr1 = reg.Pool<TransformComponent>().Get(Index(e))->position.x;
-    CHECK(ApproxEq(prev1, 0.0f, 1e-4f));
-    CHECK(ApproxEq(curr1, 0.1f, 1e-3f));
+    const Real prev1 = reg.Pool<PreviousTransformComponent>().Get(Index(e))->position.x;
+    const Real curr1 = reg.Pool<TransformComponent>().Get(Index(e))->position.x;
+    CHECK(ApproxEq(prev1, 0.0, 1e-4));
+    CHECK(ApproxEq(curr1, 0.1, 1e-3));
 
     // Substep 2: prev == curr1, curr2 ~= 0.2
     physSync.Execute(reg, q, kDt, reg.AdvanceEpoch());
     const auto* prev2 = reg.Pool<PreviousTransformComponent>().Get(Index(e));
     const auto* curr2 = reg.Pool<TransformComponent>().Get(Index(e));
-    CHECK(ApproxEq(prev2->position.x, curr1, 1e-4f));
-    CHECK(ApproxEq(curr2->position.x, 0.2f, 1e-3f));
+    CHECK(ApproxEq(prev2->position.x, curr1, 1e-4));
+    CHECK(ApproxEq(curr2->position.x, 0.2, 1e-3));
 
     // Alpha = 0.5 interpolation produces midpoint ~= 0.15
     const TransformComponent mid = prev2->InterpolateTo(*curr2, 0.5f);
-    CHECK(ApproxEq(mid.position.x, 0.15f, 1e-3f));
+    CHECK(ApproxEq(mid.position.x, 0.15, 1e-3));
 }
 
 // ---------------------------------------------------------------------------
@@ -476,14 +476,14 @@ TEST_CASE("Physics: Batch streaming geometry, mesh/compound shapes, and trigger 
 
     descs[1].motion   = MotionType::Static;
     descs[1].shape    = sA;
-    descs[1].position = Vec3{ 0.0f, 1.5f, 0.0f };
+    descs[1].position = RVec3{ 0.0f, 1.5f, 0.0f };
     descs[1].layer    = PhysicsLayer::Trigger;
     descs[1].isSensor = true;
     descs[1].userData = Entity{ 2 };
 
     descs[2].motion   = MotionType::Dynamic;
     descs[2].shape    = compShape;
-    descs[2].position = Vec3{ 0.0f, 3.0f, 0.0f };
+    descs[2].position = RVec3{ 0.0f, 3.0f, 0.0f };
     descs[2].layer    = PhysicsLayer::Dynamic;
     descs[2].userData = Entity{ 3 };
 
@@ -519,3 +519,131 @@ TEST_CASE("Physics: Batch streaming geometry, mesh/compound shapes, and trigger 
     world.DestroyShape(meshShape);
     CHECK_FALSE(world.IsShapeValid(meshShape));
 }
+
+#ifdef ZERO_DOUBLE_PRECISION
+// ---------------------------------------------------------------------------
+// 8. Large-world 64-bit precision at 100 km (100,000.0 m) from origin
+// ---------------------------------------------------------------------------
+TEST_CASE("Physics (Double Precision): Sub-millimeter resting contact and Raycast at 100 km")
+{
+    ScopedPoolInit poolGuard(2);
+
+    PhysicsWorld world;
+    REQUIRE(world.Init(PhysicsWorldConfig::Default()));
+
+    EcsRegistry reg;
+    EcsCommandQueue q;
+    PhysicsSyncSystem physSync(world);
+
+    constexpr double kOrigin = 100'000.0;
+
+    // Static floor centered at (100000, 99999.5, 100000), half-extents (20, 0.5, 20)
+    // -> top surface at exact y = 100000.0 m
+    Entity floorEnt = reg.CreateEntity();
+    reg.AddComponent(floorEnt, TransformComponent{
+        DVec3{ kOrigin, kOrigin - 0.5, kOrigin }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+    }, q);
+    reg.AddComponent(floorEnt, RigidBodyComponent{
+        Vec3{ 0.0f, 0.0f, 0.0f }, 0.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
+    }, q);
+    reg.AddComponent(floorEnt, ColliderComponent::Box(
+        Vec3{ 20.0f, 0.5f, 20.0f }, MotionType::Static, PhysicsLayer::Static
+    ), q);
+
+    // Dynamic box half-extents (0.5, 0.5, 0.5) falling from y = 100002.0 -> rests at y = 100000.5
+    Entity boxEnt = reg.CreateEntity();
+    reg.AddComponent(boxEnt, TransformComponent{
+        DVec3{ kOrigin, kOrigin + 2.0, kOrigin }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+    }, q);
+    reg.AddComponent(boxEnt, RigidBodyComponent{
+        Vec3{ 0.0f, 0.0f, 0.0f }, 1.0f, Vec3{ 0.0f, 0.0f, 0.0f }, InvalidBodyID
+    }, q);
+    reg.AddComponent(boxEnt, ColliderComponent::Box(
+        Vec3{ 0.5f, 0.5f, 0.5f }, MotionType::Dynamic, PhysicsLayer::Dynamic
+    ), q);
+
+    reg.FlushCommands(q);
+
+    constexpr float kDt = 1.0f / 60.0f;
+    bool sawContact = false;
+    DVec3 contactPoint{};
+    for (int step = 0; step < 180; ++step)
+    {
+        world.ClearContactEvents();
+        physSync.Execute(reg, q, kDt, reg.AdvanceEpoch());
+        reg.FlushCommands(q);
+
+        for (const auto& ev : world.GetContactEvents())
+        {
+            if ((ev.entityA == boxEnt && ev.entityB == floorEnt) ||
+                (ev.entityA == floorEnt && ev.entityB == boxEnt))
+            {
+                if (ev.type == ContactType::Added || ev.type == ContactType::Persisted)
+                {
+                    sawContact   = true;
+                    contactPoint = ev.point;
+                }
+            }
+        }
+    }
+
+    const TransformComponent* boxTf = reg.Pool<TransformComponent>().Get(Index(boxEnt));
+    const RigidBodyComponent* boxRb = reg.Pool<RigidBodyComponent>().Get(Index(boxEnt));
+    REQUIRE(boxTf != nullptr);
+    REQUIRE(boxRb != nullptr);
+    REQUIRE(boxRb->bodyId.IsValid());
+
+    CHECK(sawContact);
+    // Sub-millimeter resting contact point accuracy at 100 km
+    CHECK(ApproxEq(contactPoint.y, kOrigin, 1e-3));
+
+    // Compare resting position at 100 km against an identical origin-local simulation
+    // (Jolt's default mPenetrationSlop is 0.02 m, so resting y differs slightly from 0.5,
+    //  but 64-bit world precision matches origin-local resting y to sub-millimeter!)
+    PhysicsWorld refWorld;
+    REQUIRE(refWorld.Init(PhysicsWorldConfig::Default()));
+    const ShapeID refFloorShape = refWorld.CreateBoxShape(Vec3{ 20.0f, 0.5f, 20.0f });
+    const ShapeID refBoxShape   = refWorld.CreateBoxShape(Vec3{ 0.5f, 0.5f, 0.5f });
+    BodyDesc refFloor{};
+    refFloor.motion   = MotionType::Static;
+    refFloor.shape    = refFloorShape;
+    refFloor.position = DVec3{ 0.0, -0.5, 0.0 };
+    refFloor.layer    = PhysicsLayer::Static;
+    (void)refWorld.CreateBody(refFloor);
+    BodyDesc refBox{};
+    refBox.motion   = MotionType::Dynamic;
+    refBox.shape    = refBoxShape;
+    refBox.position = DVec3{ 0.0, 2.0, 0.0 };
+    refBox.layer    = PhysicsLayer::Dynamic;
+    const BodyID refBoxId = refWorld.CreateBody(refBox);
+    for (int step = 0; step < 180; ++step)
+    {
+        refWorld.ClearContactEvents();
+        refWorld.Step(kDt, 1);
+    }
+    const DVec3 refPos = refWorld.GetPosition(refBoxId);
+
+    const DVec3 worldPos = world.GetPosition(boxRb->bodyId);
+    CHECK(ApproxEq(worldPos.x, kOrigin, 1e-4));
+    CHECK(ApproxEq(worldPos.z, kOrigin, 1e-4));
+    CHECK(ApproxEq(worldPos.y - kOrigin, refPos.y, 1e-4));
+    CHECK(ApproxEq(boxTf->position.x, worldPos.x, 1e-6));
+    CHECK(ApproxEq(boxTf->position.y, worldPos.y, 1e-6));
+    CHECK(ApproxEq(boxTf->position.z, worldPos.z, 1e-6));
+    CHECK(std::fabs(boxRb->linearVelocity.y) < 1e-2f);
+
+    // Raycast from 10 m above down onto the resting box's top face (y = worldPos.y + 0.5)
+    HitResult hit{};
+    const bool didHit = world.Raycast(
+        DVec3{ kOrigin, kOrigin + 10.0, kOrigin },
+        Vec3{ 0.0f, -1.0f, 0.0f },
+        20.0f,
+        MakeMask(PhysicsLayer::Dynamic),
+        hit);
+    REQUIRE(didHit);
+    CHECK(hit.entity == boxEnt);
+    CHECK(ApproxEq(hit.position.x, kOrigin, 1e-4));
+    CHECK(ApproxEq(hit.position.z, kOrigin, 1e-4));
+    CHECK(ApproxEq(hit.position.y, worldPos.y + 0.5, 1e-3));
+}
+#endif

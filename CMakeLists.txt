@@ -11,6 +11,10 @@ endif()
 option(BUILD_SHARED "Build as shared library" OFF)
 option(ZERO_ENABLE_PROFILING "Enable Tracy profiling" ON) # profiling with tracy
 option(ZERO_PROFILE_ON_DEMAND "Only collect Tracy captures when profiler connects (requires ZERO_ENABLE_PROFILING)" OFF)
+option(ZERO_DOUBLE_PRECISION "Use 64-bit double precision for world-space positions" ON)
+
+# Forward precision mode to Jolt before third_party/joltphysics is added
+set(DOUBLE_PRECISION ${ZERO_DOUBLE_PRECISION} CACHE BOOL "" FORCE)
 
 file(GLOB_RECURSE ZERO_SOURCES CONFIGURE_DEPENDS
     "src/*.cpp"
@@ -50,6 +54,10 @@ endif()
 target_compile_definitions(Zero PUBLIC
     $<$<CONFIG:Debug>:ZERO_DEBUG>
 )
+
+if(ZERO_DOUBLE_PRECISION)
+    target_compile_definitions(Zero PUBLIC ZERO_DOUBLE_PRECISION)
+endif()
 
 target_compile_definitions(Zero PRIVATE
     ZERO_BUILD_CONFIG_STR="$<CONFIG>"

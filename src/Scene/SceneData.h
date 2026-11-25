@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <atomic>
+#include <mutex>
 #include <unordered_map>
 #include <Engine/Math/Mat4.h>
 #include <Engine/Math/Vec3.h>
@@ -328,10 +329,12 @@ namespace Zero
         std::string name;
         RenderPath  renderPath = RenderPath::CPUDriven;  // set at creation
 
-        RenderableStore renderables;
-        LightStore      lights;
-        CameraDesc      camera{};
-        GPUDrivenBatch  gpuBatch{};
+        RenderableStore    renderables;
+        LightStore         lights;
+        CameraDesc         camera{};
+        mutable std::mutex cameraPosMutex;
+        RVec3              latestCameraPosition{};
+        GPUDrivenBatch     gpuBatch{};
 
         moodycamel::ConcurrentQueue<SceneCommand> commands;
         std::atomic<uint32_t> nextHandleId{ 1 };

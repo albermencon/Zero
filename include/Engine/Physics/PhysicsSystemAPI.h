@@ -2,6 +2,7 @@
 #include <Engine/Export.h>
 #include <Engine/Physics/PhysicsTypes.h>
 #include <Engine/Math/Vec3.h>
+#include <Engine/Math/Real.h>
 #include <Engine/Math/Quat.h>
 #include <Engine/Ecs/Entity.h>
 #include <array>
@@ -10,11 +11,9 @@
 #include <memory>
 #include <span>
 
-namespace Zero {
-
-    // -------------------------------------------------------------------------
+namespace Zero 
+{
     // Opaque 32-bit physics handles (no Jolt types exposed in public headers)
-    // -------------------------------------------------------------------------
 
     struct BodyID {
         uint32_t value = std::numeric_limits<uint32_t>::max();
@@ -39,9 +38,7 @@ namespace Zero {
 
     inline constexpr ShapeID InvalidShapeID{~0u};
 
-    // -------------------------------------------------------------------------
     // Shape & Body descriptors
-    // -------------------------------------------------------------------------
 
     struct CompoundSubShape {
         ShapeID shape    = InvalidShapeID;
@@ -52,7 +49,7 @@ namespace Zero {
     struct BodyDesc {
         MotionType   motion              = MotionType::Dynamic;
         ShapeID      shape               = InvalidShapeID;
-        Vec3         position            = { 0.0f, 0.0f, 0.0f };
+        RVec3        position            = {};
         Quat         rotation            = Quat::Identity();
         Vec3         scale               = { 1.0f, 1.0f, 1.0f };
         Vec3         fallbackHalfExtents = { 0.5f, 0.5f, 0.5f }; // Used if shape == InvalidShapeID
@@ -82,9 +79,7 @@ namespace Zero {
         bool         startActivated = true;
     };
 
-    // -------------------------------------------------------------------------
     // World configuration & query / event data
-    // -------------------------------------------------------------------------
 
     struct PhysicsWorldConfig {
         uint32_t maxBodies             = 65'536;
@@ -117,7 +112,7 @@ namespace Zero {
     struct HitResult {
         BodyID   bodyId     = InvalidBodyID;
         Entity   entity     = Invalid;
-        Vec3     position   = { 0.0f, 0.0f, 0.0f };
+        RVec3    position   = {};
         Vec3     normal     = { 0.0f, 1.0f, 0.0f };
         float    fraction   = 1.0f;
         float    distance   = 0.0f;
@@ -129,7 +124,7 @@ namespace Zero {
         BodyID      b           = InvalidBodyID;
         Entity      entityA     = Invalid;
         Entity      entityB     = Invalid;
-        Vec3        point       = { 0.0f, 0.0f, 0.0f };
+        RVec3       point       = {};
         Vec3        normal      = { 0.0f, 1.0f, 0.0f };
         float       penetration = 0.0f;
         ContactType type        = ContactType::Added;
@@ -138,16 +133,14 @@ namespace Zero {
     struct ActiveBodyState {
         BodyID     bodyId          = InvalidBodyID;
         Entity     entity          = Invalid;
-        Vec3       position        = { 0.0f, 0.0f, 0.0f };
+        RVec3      position        = {};
         Quat       rotation        = Quat::Identity();
         Vec3       linearVelocity  = { 0.0f, 0.0f, 0.0f };
         Vec3       angularVelocity = { 0.0f, 0.0f, 0.0f };
         MotionType motion          = MotionType::Dynamic;
     };
 
-    // -------------------------------------------------------------------------
     // Pimpl-encapsulated PhysicsWorld
-    // -------------------------------------------------------------------------
 
     class ZERO_API PhysicsWorld {
     public:
@@ -198,8 +191,8 @@ namespace Zero {
         void DestroyBodies(std::span<const BodyID> ids);
 
         // Body state & manipulation
-        void SetPositionAndRotation(BodyID id, const Vec3& position, const Quat& rotation, bool activate = true);
-        void MoveKinematic(BodyID id, const Vec3& targetPosition, const Quat& targetRotation, float fixedDt);
+        void SetPositionAndRotation(BodyID id, const RVec3& position, const Quat& rotation, bool activate = true);
+        void MoveKinematic(BodyID id, const RVec3& targetPosition, const Quat& targetRotation, float fixedDt);
         void SetLinearVelocity(BodyID id, const Vec3& velocity);
         void SetAngularVelocity(BodyID id, const Vec3& angularVelocity);
         void AddForce(BodyID id, const Vec3& force);
@@ -209,7 +202,7 @@ namespace Zero {
         [[nodiscard]] bool       IsBodyValid(BodyID id) const noexcept;
         [[nodiscard]] bool       IsBodyActive(BodyID id) const noexcept;
         [[nodiscard]] MotionType GetMotionType(BodyID id) const noexcept;
-        [[nodiscard]] Vec3       GetPosition(BodyID id) const noexcept;
+        [[nodiscard]] RVec3      GetPosition(BodyID id) const noexcept;
         [[nodiscard]] Quat       GetRotation(BodyID id) const noexcept;
         [[nodiscard]] Vec3       GetLinearVelocity(BodyID id) const noexcept;
         [[nodiscard]] Vec3       GetAngularVelocity(BodyID id) const noexcept;
@@ -227,24 +220,24 @@ namespace Zero {
                                                        std::span<ActiveBodyState> outStates) const noexcept;
 
         // Zero-allocation spatial queries
-        [[nodiscard]] bool Raycast(const Vec3& origin,
+        [[nodiscard]] bool Raycast(const RVec3& origin,
                                    const Vec3& dir,
                                    float maxDist,
                                    LayerMask layerMask,
                                    HitResult& outHit) const noexcept;
 
-        [[nodiscard]] uint32_t RaycastAll(const Vec3& origin,
+        [[nodiscard]] uint32_t RaycastAll(const RVec3& origin,
                                           const Vec3& dir,
                                           float maxDist,
                                           LayerMask layerMask,
                                           std::span<HitResult> outHits) const noexcept;
 
-        [[nodiscard]] uint32_t OverlapSphere(const Vec3& center,
+        [[nodiscard]] uint32_t OverlapSphere(const RVec3& center,
                                              float radius,
                                              LayerMask layerMask,
                                              std::span<BodyID> outBodies) const noexcept;
 
-        [[nodiscard]] uint32_t OverlapBox(const Vec3& center,
+        [[nodiscard]] uint32_t OverlapBox(const RVec3& center,
                                           const Vec3& halfExtents,
                                           const Quat& rotation,
                                           LayerMask layerMask,

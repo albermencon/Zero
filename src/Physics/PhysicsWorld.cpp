@@ -34,11 +34,13 @@
 
 namespace Zero
 {
+    static_assert(sizeof(Zero::Real) == sizeof(JPH::Real),
+        "Zero::Real precision must match JPH::Real precision");
+
     namespace
     {
-        // ---------------------------------------------------------------------
         // Reference-counted Jolt global initialization
-        // ---------------------------------------------------------------------
+
         std::mutex g_joltGlobalMutex;
         uint32_t   g_joltRefCount = 0;
 
@@ -97,15 +99,14 @@ namespace Zero
             }
         }
 
-        // ---------------------------------------------------------------------
         // Math & enum conversions
-        // ---------------------------------------------------------------------
+
         [[nodiscard]] inline JPH::Vec3 ToJolt(const Vec3& v) noexcept
         {
             return JPH::Vec3(v.x, v.y, v.z);
         }
 
-        [[nodiscard]] inline JPH::RVec3 ToJoltR(const Vec3& v) noexcept
+        [[nodiscard]] inline JPH::RVec3 ToJoltR(const RVec3& v) noexcept
         {
             return JPH::RVec3(v.x, v.y, v.z);
         }
@@ -121,16 +122,10 @@ namespace Zero
             return Vec3{ v.GetX(), v.GetY(), v.GetZ() };
         }
 
-#ifdef JPH_DOUBLE_PRECISION
-        [[nodiscard]] inline Vec3 ToZero(const JPH::RVec3& v) noexcept
+        [[nodiscard]] inline RVec3 ToZeroR(const JPH::RVec3& v) noexcept
         {
-            return Vec3{
-                static_cast<float>(v.GetX()),
-                static_cast<float>(v.GetY()),
-                static_cast<float>(v.GetZ())
-            };
+            return RVec3{ v.GetX(), v.GetY(), v.GetZ() };
         }
-#endif
 
         [[nodiscard]] inline Quat ToZero(const JPH::Quat& q) noexcept
         {
@@ -177,9 +172,8 @@ namespace Zero
             return static_cast<JPH::ObjectLayer>(ObjectLayer::DYNAMIC);
         }
 
-        // ---------------------------------------------------------------------
         // Broadphase & Object Layer Filters
-        // ---------------------------------------------------------------------
+
         namespace BPLayers
         {
             inline constexpr JPH::BroadPhaseLayer NON_MOVING(0);
@@ -321,9 +315,8 @@ namespace Zero
             LayerMask m_mask;
         };
 
-        // ---------------------------------------------------------------------
         // Generational ShapeID storage
-        // ---------------------------------------------------------------------
+
         constexpr uint32_t kShapeIndexBits = 20;
         constexpr uint32_t kShapeIndexMask = (1u << kShapeIndexBits) - 1u;
         constexpr uint32_t kShapeGenMask   = 0xFFFu; // 12 bits; 0xFFF reserved with UINT32_MAX
@@ -359,9 +352,8 @@ namespace Zero
             bool     isSensor  = false;
         };
 
-        // ---------------------------------------------------------------------
         // Lock-free atomic-indexed ContactListener
-        // ---------------------------------------------------------------------
+
         class ZeroContactListener final : public JPH::ContactListener
         {
         public:
@@ -471,9 +463,9 @@ namespace Zero
                 ev.type        = type;
 
                 if (!inManifold.mRelativeContactPointsOn1.empty())
-                    ev.point = ToZero(inManifold.GetWorldSpaceContactPointOn1(0));
+                    ev.point = ToZeroR(inManifold.GetWorldSpaceContactPointOn1(0));
                 else
-                    ev.point = ToZero(inManifold.mBaseOffset);
+                    ev.point = ToZeroR(inManifold.mBaseOffset);
 
                 PushEvent(ev);
             }
@@ -501,9 +493,8 @@ namespace Zero
             const std::vector<BodyEntityEntry>* m_bodyCache        = nullptr;
         };
 
-        // ---------------------------------------------------------------------
         // Zero-allocation Spatial Query Collectors
-        // ---------------------------------------------------------------------
+
         class ZeroCastRayAllCollector final : public JPH::CastRayCollector
         {
         public:
@@ -605,11 +596,8 @@ namespace Zero
             std::span<BodyID> m_out;
             uint32_t          m_count = 0;
         };
-    } // anonymous namespace
+    }
 
-    // =========================================================================
-    // PhysicsWorld::Impl
-    // =========================================================================
 
     struct PhysicsWorld::Impl
     {
@@ -876,9 +864,7 @@ namespace Zero
         }
     };
 
-    // =========================================================================
     // PhysicsWorld Public API
-    // =========================================================================
 
     PhysicsWorld::PhysicsWorld()
         : m_impl(std::make_unique<Impl>())
@@ -943,9 +929,7 @@ namespace Zero
         return ToZero(m_impl->physicsSystem.GetGravity());
     }
 
-    // -------------------------------------------------------------------------
     // Shape API
-    // -------------------------------------------------------------------------
 
     ShapeID PhysicsWorld::CreateBoxShape(const Vec3& halfExtents, float convexRadius)
     {
@@ -1337,12 +1321,10 @@ namespace Zero
         }
     }
 
-    // -------------------------------------------------------------------------
     // Body State & Manipulation
-    // -------------------------------------------------------------------------
-
+    
     void PhysicsWorld::SetPositionAndRotation(BodyID id,
-                                              const Vec3& position,
+                                              const RVec3& position,
                                               const Quat& rotation,
                                               bool activate)
     {
@@ -1357,7 +1339,7 @@ namespace Zero
     }
 
     void PhysicsWorld::MoveKinematic(BodyID id,
-                                     const Vec3& targetPosition,
+                                     const RVec3& targetPosition,
                                      const Quat& targetRotation,
                                      float fixedDt)
     {
@@ -1444,11 +1426,11 @@ namespace Zero
         return ToZero(m_impl->physicsSystem.GetBodyInterface().GetMotionType(ToJolt(id)));
     }
 
-    Vec3 PhysicsWorld::GetPosition(BodyID id) const noexcept
+    RVec3 PhysicsWorld::GetPosition(BodyID id) const noexcept
     {
         if (!IsInitialized() || id.IsInvalid())
-            return Vec3{};
-        return ToZero(m_impl->physicsSystem.GetBodyInterface().GetPosition(ToJolt(id)));
+            return RVec3{};
+        return ToZeroR(m_impl->physicsSystem.GetBodyInterface().GetPosition(ToJolt(id)));
     }
 
     Quat PhysicsWorld::GetRotation(BodyID id) const noexcept
@@ -1544,7 +1526,7 @@ namespace Zero
             ActiveBodyState& dst = outStates[written++];
             dst.bodyId           = ToZero(jphId);
             dst.entity           = static_cast<Entity>(body.GetUserData());
-            dst.position         = ToZero(body.GetPosition());
+            dst.position         = ToZeroR(body.GetPosition());
             dst.rotation         = ToZero(body.GetRotation());
             dst.linearVelocity   = ToZero(body.GetLinearVelocity());
             dst.angularVelocity  = ToZero(body.GetAngularVelocity());
@@ -1554,11 +1536,9 @@ namespace Zero
         return written;
     }
 
-    // -------------------------------------------------------------------------
     // Zero-Allocation Spatial Queries
-    // -------------------------------------------------------------------------
 
-    bool PhysicsWorld::Raycast(const Vec3& origin,
+    bool PhysicsWorld::Raycast(const RVec3& origin,
                                const Vec3& dir,
                                float maxDist,
                                LayerMask layerMask,
@@ -1586,7 +1566,7 @@ namespace Zero
         outHit.bodyId     = ToZero(hit.mBodyID);
         outHit.fraction   = hit.mFraction;
         outHit.distance   = hit.mFraction * maxDist;
-        outHit.position   = ToZero(hitPos);
+        outHit.position   = ToZeroR(hitPos);
         outHit.subShapeId = hit.mSubShapeID2.GetValue();
         outHit.entity     = Invalid;
         outHit.normal     = Vec3{ 0.0f, 1.0f, 0.0f };
@@ -1602,7 +1582,7 @@ namespace Zero
         return true;
     }
 
-    uint32_t PhysicsWorld::RaycastAll(const Vec3& origin,
+    uint32_t PhysicsWorld::RaycastAll(const RVec3& origin,
                                       const Vec3& dir,
                                       float maxDist,
                                       LayerMask layerMask,
@@ -1640,7 +1620,7 @@ namespace Zero
         {
             HitResult& h = outHits[i];
             const JPH::RVec3 hitPos = ray.GetPointOnRay(h.fraction);
-            h.position = ToZero(hitPos);
+            h.position = ToZeroR(hitPos);
             h.distance = h.fraction * maxDist;
             h.entity   = Invalid;
             h.normal   = Vec3{ 0.0f, 1.0f, 0.0f };
@@ -1660,7 +1640,7 @@ namespace Zero
         return hitCount;
     }
 
-    uint32_t PhysicsWorld::OverlapSphere(const Vec3& center,
+    uint32_t PhysicsWorld::OverlapSphere(const RVec3& center,
                                          float radius,
                                          LayerMask layerMask,
                                          std::span<BodyID> outBodies) const noexcept
@@ -1692,7 +1672,7 @@ namespace Zero
         return collector.Count();
     }
 
-    uint32_t PhysicsWorld::OverlapBox(const Vec3& center,
+    uint32_t PhysicsWorld::OverlapBox(const RVec3& center,
                                       const Vec3& halfExtents,
                                       const Quat& rotation,
                                       LayerMask layerMask,
@@ -1731,9 +1711,7 @@ namespace Zero
         return collector.Count();
     }
 
-    // -------------------------------------------------------------------------
     // Zero-Allocation Contact Events
-    // -------------------------------------------------------------------------
 
     std::span<const ContactEvent> PhysicsWorld::GetContactEvents() const noexcept
     {

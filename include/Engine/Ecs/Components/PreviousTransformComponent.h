@@ -10,9 +10,9 @@ namespace Zero
     // Only dynamic / interpolated entities need this component; static meshes omit it.
     struct alignas(16) PreviousTransformComponent
     {
-        Vec3 position = { 0.0f, 0.0f, 0.0f };
-        Quat rotation = Quat::Identity();
-        Vec3 scale    = { 1.0f, 1.0f, 1.0f };
+        RVec3 position = {};
+        Quat  rotation = Quat::Identity();
+        Vec3  scale    = { 1.0f, 1.0f, 1.0f };
 
         [[nodiscard]] static constexpr PreviousTransformComponent FromTransform(const TransformComponent& tf) noexcept
         {
@@ -38,7 +38,11 @@ namespace Zero
     };
 
     static_assert(std::is_trivially_copyable_v<PreviousTransformComponent>);
+#ifdef ZERO_DOUBLE_PRECISION
+    static_assert(sizeof(PreviousTransformComponent) == 64);
+#else
     static_assert(sizeof(PreviousTransformComponent) == 48);
+#endif
     static_assert(alignof(PreviousTransformComponent) == 16);
 }
 

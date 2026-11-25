@@ -15,6 +15,7 @@
 #include <Engine/Ecs/Components/NameComponent.h>
 #include <Engine/Scene/SceneManager.h>
 #include <Engine/Scene/Scene.h>
+#include <Engine/Graphics/FrameData.h>
 
 #include "JobSystem/BlockingThreadPool.h"
 
@@ -45,12 +46,17 @@ namespace
         };
     }
 
-    bool ApproxEq(float a, float b, float eps = 1e-4f)
+    bool ApproxEq(double a, double b, double eps = 1e-4)
     {
         return std::fabs(a - b) <= eps;
     }
 
     bool ApproxVec3(const Vec3& a, const Vec3& b, float eps = 1e-4f)
+    {
+        return ApproxEq(a.x, b.x, eps) && ApproxEq(a.y, b.y, eps) && ApproxEq(a.z, b.z, eps);
+    }
+
+    bool ApproxRVec3(const RVec3& a, const RVec3& b, double eps = 1e-4)
     {
         return ApproxEq(a.x, b.x, eps) && ApproxEq(a.y, b.y, eps) && ApproxEq(a.z, b.z, eps);
     }
@@ -207,29 +213,29 @@ TEST_CASE("ECS Pass 2: RenderSyncSystem drains tombstones and leaks zero Scene r
 // ---------------------------------------------------------------------------
 TEST_CASE("ECS Pass 2: TransformComponent TRS composition and fixed-step interpolation")
 {
-    const Vec3 pos{ 10.0f, -4.0f, 2.5f };
+    const RVec3 pos{ Real(10.0), Real(-4.0), Real(2.5) };
     const Quat rot = Quat::FromAxisAngle(Vec3{ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> * 0.5f);
     const Vec3 scl{ 2.0f, 3.0f, 4.0f };
 
     TransformComponent tf{ pos, rot, scl };
     const Mat4 trsMat = tf.ToMat4();
-    const Mat4 expected = Mat4::Translate(pos) * rot.ToMat4() * Mat4::Scale(scl);
+    const Mat4 expected = Mat4::Translate(ToVec3(pos)) * rot.ToMat4() * Mat4::Scale(scl);
     CHECK(ApproxMat4(trsMat, expected, 1e-4f));
 
     // Fixed-step interpolation between prev and curr
     TransformComponent curr{
-        Vec3{ 20.0f, 0.0f, 0.0f },
+        RVec3{ Real(20.0), Real(0.0), Real(0.0) },
         Quat::FromAxisAngle(Vec3{ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> * 0.5f),
         Vec3{ 3.0f, 3.0f, 3.0f }
     };
     PreviousTransformComponent prev{
-        Vec3{ 10.0f, 0.0f, 0.0f },
+        RVec3{ Real(10.0), Real(0.0), Real(0.0) },
         Quat::Identity(),
         Vec3{ 1.0f, 1.0f, 1.0f }
     };
 
     const TransformComponent mid = prev.InterpolateTo(curr, 0.5f);
-    CHECK(ApproxVec3(mid.position, Vec3{ 15.0f, 0.0f, 0.0f }));
+    CHECK(ApproxRVec3(mid.position, RVec3{ Real(15.0), Real(0.0), Real(0.0) }));
     CHECK(ApproxVec3(mid.scale, Vec3{ 2.0f, 2.0f, 2.0f }));
 
     // Midpoint rotation of 90 deg around Y should be 45 deg around Y
@@ -277,7 +283,7 @@ TEST_CASE("ECS Pass 2: Monotonic dirty epochs and write provenance prevent physi
     {
         auto writeView = tfPool.WriteView(gameplayEpoch, WriteSource::Gameplay);
         TransformComponent moved = writeView.data[0];
-        moved.position = Vec3{ 5.0f, 10.0f, 0.0f };
+        moved.position = RVec3{ Real(5.0), Real(10.0), Real(0.0) };
         writeView.Write(0, moved);
     }
     // RenderSync consumes Frame N's gameplay write, updating renderSyncEpoch
@@ -347,7 +353,7 @@ TEST_CASE("ECS Pass 2: Scheduler phases, MainThread affinity, ResourceMask confl
         phaseTrace.push_back(0);
         // Enqueue structural command directly using the passed EcsCommandQueue&
         Entity e = r.CreateEntity();
-        r.AddComponent(e, TransformComponent{ Vec3{ 1.0f, 2.0f, 3.0f }, Quat::Identity(), Vec3{ 1.0f } }, cmdQ);
+        r.AddComponent(e, TransformComponent{ RVec3{ Real(1.0), Real(2.0), Real(3.0) }, Quat::Identity(), Vec3{ 1.0f } }, cmdQ);
     };
 
     SystemDescriptor physWrite1;
@@ -439,4 +445,58 @@ TEST_CASE("ECS Pass 2: Scheduler phases, MainThread affinity, ResourceMask confl
     CHECK(phaseTrace[2] == 3);
 
     pool.Shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// 4. RenderSyncSystem Camera-Relative Transform Subtraction
+// ---------------------------------------------------------------------------
+TEST_CASE("ECS: RenderSyncSystem builds camera-relative 32-bit Mat4 from RVec3")
+{
+    SceneManager::Get().Init();
+    const SceneId sceneId = SceneManager::Get().CreateScene("CamRelTestScene", RenderPath::CPUDriven);
+    Scene* scene = SceneManager::Get().GetScene(sceneId);
+    REQUIRE(scene != nullptr);
+    SceneManager::Get().SetSceneActive(sceneId, true);
+
+#ifdef ZERO_DOUBLE_PRECISION
+    const RVec3 camWorldPos{ 100'000.0, 200'000.0, 300'000.0 };
+    const RVec3 entWorldPos{ 100'000.00125, 200'000.5, 299'995.0 };
+#else
+    const RVec3 camWorldPos{ 100.0f, 200.0f, 300.0f };
+    const RVec3 entWorldPos{ 100.00125f, 200.5f, 295.0f };
+#endif
+
+    CameraDesc cam{};
+    cam.view      = Mat4::LookAt(Vec3{ 0.0f, 0.0f, 0.0f }, Vec3{ 0.0f, 0.0f, -1.0f }, Vec3{ 0.0f, 1.0f, 0.0f });
+    cam.proj      = Mat4::Perspective(1.04719755f, 16.0f / 9.0f, 0.1f, 1000.0f);
+    cam.position  = camWorldPos;
+    cam.nearPlane = 0.1f;
+    cam.farPlane  = 1000.0f;
+    scene->SetCamera(cam);
+
+    EcsRegistry reg;
+    EcsCommandQueue q;
+    RenderSyncSystem sync(*scene, MakeDummyMeshResolver());
+
+    Entity e = reg.CreateEntity();
+    reg.AddComponent(e, MeshComponent{ 1, 1 }, q);
+    reg.AddComponent(e, TransformComponent{ entWorldPos, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f } }, q);
+    reg.AddComponent(e, BoundsComponent{ Vec3{ -1.0f, -1.0f, -6.0f }, Vec3{ 1.0f, 1.0f, -4.0f } }, q);
+    reg.FlushCommands(q);
+
+    sync.Execute(reg, q, 0.016f, reg.AdvanceEpoch());
+    reg.FlushCommands(q);
+    reg.ClearTombstones();
+    SceneManager::Get().FlushCommands();
+
+    FrameData* frame = SceneManager::Get().BuildFrame(0, 0.016f);
+    REQUIRE(frame != nullptr);
+    REQUIRE(!frame->transform.empty());
+
+    const Mat4& gpuMat = frame->transform.back();
+    CHECK(ApproxEq(gpuMat.m[12], 0.00125f, 1e-5f));
+    CHECK(ApproxEq(gpuMat.m[13], 0.5f, 1e-5f));
+    CHECK(ApproxEq(gpuMat.m[14], -5.0f, 1e-5f));
+
+    SceneManager::Get().DestroyScene(sceneId);
 }

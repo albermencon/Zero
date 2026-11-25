@@ -115,10 +115,20 @@ namespace Zero
 
     void Scene::SetCamera(const CameraDesc& desc)
     {
+        {
+            std::lock_guard<std::mutex> lock(m_impl->cameraPosMutex);
+            m_impl->latestCameraPosition = desc.position;
+        }
         SceneCommand cmd;
         cmd.type = SceneCommandType::SetCamera;
         cmd.camera = desc;
         m_impl->commands.enqueue(cmd);
+    }
+
+    RVec3 Scene::GetCameraPosition() const noexcept
+    {
+        std::lock_guard<std::mutex> lock(m_impl->cameraPosMutex);
+        return m_impl->latestCameraPosition;
     }
 
     void Scene::SetGPUBatch(const GPUDrivenBatch& batch)

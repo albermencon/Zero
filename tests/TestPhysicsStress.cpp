@@ -50,7 +50,7 @@ TEST_CASE("Physics Stress: Multi-substep frame preserves Substep 1 ContactEvents
     // Static sensor trigger at origin
     BodyDesc sensorDesc;
     sensorDesc.motion   = MotionType::Static;
-    sensorDesc.position = Vec3{ 0.0f, 0.0f, 0.0f };
+    sensorDesc.position = RVec3{ 0.0f, 0.0f, 0.0f };
     sensorDesc.layer    = PhysicsLayer::Trigger;
     sensorDesc.isSensor = true;
     sensorDesc.userData = Entity{ 10 };
@@ -62,7 +62,7 @@ TEST_CASE("Physics Stress: Multi-substep frame preserves Substep 1 ContactEvents
     BodyDesc moverDesc;
     moverDesc.motion         = MotionType::Dynamic;
     moverDesc.shape          = sphereShape;
-    moverDesc.position       = Vec3{ -0.7f, 0.0f, 0.0f };
+    moverDesc.position       = RVec3{ -0.7f, 0.0f, 0.0f };
     moverDesc.linearVelocity = Vec3{ 60.0f, 0.0f, 0.0f };
     moverDesc.linearDamping  = 0.0f;
     moverDesc.layer          = PhysicsLayer::Dynamic;
@@ -124,7 +124,7 @@ TEST_CASE("Physics Stress: ContactEvent buffer overflow drops cleanly without al
     BodyDesc floorDesc;
     floorDesc.motion   = MotionType::Static;
     floorDesc.shape    = floorShape;
-    floorDesc.position = Vec3{ 0.0f, -0.5f, 0.0f };
+    floorDesc.position = RVec3{ 0.0f, -0.5f, 0.0f };
     floorDesc.layer    = PhysicsLayer::Static;
     (void)world.CreateBody(floorDesc);
 
@@ -134,7 +134,7 @@ TEST_CASE("Physics Stress: ContactEvent buffer overflow drops cleanly without al
     {
         boxes[i].motion   = MotionType::Dynamic;
         boxes[i].shape    = boxShape;
-        boxes[i].position = Vec3{ static_cast<float>(i) * 1.2f, 0.35f, 0.0f };
+        boxes[i].position = RVec3{ static_cast<float>(i) * 1.2f, 0.35f, 0.0f };
         boxes[i].layer    = PhysicsLayer::Dynamic;
         boxes[i].userData = Entity{ 100 + i };
     }
@@ -183,7 +183,7 @@ TEST_CASE("Physics Stress: 500 dynamic ECS entities across 90 FixedSteps with Bl
     // Static ground
     Entity floorEnt = reg.CreateEntity();
     reg.AddComponent(floorEnt, TransformComponent{
-        Vec3{ 0.0f, -1.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
+        RVec3{ 0.0f, -1.0f, 0.0f }, Quat::Identity(), Vec3{ 1.0f, 1.0f, 1.0f }
     }, q);
     reg.AddComponent(floorEnt, RigidBodyComponent{ Vec3{}, 0.0f, Vec3{}, InvalidBodyID }, q);
     reg.AddComponent(floorEnt, ColliderComponent::FromShape(
@@ -203,7 +203,7 @@ TEST_CASE("Physics Stress: 500 dynamic ECS entities across 90 FixedSteps with Bl
         entities.push_back(e);
 
         reg.AddComponent(e, TransformComponent{
-            Vec3{
+            RVec3{
                 (static_cast<float>(gx) - 12.0f) * 1.2f,
                 2.0f + static_cast<float>(gy) * 1.5f + static_cast<float>(i % 5) * 0.25f,
                 (static_cast<float>(gz) - 10.0f) * 1.2f
@@ -238,11 +238,11 @@ TEST_CASE("Physics Stress: 500 dynamic ECS entities across 90 FixedSteps with Bl
     const auto tfView = reg.Pool<TransformComponent>().ReadView();
     for (uint32_t i = 0; i < tfView.Count(); ++i)
     {
-        const Vec3& p = tfView.data[i].position;
+        const RVec3& p = tfView.data[i].position;
         CHECK(std::isfinite(p.x));
         CHECK(std::isfinite(p.y));
         CHECK(std::isfinite(p.z));
-        CHECK(p.y >= -2.0f);
+        CHECK(p.y >= Real(-2.0));
     }
 
     // Destroy all entities and verify 0 leaked Jolt bodies
@@ -293,14 +293,14 @@ TEST_CASE("Physics Stress: Streaming chunk batch create/destroy and mesh shape c
         descs[0].motion   = MotionType::Static;
         descs[0].shape    = meshShape;
         descs[0].layer    = PhysicsLayer::Static;
-        descs[0].position = Vec3{ 0.0f, 0.0f, 0.0f };
+        descs[0].position = RVec3{ 0.0f, 0.0f, 0.0f };
 
         for (uint32_t i = 1; i < kBatch; ++i)
         {
             descs[i].motion   = MotionType::Dynamic;
             descs[i].shape    = boxShape;
             descs[i].layer    = PhysicsLayer::Dynamic;
-            descs[i].position = Vec3{
+            descs[i].position = RVec3{
                 static_cast<float>(i % 16) - 8.0f,
                 2.0f + static_cast<float>(i / 16) * 1.2f,
                 0.0f
@@ -339,7 +339,7 @@ TEST_CASE("Physics Stress: Concurrent Raycast / RaycastAll / OverlapSphere from 
         descs[i].motion   = MotionType::Static;
         descs[i].shape    = sphereShape;
         descs[i].layer    = PhysicsLayer::Static;
-        descs[i].position = Vec3{ 0.0f, 0.0f, static_cast<float>(i) * 2.0f + 2.0f };
+        descs[i].position = RVec3{ 0.0f, 0.0f, static_cast<float>(i) * 2.0f + 2.0f };
         descs[i].userData = Entity{ i + 1 };
     }
     REQUIRE(world.CreateBodies(descs, ids) == kBodies);
@@ -356,7 +356,7 @@ TEST_CASE("Physics Stress: Concurrent Raycast / RaycastAll / OverlapSphere from 
             for (int iter = 0; iter < 250; ++iter)
             {
                 HitResult single{};
-                if (!world.Raycast(Vec3{ 0.0f, 0.0f, 0.0f }, Vec3{ 0.0f, 0.0f, 1.0f },
+                if (!world.Raycast(RVec3{ 0.0f, 0.0f, 0.0f }, Vec3{ 0.0f, 0.0f, 1.0f },
                                    500.0f, kAllLayersMask, single) ||
                     single.bodyId != ids[0])
                 {
@@ -364,7 +364,7 @@ TEST_CASE("Physics Stress: Concurrent Raycast / RaycastAll / OverlapSphere from 
                 }
 
                 const uint32_t hitCount = world.RaycastAll(
-                    Vec3{ 0.0f, 0.0f, 0.0f }, Vec3{ 0.0f, 0.0f, 1.0f },
+                    RVec3{ 0.0f, 0.0f, 0.0f }, Vec3{ 0.0f, 0.0f, 1.0f },
                     500.0f, kAllLayersMask, hits);
                 if (hitCount != 8 || hits[0].bodyId != ids[0])
                 {
@@ -372,7 +372,7 @@ TEST_CASE("Physics Stress: Concurrent Raycast / RaycastAll / OverlapSphere from 
                 }
 
                 const uint32_t ovCount = world.OverlapSphere(
-                    Vec3{ 0.0f, 0.0f, 4.0f }, 2.5f, kAllLayersMask, overlaps);
+                    RVec3{ 0.0f, 0.0f, 4.0f }, 2.5f, kAllLayersMask, overlaps);
                 if (ovCount < 2)
                 {
                     failures.fetch_add(1, std::memory_order_relaxed);

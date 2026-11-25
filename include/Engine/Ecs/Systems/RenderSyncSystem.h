@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <functional>
 #include <Engine/Export.h>
+#include <Engine/Math/Real.h>
 #include <Engine/Graphics/ResourceHandle.h>
 #include <Engine/Ecs/ComponentMask.h>
 
@@ -46,5 +47,6 @@ namespace Zero
         Scene&         m_scene;
         MeshResolverFn m_resolver;
         uint64_t       m_lastSyncedEpoch = 0;
+        RVec3          m_lastCameraPos{};
     };
 }

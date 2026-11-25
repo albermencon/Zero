@@ -14,6 +14,33 @@
 
 namespace Zero
 {
+    namespace
+    {
+        [[nodiscard]] Mat4 BuildRelativeMat4(const TransformComponent& tf, const Vec3& relPos) noexcept
+        {
+            Mat4 m = tf.rotation.ToMat4();
+
+            m.m[0]  *= tf.scale.x;
+            m.m[1]  *= tf.scale.x;
+            m.m[2]  *= tf.scale.x;
+
+            m.m[4]  *= tf.scale.y;
+            m.m[5]  *= tf.scale.y;
+            m.m[6]  *= tf.scale.y;
+
+            m.m[8]  *= tf.scale.z;
+            m.m[9]  *= tf.scale.z;
+            m.m[10] *= tf.scale.z;
+
+            m.m[12] = relPos.x;
+            m.m[13] = relPos.y;
+            m.m[14] = relPos.z;
+            m.m[15] = 1.0f;
+
+            return m;
+        }
+    }
+
     RenderSyncSystem::RenderSyncSystem(Scene& scene, MeshResolverFn resolver)
         : m_scene(scene)
         , m_resolver(std::move(resolver))
@@ -29,6 +56,8 @@ namespace Zero
         const auto& prevPool   = reg.Pool<PreviousTransformComponent>();
         const auto& boundsPool = reg.Pool<BoundsComponent>();
         const float alpha      = reg.InterpolationAlpha();
+        const RVec3 cameraWorldPos = m_scene.GetCameraPosition();
+        const bool  cameraMoved    = (cameraWorldPos != m_lastCameraPos);
 
         // Pass A — Removals (tombstones + mesh-stripped live entities)
         //
@@ -87,9 +116,11 @@ namespace Zero
 
                 const uint32_t entityIdx = Index(e);
                 const PreviousTransformComponent* prev = prevPool.Get(entityIdx);
-                const Mat4 worldMat = prev
-                    ? prev->InterpolateTo(tf, alpha).ToMat4()
-                    : tf.ToMat4();
+                const TransformComponent interp = prev
+                    ? prev->InterpolateTo(tf, alpha)
+                    : tf;
+                const Vec3 relPos = ToVec3(interp.position - cameraWorldPos);
+                const Mat4 worldMat = BuildRelativeMat4(interp, relPos);
 
                 RenderableDesc desc;
                 desc.boundsMin     = {};
@@ -134,11 +165,13 @@ namespace Zero
                 const bool epochDirty   = tfView.IsDirtySince(i, m_lastSyncedEpoch);
                 const bool interpActive = prev != nullptr && prev->DiffersFrom(tfView.data[i]);
 
-                if (!epochDirty && !interpActive) continue;
+                if (!epochDirty && !interpActive && !cameraMoved) continue;
 
-                const Mat4 worldMat = prev
-                    ? prev->InterpolateTo(tfView.data[i], alpha).ToMat4()
-                    : tfView.data[i].ToMat4();
+                const TransformComponent interp = prev
+                    ? prev->InterpolateTo(tfView.data[i], alpha)
+                    : tfView.data[i];
+                const Vec3 relPos = ToVec3(interp.position - cameraWorldPos);
+                const Mat4 worldMat = BuildRelativeMat4(interp, relPos);
 
                 RenderableHandle h;
                 h.id = rh->id;
@@ -163,6 +196,7 @@ namespace Zero
             }
         }
 
+        m_lastCameraPos   = cameraWorldPos;
         m_lastSyncedEpoch = std::max(m_lastSyncedEpoch, reg.CurrentEpoch());
     }
 
