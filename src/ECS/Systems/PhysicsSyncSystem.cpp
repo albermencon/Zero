@@ -313,6 +313,7 @@ namespace Zero
         auto holder = std::make_shared<PhysicsSyncSystem>(world);
         app.RegisterEcsSystem(holder->TeardownDescriptor(SchedulePhase::PrePhysics), holder);
         app.RegisterEcsSystem(holder->Descriptor(), holder);
-        app.RegisterEcsSystem(holder->TeardownDescriptor(SchedulePhase::RenderSync), std::move(holder));
+        auto renderSyncDesc = holder->TeardownDescriptor(SchedulePhase::RenderSync);
+        app.RegisterEcsSystem(std::move(renderSyncDesc), std::move(holder));
     }
 }
